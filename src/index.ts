@@ -220,6 +220,8 @@ export function createAiChatWidget(
   bubble.innerHTML = `<span class="${PREFIX}-bubble-av">${avatarInner}</span>`;
   const panel = el("div", `${PREFIX}-panel`);
   panel.style.display = "none";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", `${name} chat`);
 
   const header = el("div", `${PREFIX}-header`);
   const hLeft = el("div", `${PREFIX}-hleft`);
@@ -238,6 +240,12 @@ export function createAiChatWidget(
   header.append(hLeft, closeBtn);
 
   const log = el("div", `${PREFIX}-log`);
+  // Accessible, scrollable conversation region. role=log + aria-live announces
+  // streamed replies to screen readers; tabindex makes it keyboard-scrollable.
+  log.setAttribute("role", "log");
+  log.setAttribute("aria-live", "polite");
+  log.setAttribute("aria-label", "Conversation");
+  log.setAttribute("tabindex", "0");
   if (history.length) {
     // Restore a prior conversation (survives refresh).
     for (const m of history) addMsg(log, m.role, m.content);
@@ -245,9 +253,30 @@ export function createAiChatWidget(
     addMsg(log, "assistant", opts.greeting);
   }
 
+  // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
+  // already near the bottom — so streaming text doesn't yank the view when they
+  // scrolled up to read. rAF-batched to avoid per-token layout thrash (the
+  // "glitch"). Pinning resets whenever they scroll back down.
+  let pinned = true;
+  let scrollQueued = false;
+  log.addEventListener("scroll", () => {
+    pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 90;
+  });
+  const scrollDown = (force?: boolean): void => {
+    if (force) pinned = true;
+    if (!pinned || scrollQueued) return;
+    scrollQueued = true;
+    requestAnimationFrame(() => {
+      scrollQueued = false;
+      log.scrollTop = log.scrollHeight;
+    });
+  };
+
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
-  input.placeholder = "Ask anything…";
+  // "Always ready" cue — an inviting prompt the assistant is waiting for input.
+  input.placeholder = `Ask ${name} anything…`;
+  input.setAttribute("aria-label", `Message ${name}`);
   input.autocomplete = "off";
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
@@ -260,6 +289,9 @@ export function createAiChatWidget(
   const open = (): void => {
     panel.style.display = "flex";
     bubble.style.display = "none";
+    // Show the latest message + focus the composer (always-ready assistant feel).
+    pinned = true;
+    log.scrollTop = log.scrollHeight;
     input.focus();
   };
   const close = (): void => {
@@ -297,7 +329,7 @@ export function createAiChatWidget(
     const typing = el("div", `${PREFIX}-typing`);
     typing.innerHTML = "<span></span><span></span><span></span>";
     log.appendChild(typing);
-    log.scrollTop = log.scrollHeight;
+    scrollDown(true);
     let assistant: HTMLElement | null = null;
     let failure: string | null = null;
     try {
@@ -340,9 +372,11 @@ export function createAiChatWidget(
               if (!assistant) {
                 typing.remove();
                 assistant = addMsg(log, "assistant", "");
+                // Blinking caret while streaming → live "assistant is typing".
+                assistant.classList.add(`${PREFIX}-streaming`);
               }
               assistant.textContent = (assistant.textContent ?? "") + piece;
-              log.scrollTop = log.scrollHeight;
+              scrollDown();
             }
             if (frame.type === "error" && frame.message)
               failure = frame.message;
@@ -357,13 +391,16 @@ export function createAiChatWidget(
       input.focus();
     }
 
-    // Clear the typing indicator and, if nothing streamed, show an error card
-    // (Try again / Report issue) or a graceful "no response".
+    // Clear the typing indicator + the streaming caret now the reply is final.
     typing.remove();
+    assistant?.classList.remove(`${PREFIX}-streaming`);
     if (!assistant || !assistant.textContent) {
       assistant?.remove();
       if (failure) showError(failure);
-      else addMsg(log, "assistant", "(no response)");
+      else {
+        addMsg(log, "assistant", "(no response)");
+        scrollDown(true);
+      }
     } else {
       // AI-rendered input forms. A generic [[form:{...}]] directive renders an
       // inline form submitting to a host action; [[collect-email]] is the
@@ -442,7 +479,7 @@ export function createAiChatWidget(
     f.appendChild(submit);
     wrap.appendChild(f);
     log.appendChild(wrap);
-    log.scrollTop = log.scrollHeight;
+    scrollDown(true);
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
       const data: Record<string, string> = {};
@@ -517,7 +554,7 @@ export function createAiChatWidget(
 
     wrap.append(txt, detail, actions);
     log.appendChild(wrap);
-    log.scrollTop = log.scrollHeight;
+    scrollDown(true);
   }
 
   return {
@@ -561,7 +598,6 @@ function addMsg(
   const msg = el("div", `${PREFIX}-msg ${PREFIX}-${role}`);
   msg.textContent = text;
   log.appendChild(msg);
-  log.scrollTop = log.scrollHeight;
   return msg;
 }
 
@@ -600,7 +636,12 @@ function injectStyles(
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
 .${PREFIX}-sub{font-size:11px;opacity:.85}
 .${PREFIX}-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
-.${PREFIX}-log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#fafafa}
+.${PREFIX}-log{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:10px;background:#fafafa;scrollbar-width:thin}
+.${PREFIX}-log:focus-visible{outline:none}
+.${PREFIX}-log::-webkit-scrollbar{width:8px}
+.${PREFIX}-log::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:8px}
+@keyframes ${PREFIX}-caret{0%,55%{opacity:.85}55.01%,100%{opacity:0}}
+.${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:1px;background:${accent};vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
 .${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-user{align-self:flex-end;background:${accent};color:#fff;border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:#fff;color:#111;border:1px solid #ececec;border-bottom-left-radius:4px}
@@ -628,7 +669,7 @@ function injectStyles(
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
 @media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}}
-@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes{animation:none}}
+@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
   style.setAttribute("data-sgiant-aiw", "");
