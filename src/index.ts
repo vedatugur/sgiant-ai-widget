@@ -73,7 +73,17 @@ export interface AiChatWidgetOptions {
     lastUserMessage: string;
     threadId?: string;
   }) => void | Promise<void>;
+  /**
+   * Lead capture. When the assistant emits the sentinel `[[collect-email]]` in a
+   * reply, the widget strips it and renders an inline email form; submitting it
+   * calls this with the email (+ the last user message as context). Wire it to
+   * your contact/lead API. Omit to disable lead capture entirely.
+   */
+  onLead?: (lead: { email: string; context?: string }) => Promise<void>;
 }
+
+/** Sentinel the assistant emits to ask the widget to render an email form. */
+const LEAD_TOKEN = "[[collect-email]]";
 
 export interface AiChatWidgetHandle {
   open(): void;
@@ -307,10 +317,54 @@ export function createAiChatWidget(
       if (failure) showError(failure);
       else addMsg(log, "assistant", "(no response)");
     } else {
+      // Lead capture: if the assistant asked for an email, strip the sentinel
+      // from the visible text and render an inline email form.
+      if (opts.onLead && assistant.textContent.includes(LEAD_TOKEN)) {
+        assistant.textContent = assistant.textContent
+          .replace(LEAD_TOKEN, "")
+          .trim();
+        renderLeadForm();
+      }
       // Persist the completed assistant turn (+ thread id) for refresh recovery.
       history.push({ role: "assistant", content: assistant.textContent });
       saveState();
     }
+  }
+
+  /** Inline email-capture form appended to the log; submit → onLead. */
+  function renderLeadForm(): void {
+    if (!opts.onLead) return;
+    const wrap = el("div", `${PREFIX}-lead`);
+    const f = el("form", `${PREFIX}-lead-form`) as HTMLFormElement;
+    const email = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
+    email.type = "email";
+    email.required = true;
+    email.placeholder = "you@company.com";
+    email.autocomplete = "email";
+    const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
+    submit.type = "submit";
+    submit.textContent = "Send";
+    f.append(email, submit);
+    wrap.appendChild(f);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const value = email.value.trim();
+      if (!value) return;
+      submit.disabled = true;
+      submit.textContent = "Sending…";
+      try {
+        await opts.onLead!({ email: value, context: lastUserContent });
+        wrap.innerHTML = "";
+        const ok = el("div", `${PREFIX}-lead-ok`);
+        ok.textContent = "Thanks — we'll be in touch ✓";
+        wrap.appendChild(ok);
+      } catch {
+        submit.disabled = false;
+        submit.textContent = "Try again";
+      }
+    });
   }
 
   /** Render a recoverable error card: friendly copy + retry + (optional) report. */
@@ -455,6 +509,12 @@ function injectStyles(
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff}
 .${PREFIX}-input{flex:1;border:1px solid #ddd;border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
+.${PREFIX}-lead{align-self:stretch;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-lead-form{display:flex;gap:8px}
+.${PREFIX}-lead-input{flex:1;border:1px solid ${accent};border-radius:11px;padding:9px 12px;font-size:14px;outline:none}
+.${PREFIX}-lead-btn{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
+.${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
+.${PREFIX}-lead-ok{font-size:13px;font-weight:600;color:${accent}}
 .${PREFIX}-input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}22}
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
