@@ -382,7 +382,12 @@ export function createAiChatWidget(
         renderForm({
           action: "lead",
           fields: [
-            { name: "email", type: "email", placeholder: "you@company.com", required: true },
+            {
+              name: "email",
+              type: "email",
+              placeholder: "you@company.com",
+              required: true,
+            },
           ],
           submit: "Send",
         });
@@ -418,7 +423,7 @@ export function createAiChatWidget(
         input = sel;
       } else {
         const i = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
-        i.type = field.type === "number" ? "number" : field.type ?? "text";
+        i.type = field.type === "number" ? "number" : (field.type ?? "text");
         input = i;
       }
       if ("placeholder" in input && field.placeholder)
@@ -442,16 +447,22 @@ export function createAiChatWidget(
       e.preventDefault();
       const data: Record<string, string> = {};
       for (const c of controls) data[c.name] = c.get();
-      if (controls.some((c) => !data[c.name]) && spec.fields.some((x) => x.required))
+      if (
+        controls.some((c) => !data[c.name]) &&
+        spec.fields.some((x) => x.required)
+      )
         return;
       submit.disabled = true;
       submit.textContent = "Sending…";
       try {
-        let msg: string | void;
+        let msg: string | void = undefined;
         if (opts.onWidgetAction) {
           msg = await opts.onWidgetAction(spec.action, data);
         } else if (opts.onLead && spec.action === "lead") {
-          await opts.onLead({ email: data.email ?? "", context: lastUserContent });
+          await opts.onLead({
+            email: data.email ?? "",
+            context: lastUserContent,
+          });
         }
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-lead-ok`);
