@@ -1,0 +1,22 @@
+{
+  "name": "@sgiant/ai-widget",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "require": "./dist/index.js",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@sgiant/tsconfig": "*",
+    "typescript": "^5.7.2"
+  }
+}
