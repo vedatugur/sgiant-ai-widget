@@ -80,10 +80,58 @@ export interface AiChatWidgetOptions {
    * your contact/lead API. Omit to disable lead capture entirely.
    */
   onLead?: (lead: { email: string; context?: string }) => Promise<void>;
+  /**
+   * Generic AI-rendered input forms. When the assistant emits a
+   * `[[form:{...}]]` directive, the widget renders the described form inline and,
+   * on submit, calls this with the directive's `action` name + the collected
+   * field values. SECURITY: the AI only names an `action`; the HOST maps action
+   * names to real API calls here — the AI can never call an arbitrary endpoint.
+   * Throw to surface a retry. Return a string to show as the success message.
+   */
+  onWidgetAction?: (
+    action: string,
+    data: Record<string, string>
+  ) => Promise<string | void>;
 }
 
 /** Sentinel the assistant emits to ask the widget to render an email form. */
 const LEAD_TOKEN = "[[collect-email]]";
+
+/** One field in an AI-rendered form directive. */
+interface FormField {
+  name: string;
+  label?: string;
+  type?: "text" | "email" | "number" | "textarea" | "select";
+  placeholder?: string;
+  required?: boolean;
+  options?: string[];
+}
+interface FormSpec {
+  action: string;
+  title?: string;
+  fields: FormField[];
+  submit?: string;
+}
+
+/** Pull a `[[form:{json}]]` directive out of assistant text, if present. */
+function parseFormDirective(
+  text: string
+): { spec: FormSpec; stripped: string } | null {
+  const start = text.indexOf("[[form:");
+  if (start < 0) return null;
+  const end = text.lastIndexOf("]]");
+  if (end <= start) return null;
+  const json = text.slice(start + "[[form:".length, end).trim();
+  try {
+    const spec = JSON.parse(json) as FormSpec;
+    if (!spec || typeof spec.action !== "string" || !Array.isArray(spec.fields))
+      return null;
+    const stripped = (text.slice(0, start) + text.slice(end + 2)).trim();
+    return { spec, stripped };
+  } catch {
+    return null;
+  }
+}
 
 export interface AiChatWidgetHandle {
   open(): void;
@@ -317,13 +365,27 @@ export function createAiChatWidget(
       if (failure) showError(failure);
       else addMsg(log, "assistant", "(no response)");
     } else {
-      // Lead capture: if the assistant asked for an email, strip the sentinel
-      // from the visible text and render an inline email form.
-      if (opts.onLead && assistant.textContent.includes(LEAD_TOKEN)) {
+      // AI-rendered input forms. A generic [[form:{...}]] directive renders an
+      // inline form submitting to a host action; [[collect-email]] is the
+      // built-in lead shortcut.
+      const form = parseFormDirective(assistant.textContent);
+      if (form && (opts.onWidgetAction || opts.onLead)) {
+        assistant.textContent = form.stripped;
+        renderForm(form.spec);
+      } else if (
+        (opts.onLead || opts.onWidgetAction) &&
+        assistant.textContent.includes(LEAD_TOKEN)
+      ) {
         assistant.textContent = assistant.textContent
           .replace(LEAD_TOKEN, "")
           .trim();
-        renderLeadForm();
+        renderForm({
+          action: "lead",
+          fields: [
+            { name: "email", type: "email", placeholder: "you@company.com", required: true },
+          ],
+          submit: "Send",
+        });
       }
       // Persist the completed assistant turn (+ thread id) for refresh recovery.
       history.push({ role: "assistant", content: assistant.textContent });
@@ -331,34 +393,69 @@ export function createAiChatWidget(
     }
   }
 
-  /** Inline email-capture form appended to the log; submit → onLead. */
-  function renderLeadForm(): void {
-    if (!opts.onLead) return;
+  /** Render an AI-described input form inline; submit → host action. */
+  function renderForm(spec: FormSpec): void {
     const wrap = el("div", `${PREFIX}-lead`);
+    if (spec.title) {
+      const t = el("div", `${PREFIX}-form-title`);
+      t.textContent = spec.title;
+      wrap.appendChild(t);
+    }
     const f = el("form", `${PREFIX}-lead-form`) as HTMLFormElement;
-    const email = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
-    email.type = "email";
-    email.required = true;
-    email.placeholder = "you@company.com";
-    email.autocomplete = "email";
+    const controls: { name: string; get: () => string }[] = [];
+    for (const field of spec.fields.slice(0, 8)) {
+      let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+      if (field.type === "textarea") {
+        input = el("textarea", `${PREFIX}-lead-input`) as HTMLTextAreaElement;
+      } else if (field.type === "select") {
+        const sel = el("select", `${PREFIX}-lead-input`) as HTMLSelectElement;
+        for (const o of field.options ?? []) {
+          const opt = document.createElement("option");
+          opt.value = o;
+          opt.textContent = o;
+          sel.appendChild(opt);
+        }
+        input = sel;
+      } else {
+        const i = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
+        i.type = field.type === "number" ? "number" : field.type ?? "text";
+        input = i;
+      }
+      if ("placeholder" in input && field.placeholder)
+        (input as HTMLInputElement).placeholder = field.label
+          ? `${field.label} — ${field.placeholder}`
+          : field.placeholder;
+      else if ("placeholder" in input && field.label)
+        (input as HTMLInputElement).placeholder = field.label;
+      if (field.required) (input as HTMLInputElement).required = true;
+      f.appendChild(input);
+      controls.push({ name: field.name, get: () => input.value.trim() });
+    }
     const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
     submit.type = "submit";
-    submit.textContent = "Send";
-    f.append(email, submit);
+    submit.textContent = spec.submit ?? "Submit";
+    f.appendChild(submit);
     wrap.appendChild(f);
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const value = email.value.trim();
-      if (!value) return;
+      const data: Record<string, string> = {};
+      for (const c of controls) data[c.name] = c.get();
+      if (controls.some((c) => !data[c.name]) && spec.fields.some((x) => x.required))
+        return;
       submit.disabled = true;
       submit.textContent = "Sending…";
       try {
-        await opts.onLead!({ email: value, context: lastUserContent });
+        let msg: string | void;
+        if (opts.onWidgetAction) {
+          msg = await opts.onWidgetAction(spec.action, data);
+        } else if (opts.onLead && spec.action === "lead") {
+          await opts.onLead({ email: data.email ?? "", context: lastUserContent });
+        }
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-lead-ok`);
-        ok.textContent = "Thanks — we'll be in touch ✓";
+        ok.textContent = (typeof msg === "string" && msg) || "Done ✓";
         wrap.appendChild(ok);
       } catch {
         submit.disabled = false;
@@ -509,10 +606,11 @@ function injectStyles(
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff}
 .${PREFIX}-input{flex:1;border:1px solid #ddd;border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
-.${PREFIX}-lead{align-self:stretch;animation:${PREFIX}-rise .2s ease}
-.${PREFIX}-lead-form{display:flex;gap:8px}
-.${PREFIX}-lead-input{flex:1;border:1px solid ${accent};border-radius:11px;padding:9px 12px;font-size:14px;outline:none}
-.${PREFIX}-lead-btn{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
+.${PREFIX}-lead{align-self:stretch;border:1px solid #eee;border-radius:14px;padding:11px 12px;background:#fff;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-form-title{font-size:13px;font-weight:600;margin-bottom:8px}
+.${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
+.${PREFIX}-lead-input{width:100%;border:1px solid ${accent};border-radius:11px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit}
+.${PREFIX}-lead-btn{border:none;background:${accent};color:#fff;border-radius:11px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-lead-ok{font-size:13px;font-weight:600;color:${accent}}
 .${PREFIX}-input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}22}
