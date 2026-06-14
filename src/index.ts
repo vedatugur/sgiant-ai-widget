@@ -59,6 +59,12 @@ export interface AiChatWidgetOptions {
   /** Mount target; defaults to document.body. */
   container?: HTMLElement;
   /**
+   * When set, the conversation (thread id + messages) is persisted to
+   * localStorage under this key and restored on reload — so a page refresh
+   * doesn't lose the chat. Use a per-visitor/per-user key (e.g. the visitorId).
+   */
+  persistKey?: string;
+  /**
    * Called when the user clicks "Report issue" on an error state — wire it to
    * your Backoffice/contact endpoint so the admin team gets the failed turn.
    */
@@ -86,9 +92,18 @@ interface StreamFrame {
 
 const PREFIX = "sgiant-aiw";
 
-// AYCA — "moonlight" (tr). A crescent + sparkle avatar: a distinct, on-brand
-// assistant identity that animates, without a literal face. White on the accent.
-const AVATAR_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M17 13.8A6.4 6.4 0 0 1 9.2 6a6.8 6.8 0 1 0 7.8 7.8Z" fill="currentColor"/><path d="M18.4 3.6l.55 1.55 1.55.55-1.55.55-.55 1.55-.55-1.55-1.55-.55 1.55-.55.55-1.55Z" fill="currentColor" opacity=".95"/></svg>`;
+// AYCA — "moonlight" (tr). A MINIMAL animated assistant: a soft moon-face (cream
+// disc on the dark avatar = a moon in a night sky) with a moon-phase crescent,
+// blinking eyes, a smile, blush, and a sparkle. Feminine + friendly without a
+// literal portrait; reads cleanly at 24–36px. Animations (blink/float) in CSS.
+const AVATAR_SVG = `<svg viewBox="0 0 48 48" class="${PREFIX}-ayca" aria-hidden="true">
+<circle cx="24" cy="24" r="15" fill="#FCF7E3"/>
+<path d="M24 9a15 15 0 0 1 0 30 18 18 0 0 0 0-30Z" fill="#FBD9A6" opacity=".5"/>
+<g class="${PREFIX}-eyes" fill="#2B2236"><circle cx="19" cy="23" r="1.7"/><circle cx="29" cy="23" r="1.7"/></g>
+<path d="M20.5 28.5q3.5 3 7 0" stroke="#2B2236" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<circle cx="16.8" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/><circle cx="31.2" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/>
+<path d="M37 12l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z" fill="#FBAA34"/>
+</svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -106,6 +121,39 @@ export function createAiChatWidget(
   let threadId: string | undefined;
   let busy = false;
   let lastUserContent = "";
+
+  // Conversation memory across page reloads (opt-in via persistKey). Kept in
+  // localStorage so a refresh restores the thread + messages.
+  type StoredMsg = { role: "user" | "assistant"; content: string };
+  const storeKey = opts.persistKey ? `ayca:v1:${opts.persistKey}` : null;
+  const history: StoredMsg[] = [];
+  function loadState(): void {
+    if (!storeKey) return;
+    try {
+      const raw = localStorage.getItem(storeKey);
+      if (!raw) return;
+      const s = JSON.parse(raw) as {
+        threadId?: string;
+        messages?: StoredMsg[];
+      };
+      threadId = s.threadId;
+      if (Array.isArray(s.messages)) history.push(...s.messages);
+    } catch {
+      /* corrupt/unavailable storage — start fresh */
+    }
+  }
+  function saveState(): void {
+    if (!storeKey) return;
+    try {
+      localStorage.setItem(
+        storeKey,
+        JSON.stringify({ threadId, messages: history.slice(-40) })
+      );
+    } catch {
+      /* storage full/blocked — non-fatal */
+    }
+  }
+  loadState();
 
   injectStyles(accent, side, gradient);
 
@@ -132,7 +180,12 @@ export function createAiChatWidget(
   header.append(hLeft, closeBtn);
 
   const log = el("div", `${PREFIX}-log`);
-  if (opts.greeting) addMsg(log, "assistant", opts.greeting);
+  if (history.length) {
+    // Restore a prior conversation (survives refresh).
+    for (const m of history) addMsg(log, m.role, m.content);
+  } else if (opts.greeting) {
+    addMsg(log, "assistant", opts.greeting);
+  }
 
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
@@ -180,6 +233,8 @@ export function createAiChatWidget(
     lastUserContent = content;
     sendBtn.disabled = true;
     addMsg(log, "user", content);
+    history.push({ role: "user", content });
+    saveState();
     // Animated typing indicator until the first token lands.
     const typing = el("div", `${PREFIX}-typing`);
     typing.innerHTML = "<span></span><span></span><span></span>";
@@ -251,6 +306,10 @@ export function createAiChatWidget(
       assistant?.remove();
       if (failure) showError(failure);
       else addMsg(log, "assistant", "(no response)");
+    } else {
+      // Persist the completed assistant turn (+ thread id) for refresh recovery.
+      history.push({ role: "assistant", content: assistant.textContent });
+      saveState();
     }
   }
 
@@ -357,6 +416,11 @@ function injectStyles(
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
+@keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
+.${PREFIX}-ayca{width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite}
+.${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
+.${PREFIX}-avatar .${PREFIX}-ayca{width:30px;height:30px}
 .${PREFIX}-bubble{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:60px;height:60px;border-radius:50%;border:none;background:${gradient};color:#fff;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:3px;animation:${PREFIX}-pulse 3.2s infinite;transition:transform .18s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.04)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;border-radius:50%;background:#151D2F;display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -367,7 +431,8 @@ function injectStyles(
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
 .${PREFIX}-header{background:${gradient};color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .${PREFIX}-hleft{display:flex;align-items:center;gap:10px;min-width:0}
-.${PREFIX}-avatar{position:relative;width:36px;height:36px;border-radius:50%;background:#151D2F;flex:0 0 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.${PREFIX}-avatar{position:relative;width:36px;height:36px;border-radius:50%;background:#151D2F;flex:0 0 auto;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.${PREFIX}-avatar::after{content:"";position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:#34D399;box-shadow:0 0 0 2px #fff}
 .${PREFIX}-avatar svg{width:20px;height:20px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
@@ -394,7 +459,7 @@ function injectStyles(
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
 @media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}}
-@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span{animation:none}}
+@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes{animation:none}}
 `;
   const style = document.createElement("style");
   style.setAttribute("data-sgiant-aiw", "");
