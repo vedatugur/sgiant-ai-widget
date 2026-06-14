@@ -25,6 +25,20 @@ export interface AiChatWidgetOptions {
    * the anonymous marketing endpoint. Never put secrets here; it's plain JSON.
    */
   extraBody?: Record<string, unknown>;
+  /**
+   * Dynamic per-send context (current page, recent navigation, last actions).
+   * Merged into each POST body under `pageContext` so the assistant can answer
+   * about what the user is looking at. Called right before every send.
+   */
+  getContext?: () =>
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined>;
+  /**
+   * Window event name that opens the panel (e.g. "sgiant:open-assistant"), so a
+   * nav/sidebar link elsewhere in the app can summon the widget.
+   */
+  openEventName?: string;
   /** Bearer token (Clerk session or embed token). Use getToken for refresh. */
   token?: string;
   /** Async token provider — called before each send (overrides `token`). */
@@ -110,6 +124,12 @@ export function createAiChatWidget(
   bubble.addEventListener("click", open);
   closeBtn.addEventListener("click", close);
 
+  // Let a nav/sidebar link anywhere in the host app open the panel.
+  const onOpenEvent = (): void => open();
+  if (opts.openEventName) {
+    window.addEventListener(opts.openEventName, onOpenEvent);
+  }
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const content = input.value.trim();
@@ -125,6 +145,7 @@ export function createAiChatWidget(
     const assistant = addMsg(log, "assistant", "");
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
+      const pageContext = opts.getContext ? await opts.getContext() : undefined;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -134,6 +155,7 @@ export function createAiChatWidget(
         credentials: opts.withCredentials ? "include" : "same-origin",
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
+          ...(pageContext ? { pageContext } : {}),
           accountId: opts.accountId ?? "",
           threadId,
           content,
@@ -182,6 +204,9 @@ export function createAiChatWidget(
     close,
     toggle,
     destroy() {
+      if (opts.openEventName) {
+        window.removeEventListener(opts.openEventName, onOpenEvent);
+      }
       bubble.remove();
       panel.remove();
     },
