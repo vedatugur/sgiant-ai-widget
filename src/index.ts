@@ -18,8 +18,13 @@
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
   endpoint: string;
-  /** Account the chat is scoped to. */
-  accountId: string;
+  /** Account the chat is scoped to. Omit for the public/anonymous endpoint. */
+  accountId?: string;
+  /**
+   * Extra fields merged into every POST body — e.g. `{ visitorId, source }` for
+   * the anonymous marketing endpoint. Never put secrets here; it's plain JSON.
+   */
+  extraBody?: Record<string, unknown>;
   /** Bearer token (Clerk session or embed token). Use getToken for refresh. */
   token?: string;
   /** Async token provider — called before each send (overrides `token`). */
@@ -127,7 +132,12 @@ export function createAiChatWidget(
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         credentials: opts.withCredentials ? "include" : "same-origin",
-        body: JSON.stringify({ accountId: opts.accountId, threadId, content }),
+        body: JSON.stringify({
+          ...(opts.extraBody ?? {}),
+          accountId: opts.accountId ?? "",
+          threadId,
+          content,
+        }),
       });
       if (!res.ok || !res.body) {
         assistant.textContent = `Error: ${res.status}`;
