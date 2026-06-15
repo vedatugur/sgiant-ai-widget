@@ -137,6 +137,17 @@ interface NavigateSpec {
   label?: string;
 }
 
+/** An in-app action the assistant proposes via `[[action:{json}]]`. The host
+ *  maps `name` to a real operation; `confirm` (if set) requires user approval. */
+interface ActionSpec {
+  name: string;
+  label?: string;
+  /** Confirmation prompt — when set, the user must approve before it runs. */
+  confirm?: string;
+  /** Opaque data passed to the host's onWidgetAction(name, data). */
+  data?: Record<string, string>;
+}
+
 /** Sentinel the assistant emits to ask the widget to render an email form. */
 const LEAD_TOKEN = "[[collect-email]]";
 
@@ -616,6 +627,21 @@ export function createAiChatWidget(
         renderNavigate(nav.spec);
       }
 
+      // [[action:{name,label,confirm?,data?}]] — the assistant proposes an
+      // in-app ACTION (open the dashboard builder, apply a widget, etc). Rendered
+      // as a button; if `confirm` is set the user must confirm first ("critic
+      // permission") before the host's onWidgetAction(name,data) runs. The HOST
+      // owns the allowlist of action names → real operations.
+      for (let i = 0; i < 4; i++) {
+        const act = parseJsonDirective<ActionSpec>(
+          assistant.textContent,
+          "action"
+        );
+        if (!act || !opts.onWidgetAction || !act.spec.name) break;
+        assistant.textContent = act.stripped;
+        renderAction(act.spec);
+      }
+
       // [[form:{...}]] inline input form → host action; [[collect-email]] lead.
       const form = parseFormDirective(assistant.textContent);
       if (form && (opts.onWidgetAction || opts.onLead)) {
@@ -849,6 +875,58 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  /** Render an AI-proposed in-app action as a button (with optional confirm
+   *  step), dispatched to the host via onWidgetAction(name, data). */
+  function renderAction(spec: ActionSpec): void {
+    const wrap = el("div", `${PREFIX}-nav`);
+    const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+    btn.type = "button";
+    const label = spec.label || "Run";
+    btn.innerHTML = `<span>${escapeHtml(label)}</span>`;
+    const run = async (): Promise<void> => {
+      btn.disabled = true;
+      try {
+        const msg = await opts.onWidgetAction!(spec.name, spec.data ?? {});
+        btn.innerHTML = `<span>${escapeHtml(
+          (typeof msg === "string" && msg) || `${label} ✓`
+        )}</span>`;
+      } catch {
+        btn.disabled = false;
+        btn.innerHTML = `<span>${escapeHtml(label)} — try again</span>`;
+      }
+    };
+    btn.addEventListener("click", () => {
+      // "Critic permission": ask the user to confirm before acting.
+      if (spec.confirm) {
+        wrap.innerHTML = "";
+        const q = el("div", `${PREFIX}-confirm-q`);
+        q.textContent = spec.confirm;
+        const row = el("div", `${PREFIX}-confirm-row`);
+        const yes = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+        yes.type = "button";
+        yes.textContent = "Confirm";
+        const no = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
+        no.type = "button";
+        no.textContent = "Cancel";
+        yes.addEventListener("click", () => {
+          wrap.innerHTML = "";
+          wrap.appendChild(btn);
+          btn.innerHTML = `<span>${escapeHtml(label)}</span>`;
+          void run();
+        });
+        no.addEventListener("click", () => wrap.remove());
+        row.append(yes, no);
+        wrap.append(q, row);
+        scrollDown(true);
+      } else {
+        void run();
+      }
+    });
+    wrap.appendChild(btn);
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   /** Render a recoverable error card: friendly copy + retry + (optional) report. */
   function showError(raw: string): void {
     const wrap = el("div", `${PREFIX}-error`);
@@ -1051,7 +1129,10 @@ function injectStyles(
 .${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid ${accent};background:${accent}0f;color:${accent};border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-nav-btn:hover{background:${accent}1c}
 .${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}}
+.${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
+.${PREFIX}-confirm-row{display:flex;gap:8px}
+.${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}}
 @media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
