@@ -232,18 +232,33 @@ const PREFIX = "sgiant-aiw";
 // AYCA — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
 // morphs organically with a wet highlight. Editorial, not cartoon; reads
 // cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
-const AVATAR_SVG = `<svg viewBox="8 8 32 32" class="${PREFIX}-ayca" aria-hidden="true">
+const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden="true">
 <defs><radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
 <stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
 </radialGradient></defs>
 <path fill="url(#${PREFIX}-av-g)" d="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z">
-<animate attributeName="d" dur="6s" repeatCount="indefinite"
- values="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z;M24 9C33 7 41 15 39 25C38 33 30 41 23 39C15 41 7 31 9 23C10 15 17 11 24 9Z;M25 8C32 9 41 16 40 24C41 32 33 41 24 40C16 42 7 32 8 24C7 16 17 8 25 8Z;M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z"/>
+<animate attributeName="d" dur="4.2s" repeatCount="indefinite"
+ values="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z;M24 9C34 6 42 15 39 25C38 34 29 42 23 39C14 42 6 31 9 23C11 14 17 11 24 9Z;M25 7C33 9 42 16 40 24C42 33 33 42 24 40C15 43 6 32 8 24C6 15 17 7 25 7Z;M23 8C31 7 41 14 40 24C40 32 32 41 24 40C16 42 7 31 8 23C9 16 16 9 23 8Z;M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z"/>
 </path>
-<ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#fff" opacity=".35">
-<animate attributeName="cx" dur="6s" repeatCount="indefinite" values="19;21;18;19"/>
-<animate attributeName="cy" dur="6s" repeatCount="indefinite" values="18;17;19;18"/>
+<ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#fff" opacity=".4">
+<animate attributeName="cx" dur="4.2s" repeatCount="indefinite" values="19;22;17;20;19"/>
+<animate attributeName="cy" dur="4.2s" repeatCount="indefinite" values="18;16;20;17;18"/>
 </ellipse>
+<circle fill="url(#${PREFIX}-av-g)" r="2.6">
+<animate attributeName="cx" dur="3.1s" repeatCount="indefinite" values="34;39;33;36;34"/>
+<animate attributeName="cy" dur="3.1s" repeatCount="indefinite" values="16;22;19;14;16"/>
+<animate attributeName="r" dur="3.1s" repeatCount="indefinite" values="2.6;3.5;2;3;2.6"/>
+</circle>
+<circle fill="url(#${PREFIX}-av-g)" r="2">
+<animate attributeName="cx" dur="3.7s" repeatCount="indefinite" values="13;8;15;10;13"/>
+<animate attributeName="cy" dur="3.7s" repeatCount="indefinite" values="31;26;32;28;31"/>
+<animate attributeName="r" dur="3.7s" repeatCount="indefinite" values="2;2.9;1.5;2.4;2"/>
+</circle>
+<circle fill="#FFD9A8" opacity=".9" r="1.1">
+<animate attributeName="cx" dur="2.6s" repeatCount="indefinite" values="28;31;26;28"/>
+<animate attributeName="cy" dur="2.6s" repeatCount="indefinite" values="30;33;31;30"/>
+<animate attributeName="opacity" dur="2.6s" repeatCount="indefinite" values=".9;.3;.9"/>
+</circle>
 </svg>`;
 
 // Small line icons for the header controls (currentColor, 18px).
