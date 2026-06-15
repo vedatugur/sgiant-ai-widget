@@ -232,12 +232,18 @@ const PREFIX = "sgiant-aiw";
 // AYCA — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
 // morphs organically with a wet highlight. Editorial, not cartoon; reads
 // cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
-const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden="true">
-<defs><radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
+// Shared gradient + goo filter — appended to the root ONCE so the bubble and
+// the in-panel avatar (two copies of AVATAR_SVG) reference the same defs.
+// Duplicate <defs> ids in the DOM break the second instance's filter (the
+// blob disappears), so the defs live here, not inside each avatar svg.
+const AVATAR_DEFS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
 <stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
 </radialGradient>
 <filter id="${PREFIX}-av-goo" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b"/>
-<feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8"/></filter></defs>
+<feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8"/></filter></defs></svg>`;
+
+const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden="true">
 <g filter="url(#${PREFIX}-av-goo)" fill="url(#${PREFIX}-av-g)">
 <path d="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z">
 <animate attributeName="d" dur="4.2s" repeatCount="indefinite"
@@ -431,6 +437,13 @@ export function createAiChatWidget(
   form.append(input, sendBtn);
 
   panel.append(header, log, form);
+  // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
+  if (!document.getElementById(`${PREFIX}-av-g`)) {
+    const defs = document.createElement("div");
+    defs.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
+    defs.innerHTML = AVATAR_DEFS;
+    root.append(defs);
+  }
   root.append(bubble, panel);
 
   const open = (): void => {
