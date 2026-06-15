@@ -1077,7 +1077,7 @@ function injectStyles(
 .${PREFIX}-ayca{width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:30px;height:30px}
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:80px;height:80px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
+.${PREFIX}-bubble{position:fixed;bottom:16px;${side}:16px;z-index:2147483000;width:104px;height:104px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
