@@ -236,7 +236,7 @@ const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden=
 <defs><radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
 <stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
 </radialGradient>
-<filter id="${PREFIX}-av-goo"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b"/>
+<filter id="${PREFIX}-av-goo" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b"/>
 <feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8"/></filter></defs>
 <g filter="url(#${PREFIX}-av-goo)" fill="url(#${PREFIX}-av-g)">
 <path d="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z">
@@ -1088,7 +1088,7 @@ function injectStyles(
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
-.${PREFIX}-ayca{display:block;width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
+.${PREFIX}-ayca{display:block;width:100%;height:100%;overflow:visible;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
 .${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:66px;height:66px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
