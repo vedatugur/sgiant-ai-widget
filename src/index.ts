@@ -367,6 +367,30 @@ export function createAiChatWidget(
   log.addEventListener("scroll", () => {
     pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 90;
   });
+  // Defensive wheel scrolling. The widget lives in the host's light DOM, so a
+  // host that installs a global wheel handler — scroll-lock from an open
+  // drawer/dialog (react-remove-scroll/Radix), or a smooth-scroll library —
+  // can preventDefault our wheel events and the conversation won't scroll. We
+  // drive the scroll ourselves and only claim the gesture when the log actually
+  // moves, so page overscroll still hands off cleanly at the top/bottom edge.
+  log.addEventListener(
+    "wheel",
+    (e) => {
+      const step =
+        e.deltaMode === 1
+          ? e.deltaY * 16 // lines → px
+          : e.deltaMode === 2
+            ? e.deltaY * log.clientHeight // pages → px
+            : e.deltaY;
+      const before = log.scrollTop;
+      log.scrollTop = before + step;
+      if (log.scrollTop !== before) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    { passive: false }
+  );
   const scrollDown = (force?: boolean): void => {
     if (force) pinned = true;
     if (!pinned || scrollQueued) return;
