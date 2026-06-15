@@ -356,7 +356,7 @@ export function createAiChatWidget(
   let expandBtn: HTMLElement | null = null;
   const expandable = opts.expandable !== false;
   if (expandable) {
-    expandBtn = el("button", `${PREFIX}-icon`);
+    expandBtn = el("button", `${PREFIX}-icon ${PREFIX}-expand`);
     expandBtn.setAttribute("aria-label", "Expand chat");
     expandBtn.title = "Expand";
     expandBtn.innerHTML = ICON_EXPAND;
@@ -1233,14 +1233,16 @@ function injectStyles(
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
    chat is comfortably usable instead of a cramped corner card. */
 @media (max-width:640px){
-  .${PREFIX}-panel{inset:auto 0 0 0;width:100%;max-width:100%;height:90vh;height:90dvh;max-height:none;border-radius:22px 22px 0 0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
-  .${PREFIX}-expanded{width:100%;max-width:100%;height:94vh;height:94dvh}
+  .${PREFIX}-panel{inset:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
+  .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
-  .${PREFIX}-header{position:relative;padding-top:17px;touch-action:none}
-  .${PREFIX}-header::before{content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
+  .${PREFIX}-header{position:relative;padding-top:calc(10px + env(safe-area-inset-top));touch-action:none}
+  .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
   .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
   .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
   .${PREFIX}-bubble{bottom:16px;${side}:16px}
+  /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
+  .${PREFIX}-expand{display:none}
 }
 @media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
