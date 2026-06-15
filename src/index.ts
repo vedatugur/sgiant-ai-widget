@@ -92,6 +92,49 @@ export interface AiChatWidgetOptions {
     action: string,
     data: Record<string, string>
   ) => Promise<string | void>;
+  /**
+   * Show an expand/restore control in the header to grow the panel to a larger
+   * reading size (and back). Default true. Set false for tight embeds.
+   */
+  expandable?: boolean;
+  /**
+   * Past-conversation history. When provided, a history control appears in the
+   * header; opening it lists the user's prior threads. Picking one calls
+   * `loadThread` and replays its messages. Wire these to the authed endpoints
+   * (e.g. GET /accounts/:id/ai/threads and …/threads/:threadId/messages). Omit
+   * to disable history (the widget still restores the last thread via persistKey).
+   */
+  listThreads?: () => Promise<
+    Array<{ id: string; title?: string | null; updatedAt?: string }>
+  >;
+  /** Load one past thread's messages (oldest→newest) for replay in the log. */
+  loadThread?: (
+    threadId: string
+  ) => Promise<Array<{ role: "user" | "assistant"; content: string }>>;
+}
+
+/** A data widget the assistant can render inline via `[[widget:{json}]]`. */
+interface WidgetSpec {
+  /** "stat" | "kpis" | "list" | "table". Unknown kinds fall back to a list. */
+  kind?: string;
+  title?: string;
+  /** stat: the big value + caption + optional delta. */
+  value?: string | number;
+  caption?: string;
+  delta?: string;
+  /** kpis: tiles of {label,value}. */
+  items?: Array<{ label?: string; value?: string | number; delta?: string }>;
+  /** list: plain bullet lines. */
+  lines?: string[];
+  /** table: header columns + row cells. */
+  columns?: string[];
+  rows?: Array<Array<string | number>>;
+}
+
+/** A navigation suggestion the assistant emits via `[[navigate:{json}]]`. */
+interface NavigateSpec {
+  path: string;
+  label?: string;
 }
 
 /** Sentinel the assistant emits to ask the widget to render an email form. */
@@ -133,6 +176,28 @@ function parseFormDirective(
   }
 }
 
+/** Generic `[[tag:{json}]]` directive extractor (first occurrence). */
+function parseJsonDirective<T>(
+  text: string,
+  tag: string
+): { spec: T; stripped: string } | null {
+  const open = `[[${tag}:`;
+  const start = text.indexOf(open);
+  if (start < 0) return null;
+  // Find the matching `]]` for THIS directive (not the last in the message, so
+  // multiple directives in one reply each parse correctly).
+  const end = text.indexOf("]]", start);
+  if (end <= start) return null;
+  const json = text.slice(start + open.length, end).trim();
+  try {
+    const spec = JSON.parse(json) as T;
+    const stripped = (text.slice(0, start) + text.slice(end + 2)).trim();
+    return { spec, stripped };
+  } catch {
+    return null;
+  }
+}
+
 export interface AiChatWidgetHandle {
   open(): void;
   close(): void;
@@ -146,6 +211,9 @@ interface StreamFrame {
   d?: string;
   threadId?: string;
   message?: string;
+  /** render_chart widget frame (analytics lane): spec = model args, rows = data. */
+  spec?: { title?: string; chartType?: string };
+  rows?: unknown;
 }
 
 const PREFIX = "sgiant-aiw";
@@ -162,6 +230,11 @@ const AVATAR_SVG = `<svg viewBox="0 0 48 48" class="${PREFIX}-ayca" aria-hidden=
 <circle cx="16.8" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/><circle cx="31.2" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/>
 <path d="M37 12l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z" fill="#FBAA34"/>
 </svg>`;
+
+// Small line icons for the header controls (currentColor, 18px).
+const ICON_HISTORY = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>`;
+const ICON_EXPAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>`;
+const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -234,10 +307,31 @@ export function createAiChatWidget(
   subEl.textContent = opts.subtitle ?? "Growth assistant";
   hName.append(titleEl, subEl);
   hLeft.append(avatar, hName);
+  const hActions = el("div", `${PREFIX}-hactions`);
+  // History (past conversations) — only when the host wired a thread lister.
+  let historyBtn: HTMLElement | null = null;
+  if (opts.listThreads) {
+    historyBtn = el("button", `${PREFIX}-icon`);
+    historyBtn.setAttribute("aria-label", "Past conversations");
+    historyBtn.title = "History";
+    historyBtn.innerHTML = ICON_HISTORY;
+    hActions.appendChild(historyBtn);
+  }
+  // Expand / restore — grows the panel for easier reading (default on).
+  let expandBtn: HTMLElement | null = null;
+  const expandable = opts.expandable !== false;
+  if (expandable) {
+    expandBtn = el("button", `${PREFIX}-icon`);
+    expandBtn.setAttribute("aria-label", "Expand chat");
+    expandBtn.title = "Expand";
+    expandBtn.innerHTML = ICON_EXPAND;
+    hActions.appendChild(expandBtn);
+  }
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
   closeBtn.setAttribute("aria-label", "Close chat");
-  header.append(hLeft, closeBtn);
+  hActions.appendChild(closeBtn);
+  header.append(hLeft, hActions);
 
   const log = el("div", `${PREFIX}-log`);
   // Accessible, scrollable conversation region. role=log + aria-live announces
@@ -303,6 +397,92 @@ export function createAiChatWidget(
 
   bubble.addEventListener("click", open);
   closeBtn.addEventListener("click", close);
+
+  // Expand / restore the panel (bigger reading area). Toggles a class + icon.
+  let expanded = false;
+  if (expandBtn) {
+    expandBtn.addEventListener("click", () => {
+      expanded = !expanded;
+      panel.classList.toggle(`${PREFIX}-expanded`, expanded);
+      expandBtn!.innerHTML = expanded ? ICON_COLLAPSE : ICON_EXPAND;
+      expandBtn!.setAttribute(
+        "aria-label",
+        expanded ? "Restore chat size" : "Expand chat"
+      );
+      expandBtn!.title = expanded ? "Restore" : "Expand";
+      scrollDown(true);
+    });
+  }
+
+  // History (past conversations) — fetch the thread list, show a picker, and on
+  // select replay that thread's messages into the log (sets it as the active
+  // thread so the next turn continues it).
+  if (historyBtn && opts.listThreads) {
+    historyBtn.addEventListener("click", () => void openHistory());
+  }
+  async function openHistory(): Promise<void> {
+    if (!opts.listThreads) return;
+    const overlay = el("div", `${PREFIX}-history`);
+    const head = el("div", `${PREFIX}-history-head`);
+    head.textContent = "Past conversations";
+    const back = el("button", `${PREFIX}-history-back`);
+    back.textContent = "Close";
+    back.addEventListener("click", () => overlay.remove());
+    head.appendChild(back);
+    const listEl = el("div", `${PREFIX}-history-list`);
+    listEl.textContent = "Loading…";
+    overlay.append(head, listEl);
+    panel.appendChild(overlay);
+    try {
+      const threads = await opts.listThreads();
+      listEl.innerHTML = "";
+      if (!threads.length) {
+        listEl.textContent = "No past conversations yet.";
+        return;
+      }
+      for (const th of threads.slice(0, 50)) {
+        const item = el("button", `${PREFIX}-history-item`);
+        const ti = el("span", `${PREFIX}-history-title`);
+        ti.textContent = th.title || "Untitled conversation";
+        item.appendChild(ti);
+        if (th.updatedAt) {
+          const dt = el("span", `${PREFIX}-history-date`);
+          dt.textContent = new Date(th.updatedAt).toLocaleDateString();
+          item.appendChild(dt);
+        }
+        item.addEventListener(
+          "click",
+          () => void loadPastThread(th.id, overlay)
+        );
+        listEl.appendChild(item);
+      }
+    } catch {
+      listEl.textContent = "Couldn't load history — try again.";
+    }
+  }
+  async function loadPastThread(
+    id: string,
+    overlay: HTMLElement
+  ): Promise<void> {
+    if (!opts.loadThread) return;
+    try {
+      const msgs = await opts.loadThread(id);
+      // Replace the visible conversation with the chosen thread.
+      log.querySelectorAll(`.${PREFIX}-msg`).forEach((n) => n.remove());
+      history.length = 0;
+      for (const m of msgs) {
+        addMsg(log, m.role, m.content);
+        history.push({ role: m.role, content: m.content });
+      }
+      threadId = id;
+      saveState();
+      overlay.remove();
+      scrollDown(true);
+    } catch {
+      overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
+        "Couldn't open that conversation.";
+    }
+  }
 
   // Let a nav/sidebar link anywhere in the host app open the panel.
   const onOpenEvent = (): void => open();
@@ -378,6 +558,12 @@ export function createAiChatWidget(
               assistant.textContent = (assistant.textContent ?? "") + piece;
               scrollDown();
             }
+            // Inline data widget from the analytics lane (render_chart). Was
+            // previously dropped — now rendered so widget responses are visible.
+            if (frame.type === "widget") {
+              typing.remove();
+              renderServerWidget(frame.spec, frame.rows);
+            }
             if (frame.type === "error" && frame.message)
               failure = frame.message;
           }
@@ -402,9 +588,35 @@ export function createAiChatWidget(
         scrollDown(true);
       }
     } else {
-      // AI-rendered input forms. A generic [[form:{...}]] directive renders an
-      // inline form submitting to a host action; [[collect-email]] is the
-      // built-in lead shortcut.
+      // Render any directives the reply embedded, stripping them from the text.
+      // Order: data widgets (can be several) → navigation → input form → lead.
+
+      // [[widget:{...}]] — inline data widgets (stat/kpis/list/table). Rendered
+      // on EVERY surface (incl. the public marketing bot), so "widget renderer"
+      // responses are visible everywhere, not just text.
+      for (let i = 0; i < 6; i++) {
+        const w = parseJsonDirective<WidgetSpec>(
+          assistant.textContent,
+          "widget"
+        );
+        if (!w) break;
+        assistant.textContent = w.stripped;
+        renderWidget(w.spec);
+      }
+
+      // [[navigate:{path,label}]] — the assistant proposes a page. Rendered as a
+      // button that, on click, calls the host's onWidgetAction("navigate",…) so
+      // the host router does the move (user stays in control; host gates it).
+      const nav = parseJsonDirective<NavigateSpec>(
+        assistant.textContent,
+        "navigate"
+      );
+      if (nav && opts.onWidgetAction && nav.spec.path) {
+        assistant.textContent = nav.stripped;
+        renderNavigate(nav.spec);
+      }
+
+      // [[form:{...}]] inline input form → host action; [[collect-email]] lead.
       const form = parseFormDirective(assistant.textContent);
       if (form && (opts.onWidgetAction || opts.onLead)) {
         assistant.textContent = form.stripped;
@@ -512,6 +724,131 @@ export function createAiChatWidget(
     });
   }
 
+  /** Render an inline data widget (stat / kpis / list / table) in the log. */
+  function renderWidget(spec: WidgetSpec): void {
+    const card = el("div", `${PREFIX}-widget`);
+    if (spec.title) {
+      const t = el("div", `${PREFIX}-widget-title`);
+      t.textContent = spec.title;
+      card.appendChild(t);
+    }
+    const kind =
+      spec.kind ?? (spec.rows ? "table" : spec.items ? "kpis" : "list");
+    if (kind === "stat") {
+      const v = el("div", `${PREFIX}-widget-stat`);
+      v.textContent = String(spec.value ?? "");
+      card.appendChild(v);
+      if (spec.caption) {
+        const c = el("div", `${PREFIX}-widget-cap`);
+        c.textContent = spec.caption;
+        card.appendChild(c);
+      }
+      if (spec.delta) {
+        const d = el("div", `${PREFIX}-widget-delta`);
+        d.textContent = spec.delta;
+        card.appendChild(d);
+      }
+    } else if (kind === "kpis") {
+      const grid = el("div", `${PREFIX}-widget-kpis`);
+      for (const it of (spec.items ?? []).slice(0, 8)) {
+        const tile = el("div", `${PREFIX}-kpi`);
+        const kv = el("div", `${PREFIX}-kpi-v`);
+        kv.textContent = String(it.value ?? "");
+        const kl = el("div", `${PREFIX}-kpi-l`);
+        kl.textContent = it.label ?? "";
+        tile.append(kv, kl);
+        if (it.delta) {
+          const kd = el("div", `${PREFIX}-kpi-d`);
+          kd.textContent = it.delta;
+          tile.appendChild(kd);
+        }
+        grid.appendChild(tile);
+      }
+      card.appendChild(grid);
+    } else if (kind === "table" && spec.rows) {
+      const table = document.createElement("table");
+      table.className = `${PREFIX}-widget-table`;
+      if (spec.columns?.length) {
+        const thead = table.createTHead().insertRow();
+        for (const c of spec.columns) {
+          const th = document.createElement("th");
+          th.textContent = String(c);
+          thead.appendChild(th);
+        }
+      }
+      const tbody = table.createTBody();
+      for (const row of spec.rows.slice(0, 30)) {
+        const tr = tbody.insertRow();
+        for (const cell of row) tr.insertCell().textContent = String(cell);
+      }
+      card.appendChild(table);
+    } else {
+      const ul = el("ul", `${PREFIX}-widget-list`);
+      for (const line of (spec.lines ?? []).slice(0, 30)) {
+        const li = document.createElement("li");
+        li.textContent = line;
+        ul.appendChild(li);
+      }
+      card.appendChild(ul);
+    }
+    log.appendChild(card);
+    scrollDown(true);
+  }
+
+  /** Map an analytics render_chart frame (spec + StatsQueryRow[]) to an inline
+   *  widget. kpi → a stat; everything else → a table of the returned rows. */
+  function renderServerWidget(
+    spec: { title?: string; chartType?: string } | undefined,
+    rows: unknown
+  ): void {
+    const title = spec?.title;
+    const data = Array.isArray(rows)
+      ? (rows as Array<Record<string, unknown>>)
+      : [];
+    if (spec?.chartType === "kpi" && data[0]) {
+      const first = data[0];
+      const keys = Object.keys(first);
+      const valueKey = keys[keys.length - 1];
+      renderWidget({
+        kind: "stat",
+        title,
+        value: String(first[valueKey] ?? ""),
+        caption: valueKey,
+      });
+      return;
+    }
+    if (!data.length) {
+      renderWidget({ kind: "list", title, lines: ["(no data)"] });
+      return;
+    }
+    const columns = Object.keys(data[0]);
+    const tableRows = data
+      .slice(0, 30)
+      .map((r) => columns.map((c) => (r[c] == null ? "" : String(r[c]))));
+    renderWidget({ kind: "table", title, columns, rows: tableRows });
+  }
+
+  /** Render a navigation suggestion as a button → host onWidgetAction("navigate"). */
+  function renderNavigate(spec: NavigateSpec): void {
+    const wrap = el("div", `${PREFIX}-nav`);
+    const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+    btn.type = "button";
+    const label = spec.label || "Open page";
+    btn.innerHTML = `<span>${escapeHtml(label)}</span> <span aria-hidden="true">→</span>`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await opts.onWidgetAction!("navigate", { path: spec.path });
+        btn.innerHTML = `<span>${escapeHtml(label)} ✓</span>`;
+      } catch {
+        btn.disabled = false;
+      }
+    });
+    wrap.appendChild(btn);
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   /** Render a recoverable error card: friendly copy + retry + (optional) report. */
   function showError(raw: string): void {
     const wrap = el("div", `${PREFIX}-error`);
@@ -588,6 +925,21 @@ function el(tag: string, cls: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = cls;
   return node;
+}
+
+/** Escape text for the few places we build innerHTML (nav button label). */
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c] as string
+  );
 }
 
 function addMsg(
@@ -668,7 +1020,38 @@ function injectStyles(
 .${PREFIX}-input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}22}
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}}
+.${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
+.${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
+.${PREFIX}-expanded .${PREFIX}-msg{max-width:75%}
+.${PREFIX}-history{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise .18s ease}
+.${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #eee;font-weight:600;font-size:14px}
+.${PREFIX}-history-back{border:1px solid #ddd;background:#fff;border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:#333}
+.${PREFIX}-history-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:#555}
+.${PREFIX}-history-item{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid #eee;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer;width:100%}
+.${PREFIX}-history-item:hover{border-color:${accent};background:${accent}0a}
+.${PREFIX}-history-title{font-weight:600;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.${PREFIX}-history-date{font-size:11px;color:#999;flex:0 0 auto}
+.${PREFIX}-widget{align-self:stretch;border:1px solid #ececec;border-radius:14px;padding:12px;background:#fff;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-widget-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:8px}
+.${PREFIX}-widget-stat{font-size:30px;font-weight:800;line-height:1.1;color:#111}
+.${PREFIX}-widget-cap{font-size:13px;color:#666;margin-top:2px}
+.${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:${accent};margin-top:4px}
+.${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.${PREFIX}-kpi{border:1px solid #f0f0f0;border-radius:10px;padding:8px 10px;background:#fafafa}
+.${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:#111}
+.${PREFIX}-kpi-l{font-size:11px;color:#888;margin-top:1px}
+.${PREFIX}-kpi-d{font-size:11px;font-weight:600;color:${accent};margin-top:2px}
+.${PREFIX}-widget-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.${PREFIX}-widget-table th{text-align:left;font-weight:700;color:#666;border-bottom:1px solid #e6e6e6;padding:6px 8px}
+.${PREFIX}-widget-table td{border-bottom:1px solid #f2f2f2;padding:6px 8px;color:#222}
+.${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:13.5px;color:#222;display:flex;flex-direction:column;gap:3px}
+.${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid ${accent};background:${accent}0f;color:${accent};border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
+.${PREFIX}-nav-btn:hover{background:${accent}1c}
+.${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}}
 @media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
