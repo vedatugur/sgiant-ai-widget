@@ -1185,6 +1185,20 @@ function injectStyles(
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
 @media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}}
+@keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+/* On phones the panel becomes a full-width bottom sheet (slides up from the
+   bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
+   chat is comfortably usable instead of a cramped corner card. */
+@media (max-width:640px){
+  .${PREFIX}-panel{inset:auto 0 0 0;width:100%;max-width:100%;height:90vh;height:90dvh;max-height:none;border-radius:22px 22px 0 0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
+  .${PREFIX}-expanded{width:100%;max-width:100%;height:94vh;height:94dvh}
+  .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
+  .${PREFIX}-header{position:relative;padding-top:17px}
+  .${PREFIX}-header::before{content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
+  .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+  .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .${PREFIX}-bubble{bottom:16px;${side}:16px}
+}
 @media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
