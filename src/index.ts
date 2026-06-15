@@ -1077,7 +1077,7 @@ function injectStyles(
 .${PREFIX}-ayca{width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:30px;height:30px}
-.${PREFIX}-bubble{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:64px;height:64px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
+.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:80px;height:80px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
@@ -1085,9 +1085,8 @@ function injectStyles(
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
 .${PREFIX}-header{background:${gradient};color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .${PREFIX}-hleft{display:flex;align-items:center;gap:10px;min-width:0}
-.${PREFIX}-avatar{position:relative;width:36px;height:36px;border-radius:50%;background:#151D2F;flex:0 0 auto;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
-.${PREFIX}-avatar::after{content:"";position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:#34D399;box-shadow:0 0 0 2px #fff}
-.${PREFIX}-avatar svg{width:20px;height:20px}
+.${PREFIX}-avatar{position:relative;width:36px;height:36px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.${PREFIX}-avatar svg{width:30px;height:30px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
 .${PREFIX}-sub{font-size:11px;opacity:.85}
