@@ -229,17 +229,21 @@ interface StreamFrame {
 
 const PREFIX = "sgiant-aiw";
 
-// AYCA — "moonlight" (tr). A MINIMAL animated assistant: a soft moon-face (cream
-// disc on the dark avatar = a moon in a night sky) with a moon-phase crescent,
-// blinking eyes, a smile, blush, and a sparkle. Feminine + friendly without a
-// literal portrait; reads cleanly at 24–36px. Animations (blink/float) in CSS.
+// AYCA — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
+// morphs organically with a wet highlight. Editorial, not cartoon; reads
+// cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
 const AVATAR_SVG = `<svg viewBox="0 0 48 48" class="${PREFIX}-ayca" aria-hidden="true">
-<circle cx="24" cy="24" r="15" fill="#FCF7E3"/>
-<path d="M24 9a15 15 0 0 1 0 30 18 18 0 0 0 0-30Z" fill="#FBD9A6" opacity=".5"/>
-<g class="${PREFIX}-eyes" fill="#2B2236"><circle cx="19" cy="23" r="1.7"/><circle cx="29" cy="23" r="1.7"/></g>
-<path d="M20.5 28.5q3.5 3 7 0" stroke="#2B2236" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-<circle cx="16.8" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/><circle cx="31.2" cy="27" r="1.6" fill="#FAB7A6" opacity=".7"/>
-<path d="M37 12l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z" fill="#FBAA34"/>
+<defs><radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
+<stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
+</radialGradient></defs>
+<path fill="url(#${PREFIX}-av-g)" d="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z">
+<animate attributeName="d" dur="6s" repeatCount="indefinite"
+ values="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z;M24 9C33 7 41 15 39 25C38 33 30 41 23 39C15 41 7 31 9 23C10 15 17 11 24 9Z;M25 8C32 9 41 16 40 24C41 32 33 41 24 40C16 42 7 32 8 24C7 16 17 8 25 8Z;M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z"/>
+</path>
+<ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#fff" opacity=".35">
+<animate attributeName="cx" dur="6s" repeatCount="indefinite" values="19;21;18;19"/>
+<animate attributeName="cy" dur="6s" repeatCount="indefinite" values="18;17;19;18"/>
+</ellipse>
 </svg>`;
 
 // Small line icons for the header controls (currentColor, 18px).
