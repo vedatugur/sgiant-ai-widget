@@ -232,7 +232,7 @@ const PREFIX = "sgiant-aiw";
 // AYCA — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
 // morphs organically with a wet highlight. Editorial, not cartoon; reads
 // cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
-const AVATAR_SVG = `<svg viewBox="0 0 48 48" class="${PREFIX}-ayca" aria-hidden="true">
+const AVATAR_SVG = `<svg viewBox="8 8 32 32" class="${PREFIX}-ayca" aria-hidden="true">
 <defs><radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
 <stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
 </radialGradient></defs>
@@ -1072,16 +1072,14 @@ function injectStyles(
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
-@keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
 .${PREFIX}-ayca{width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:30px;height:30px}
-.${PREFIX}-bubble{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:60px;height:60px;border-radius:50%;border:none;background:${gradient};color:#fff;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:3px;animation:${PREFIX}-pulse 3.2s infinite;transition:transform .18s ease}
+.${PREFIX}-bubble{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:60px;height:60px;border-radius:50%;border:none;background:${gradient};color:#fff;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:1px;animation:${PREFIX}-pulse 3.2s infinite;transition:transform .18s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.04)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;border-radius:50%;background:#151D2F;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.${PREFIX}-bubble-av::before{content:"";position:absolute;inset:-3px;border-radius:50%;background:conic-gradient(from 0deg,${accent},#FBAA34,#FA712D,${accent});animation:${PREFIX}-spin 5s linear infinite;z-index:0}
-.${PREFIX}-bubble-av>*{position:relative;z-index:1}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
