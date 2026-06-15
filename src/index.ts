@@ -243,15 +243,15 @@ const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden=
 <animate attributeName="d" dur="4.2s" repeatCount="indefinite"
  values="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z;M24 9C34 6 42 15 39 25C38 34 29 42 23 39C14 42 6 31 9 23C11 14 17 11 24 9Z;M25 7C33 9 42 16 40 24C42 33 33 42 24 40C15 43 6 32 8 24C6 15 17 7 25 7Z;M23 8C31 7 41 14 40 24C40 32 32 41 24 40C16 42 7 31 8 23C9 16 16 9 23 8Z;M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z"/>
 </path>
-<circle r="3">
-<animate attributeName="cx" dur="3.1s" repeatCount="indefinite" values="36;40;34;37;36"/>
-<animate attributeName="cy" dur="3.1s" repeatCount="indefinite" values="16;22;19;14;16"/>
-<animate attributeName="r" dur="3.1s" repeatCount="indefinite" values="3;3.8;2.4;3.3;3"/>
+<circle r="5">
+<animate attributeName="cx" dur="3.1s" repeatCount="indefinite" values="36;41;33;38;36"/>
+<animate attributeName="cy" dur="3.1s" repeatCount="indefinite" values="15;22;19;13;15"/>
+<animate attributeName="r" dur="3.1s" repeatCount="indefinite" values="5;6.2;3.8;5.5;5"/>
 </circle>
-<circle r="2.6">
-<animate attributeName="cx" dur="3.7s" repeatCount="indefinite" values="12;8;14;10;12"/>
-<animate attributeName="cy" dur="3.7s" repeatCount="indefinite" values="32;27;33;29;32"/>
-<animate attributeName="r" dur="3.7s" repeatCount="indefinite" values="2.6;3.4;2;2.8;2.6"/>
+<circle r="4.4">
+<animate attributeName="cx" dur="3.7s" repeatCount="indefinite" values="12;7;15;9;12"/>
+<animate attributeName="cy" dur="3.7s" repeatCount="indefinite" values="33;27;34;30;33"/>
+<animate attributeName="r" dur="3.7s" repeatCount="indefinite" values="4.4;5.4;3.4;4.8;4.4"/>
 </circle>
 </g>
 <ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#fff" opacity=".42">
@@ -1090,10 +1090,10 @@ function injectStyles(
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
 .${PREFIX}-ayca{display:block;width:100%;height:100%;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:78px;height:78px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
+.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:66px;height:66px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-.${PREFIX}-bubble .${PREFIX}-ayca{width:64px;height:64px}
+.${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
