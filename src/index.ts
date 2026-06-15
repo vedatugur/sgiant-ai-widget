@@ -448,6 +448,7 @@ export function createAiChatWidget(
 
   const open = (): void => {
     panel.style.display = "flex";
+    panel.style.transform = ""; // clear any leftover drag offset
     bubble.style.display = "none";
     // Show the latest message + focus the composer (always-ready assistant feel).
     pinned = true;
@@ -456,6 +457,8 @@ export function createAiChatWidget(
   };
   const close = (): void => {
     panel.style.display = "none";
+    panel.style.transform = "";
+    panel.style.transition = "";
     bubble.style.display = "flex";
   };
   const toggle = (): void =>
@@ -463,6 +466,46 @@ export function createAiChatWidget(
 
   bubble.addEventListener("click", open);
   closeBtn.addEventListener("click", close);
+
+  // Swipe-down-to-close (mobile bottom sheet). Dragging the header/grab-handle
+  // pulls the panel down with the finger; releasing past a threshold dismisses
+  // it, otherwise it springs back. No-op on desktop widths.
+  const isSheet = (): boolean => window.matchMedia("(max-width:640px)").matches;
+  let dragStartY = 0;
+  let dragging = false;
+  header.addEventListener(
+    "touchstart",
+    (e: TouchEvent) => {
+      if (!isSheet() || e.touches.length !== 1) return;
+      dragStartY = e.touches[0].clientY;
+      dragging = true;
+      panel.style.transition = "none";
+    },
+    { passive: true }
+  );
+  header.addEventListener(
+    "touchmove",
+    (e: TouchEvent) => {
+      if (!dragging) return;
+      const dy = e.touches[0].clientY - dragStartY;
+      if (dy > 0) panel.style.transform = `translateY(${dy}px)`;
+    },
+    { passive: true }
+  );
+  const endDrag = (e: TouchEvent): void => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = (e.changedTouches[0]?.clientY ?? dragStartY) - dragStartY;
+    panel.style.transition = "transform .25s cubic-bezier(.22,1,.36,1)";
+    if (dy > 110) {
+      panel.style.transform = "translateY(100%)";
+      window.setTimeout(close, 230);
+    } else {
+      panel.style.transform = "";
+    }
+  };
+  header.addEventListener("touchend", endDrag, { passive: true });
+  header.addEventListener("touchcancel", endDrag, { passive: true });
 
   // Expand / restore the panel (bigger reading area). Toggles a class + icon.
   let expanded = false;
@@ -1193,7 +1236,7 @@ function injectStyles(
   .${PREFIX}-panel{inset:auto 0 0 0;width:100%;max-width:100%;height:90vh;height:90dvh;max-height:none;border-radius:22px 22px 0 0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:94vh;height:94dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
-  .${PREFIX}-header{position:relative;padding-top:17px}
+  .${PREFIX}-header{position:relative;padding-top:17px;touch-action:none}
   .${PREFIX}-header::before{content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
   .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
   .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
