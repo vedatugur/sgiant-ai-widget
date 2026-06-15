@@ -1094,6 +1094,7 @@ function injectStyles(
 .${PREFIX}-bubble{position:fixed;bottom:16px;${side}:16px;z-index:2147483000;width:104px;height:104px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.${PREFIX}-bubble .${PREFIX}-ayca{width:94px;height:94px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
