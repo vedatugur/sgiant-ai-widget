@@ -454,11 +454,15 @@ export function createAiChatWidget(
     pinned = true;
     log.scrollTop = log.scrollHeight;
     input.focus();
+    bindKeyboard();
   };
   const close = (): void => {
+    unbindKeyboard();
     panel.style.display = "none";
     panel.style.transform = "";
     panel.style.transition = "";
+    panel.style.height = "";
+    panel.style.top = "";
     bubble.style.display = "flex";
   };
   const toggle = (): void =>
@@ -471,6 +475,36 @@ export function createAiChatWidget(
   // pulls the panel down with the finger; releasing past a threshold dismisses
   // it, otherwise it springs back. No-op on desktop widths.
   const isSheet = (): boolean => window.matchMedia("(max-width:640px)").matches;
+
+  // iOS keyboard handling. On the mobile full-screen sheet the soft keyboard
+  // shrinks the VISUAL viewport but NOT 100dvh, so a focused composer would sit
+  // behind the keyboard / off-screen. Size the sheet to window.visualViewport
+  // (which DOES shrink for the keyboard) while it's open, and follow its offset.
+  let vvCleanup: (() => void) | null = null;
+  const bindKeyboard = (): void => {
+    const vv = window.visualViewport;
+    if (!vv || vvCleanup) return;
+    const apply = (): void => {
+      if (!isSheet() || panel.style.display === "none") {
+        panel.style.height = "";
+        panel.style.top = "";
+        return;
+      }
+      panel.style.height = `${vv.height}px`;
+      panel.style.top = `${vv.offsetTop}px`;
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    vvCleanup = (): void => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  };
+  const unbindKeyboard = (): void => {
+    vvCleanup?.();
+    vvCleanup = null;
+  };
   let dragStartY = 0;
   let dragging = false;
   header.addEventListener(
@@ -1078,6 +1112,7 @@ export function createAiChatWidget(
       if (opts.openEventName) {
         window.removeEventListener(opts.openEventName, onOpenEvent);
       }
+      unbindKeyboard();
       bubble.remove();
       panel.remove();
     },
