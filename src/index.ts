@@ -343,7 +343,6 @@ export function createAiChatWidget(
   panel.setAttribute("aria-label", `${name} chat`);
 
   const header = el("div", `${PREFIX}-header`);
-  const hLeft = el("div", `${PREFIX}-hleft`);
   const avatar = el("div", `${PREFIX}-avatar`);
   avatar.innerHTML = avatarInner;
   const hName = el("div", `${PREFIX}-hname`);
@@ -352,7 +351,6 @@ export function createAiChatWidget(
   const subEl = el("span", `${PREFIX}-sub`);
   subEl.textContent = opts.subtitle ?? "Growth assistant";
   hName.append(titleEl, subEl);
-  hLeft.append(avatar, hName);
   const hActions = el("div", `${PREFIX}-hactions`);
   // New chat — start a fresh conversation (keeps the prior one in history).
   const newChatBtn = el("button", `${PREFIX}-icon`);
@@ -384,7 +382,7 @@ export function createAiChatWidget(
   closeBtn.innerHTML = "&times;";
   closeBtn.setAttribute("aria-label", "Close chat");
   hActions.appendChild(closeBtn);
-  header.append(hLeft, hActions);
+  header.append(avatar, hName, hActions);
 
   const log = el("div", `${PREFIX}-log`);
   // Accessible, scrollable conversation region. role=log + aria-live announces
@@ -1272,11 +1270,10 @@ function injectStyles(
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
-.${PREFIX}-header{background:${gradient};color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.${PREFIX}-hleft{display:flex;align-items:center;gap:10px;min-width:0}
+.${PREFIX}-header{background:${gradient};color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
 .${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,17,30,.55)}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
-.${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
 .${PREFIX}-sub{font-size:11px;opacity:.85}
 .${PREFIX}-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
@@ -1361,8 +1358,15 @@ function injectStyles(
   .${PREFIX}-panel{inset:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
-  .${PREFIX}-header{position:relative;padding-top:calc(10px + env(safe-area-inset-top));touch-action:none}
+  /* Give the title its own full-width row: avatar + actions share the top row,
+     the name/subtitle drop to a dedicated line below so the title never gets
+     squeezed by the action buttons on narrow phones. */
+  .${PREFIX}-header{position:relative;padding-top:calc(14px + env(safe-area-inset-top));display:grid;grid-template-columns:auto 1fr;grid-template-areas:"avatar actions" "name name";align-items:center;gap:8px 10px;touch-action:none}
   .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
+  .${PREFIX}-avatar{grid-area:avatar}
+  .${PREFIX}-hactions{grid-area:actions;justify-self:end}
+  .${PREFIX}-hname{grid-area:name}
+  .${PREFIX}-title{font-size:16px}
   .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
   .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
   .${PREFIX}-bubble{bottom:16px;${side}:16px}
