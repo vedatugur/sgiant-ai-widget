@@ -111,6 +111,9 @@ export interface AiChatWidgetOptions {
   loadThread?: (
     threadId: string
   ) => Promise<Array<{ role: "user" | "assistant"; content: string }>>;
+  /** Where "Sign up" sends the visitor when the free token allowance runs out
+   *  (and from the meter's CTA). When set, the widget shows the token meter. */
+  signupUrl?: string;
 }
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
@@ -225,6 +228,14 @@ interface StreamFrame {
   /** render_chart widget frame (analytics lane): spec = model args, rows = data. */
   spec?: { title?: string; chartType?: string };
   rows?: unknown;
+  /** usage frame — per-turn token counts (drives the session meter). */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** quota frame — the free visitor allowance snapshot. */
+  granted?: number;
+  used?: number;
+  remaining?: number;
+  exhausted?: boolean;
 }
 
 const PREFIX = "sgiant-aiw";
@@ -343,6 +354,13 @@ export function createAiChatWidget(
   hName.append(titleEl, subEl);
   hLeft.append(avatar, hName);
   const hActions = el("div", `${PREFIX}-hactions`);
+  // New chat — start a fresh conversation (keeps the prior one in history).
+  const newChatBtn = el("button", `${PREFIX}-icon`);
+  newChatBtn.setAttribute("aria-label", "New chat");
+  newChatBtn.title = "New chat";
+  newChatBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  hActions.appendChild(newChatBtn);
   // History (past conversations) — only when the host wired a thread lister.
   let historyBtn: HTMLElement | null = null;
   if (opts.listThreads) {
@@ -425,6 +443,30 @@ export function createAiChatWidget(
     });
   };
 
+  // Token meter — shown only for the free visitor preview (when signupUrl is
+  // set). Surfaces remaining allowance + tokens used this browser session.
+  const meterEl = el("div", `${PREFIX}-meter`);
+  meterEl.style.display = "none";
+  let quotaGranted = 0;
+  let quotaRemaining: number | null = null;
+  let sessionUsed = 0;
+  function renderMeter(): void {
+    if (!opts.signupUrl || (quotaRemaining === null && sessionUsed === 0)) {
+      meterEl.style.display = "none";
+      return;
+    }
+    meterEl.style.display = "block";
+    const pct =
+      quotaGranted > 0 && quotaRemaining !== null
+        ? Math.max(0, Math.min(100, (quotaRemaining / quotaGranted) * 100))
+        : 100;
+    const remTxt =
+      quotaRemaining !== null
+        ? `${quotaRemaining.toLocaleString()} free tokens left`
+        : "Free preview";
+    meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="width:${pct}%"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
+  }
+
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
@@ -436,7 +478,7 @@ export function createAiChatWidget(
   sendBtn.textContent = "Send";
   form.append(input, sendBtn);
 
-  panel.append(header, log, form);
+  panel.append(header, log, meterEl, form);
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
   if (!document.getElementById(`${PREFIX}-av-g`)) {
     const defs = document.createElement("div");
@@ -562,6 +604,31 @@ export function createAiChatWidget(
   // thread so the next turn continues it).
   if (historyBtn && opts.listThreads) {
     historyBtn.addEventListener("click", () => void openHistory());
+  }
+
+  // New chat — drop the active thread + transcript (the old one stays in
+  // history) and start fresh with the greeting.
+  newChatBtn.addEventListener("click", () => {
+    threadId = undefined;
+    history.length = 0;
+    saveState();
+    log.innerHTML = "";
+    if (opts.greeting) addMsg(log, "assistant", opts.greeting);
+    input.focus();
+  });
+
+  /** Append a "sign up to continue" call-to-action when the free allowance is
+   *  spent (only when the host provided a signupUrl). */
+  function showSignupCta(): void {
+    if (!opts.signupUrl) return;
+    const wrap = el("div", `${PREFIX}-cta`);
+    const a = document.createElement("a");
+    a.className = `${PREFIX}-cta-btn`;
+    a.href = opts.signupUrl;
+    a.textContent = "Sign up — it's free to start";
+    wrap.appendChild(a);
+    log.appendChild(wrap);
+    scrollDown(true);
   }
   async function openHistory(): Promise<void> {
     if (!opts.listThreads) return;
@@ -706,6 +773,23 @@ export function createAiChatWidget(
             if (frame.type === "widget") {
               typing.remove();
               renderServerWidget(frame.spec, frame.rows);
+            }
+            // Free-allowance meter (visitor preview). `quota` is the server's
+            // snapshot; `usage` is this turn's tokens (count toward the session).
+            if (frame.type === "quota") {
+              if (typeof frame.granted === "number")
+                quotaGranted = frame.granted;
+              if (typeof frame.remaining === "number")
+                quotaRemaining = frame.remaining;
+              renderMeter();
+              if (frame.exhausted) showSignupCta();
+            }
+            if (frame.type === "usage") {
+              const turn = (frame.inputTokens ?? 0) + (frame.outputTokens ?? 0);
+              sessionUsed += turn;
+              if (quotaRemaining !== null)
+                quotaRemaining = Math.max(0, quotaRemaining - turn);
+              renderMeter();
             }
             if (frame.type === "error" && frame.message)
               failure = frame.message;
@@ -1218,6 +1302,12 @@ function injectStyles(
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff}
 .${PREFIX}-input{flex:1;border:1px solid #ddd;border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
+.${PREFIX}-meter{padding:7px 12px 0;background:#fff}
+.${PREFIX}-meter-bar{height:4px;border-radius:999px;background:#eee;overflow:hidden}
+.${PREFIX}-meter-bar>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,${accent},#FBAA34);transition:width .3s ease}
+.${PREFIX}-meter-row{display:flex;justify-content:space-between;gap:8px;margin-top:3px;font-size:10.5px;color:#888}
+.${PREFIX}-cta{display:flex;justify-content:center;padding:6px 0 2px}
+.${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;color:#fff;text-decoration:none;background:linear-gradient(90deg,${accent},#FBAA34);box-shadow:0 4px 14px ${accent}40}
 .${PREFIX}-lead{align-self:stretch;border:1px solid #eee;border-radius:14px;padding:11px 12px;background:#fff;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-form-title{font-size:13px;font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
