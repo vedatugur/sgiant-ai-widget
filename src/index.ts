@@ -19,9 +19,13 @@
 // surface (org/admin/marketing/onboarding) wires the same way.
 export {
   makePageContext,
+  matchManifest,
+  formatPageContext,
   createHostActions,
   STANDARD_ACTIONS,
   type PageContext,
+  type PageManifestEntry,
+  type NavTarget,
   type AppSurface,
   type HostActionsConfig,
   type HostActionHandler,
@@ -111,6 +115,16 @@ export interface AiChatWidgetOptions {
    * reading size (and back). Default true. Set false for tight embeds.
    */
   expandable?: boolean;
+  /**
+   * Offer an "auto-navigate" toggle in the header. When the user turns it ON,
+   * the assistant's `[[navigate:…]]` suggestions are followed AUTOMATICALLY (no
+   * confirm button) — a hands-free "drive me there" mode. State is BROWSER-LOCAL
+   * (localStorage), off by default, and per-user controlled. In-app ACTIONS that
+   * carry a `confirm` (anything that changes state or costs credits) are NEVER
+   * auto-run — only pure page navigation is. Set true on surfaces where
+   * navigation is enabled (org/admin/marketing).
+   */
+  autoNavOption?: boolean;
   /**
    * Past-conversation history. When provided, a history control appears in the
    * header; opening it lists the user's prior threads. Picking one calls
@@ -295,6 +309,8 @@ const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden=
 const ICON_HISTORY = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>`;
 const ICON_EXPAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>`;
 const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>`;
+// Compass — the auto-navigate ("drive me there") toggle.
+const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -381,6 +397,42 @@ export function createAiChatWidget(
     historyBtn.title = "History";
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
+  }
+  // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, AYCA follows its
+  // own navigation suggestions automatically (no confirm button). Off by default.
+  const AUTONAV_KEY = "sg_ayca_autonav";
+  let autoNav = false;
+  try {
+    autoNav = window.localStorage.getItem(AUTONAV_KEY) === "1";
+  } catch {
+    /* storage blocked */
+  }
+  let autoNavBtn: HTMLButtonElement | null = null;
+  if (opts.autoNavOption) {
+    autoNavBtn = el(`button`, `${PREFIX}-icon`) as HTMLButtonElement;
+    autoNavBtn.innerHTML = ICON_COMPASS;
+    const syncAutoNav = (): void => {
+      autoNavBtn!.classList.toggle(`${PREFIX}-icon-on`, autoNav);
+      autoNavBtn!.title = autoNav
+        ? "Auto-navigate is ON — AYCA opens pages for you. Click to turn off."
+        : "Auto-navigate is OFF — AYCA asks before opening pages. Click to turn on.";
+      autoNavBtn!.setAttribute(
+        "aria-label",
+        autoNav ? "Auto-navigate on" : "Auto-navigate off"
+      );
+      autoNavBtn!.setAttribute("aria-pressed", autoNav ? "true" : "false");
+    };
+    syncAutoNav();
+    autoNavBtn.addEventListener("click", () => {
+      autoNav = !autoNav;
+      try {
+        window.localStorage.setItem(AUTONAV_KEY, autoNav ? "1" : "0");
+      } catch {
+        /* storage blocked */
+      }
+      syncAutoNav();
+    });
+    hActions.appendChild(autoNavBtn);
   }
   // Expand / restore — grows the panel for easier reading (default on).
   let expandBtn: HTMLElement | null = null;
@@ -1082,12 +1134,26 @@ export function createAiChatWidget(
     renderWidget({ kind: "table", title, columns, rows: tableRows });
   }
 
-  /** Render a navigation suggestion as a button → host onWidgetAction("navigate"). */
+  /** Render a navigation suggestion. With auto-navigate ON it follows the link
+   *  immediately (showing a "Opening …" chip); OFF it offers a confirm button. */
   function renderNavigate(spec: NavigateSpec): void {
     const wrap = el("div", `${PREFIX}-nav`);
+    const label = spec.label || "Open page";
+    if (autoNav) {
+      const chip = el("div", `${PREFIX}-autonav`);
+      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
+      wrap.appendChild(chip);
+      log.appendChild(wrap);
+      scrollDown(true);
+      void Promise.resolve(
+        opts.onWidgetAction!("navigate", { path: spec.path })
+      ).catch(() => {
+        chip.querySelector("span")!.textContent = `Couldn't open ${label}`;
+      });
+      return;
+    }
     const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     btn.type = "button";
-    const label = spec.label || "Open page";
     btn.innerHTML = `<span>${escapeHtml(label)}</span> <span aria-hidden="true">→</span>`;
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -1107,6 +1173,29 @@ export function createAiChatWidget(
    *  step), dispatched to the host via onWidgetAction(name, data). */
   function renderAction(spec: ActionSpec): void {
     const wrap = el("div", `${PREFIX}-nav`);
+    // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
+    // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
+    // state / costs credits) ALWAYS asks, even in auto mode.
+    if (autoNav && !spec.confirm) {
+      const label = spec.label || "Opening…";
+      const chip = el("div", `${PREFIX}-autonav`);
+      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
+      wrap.appendChild(chip);
+      log.appendChild(wrap);
+      scrollDown(true);
+      void Promise.resolve(
+        opts.onWidgetAction!(spec.name, spec.data ?? {})
+      ).then(
+        (msg) => {
+          chip.querySelector("span")!.textContent =
+            (typeof msg === "string" && msg) || `${label} ✓`;
+        },
+        () => {
+          chip.querySelector("span")!.textContent = `Couldn't run ${label}`;
+        }
+      );
+      return;
+    }
     const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     btn.type = "button";
     const label = spec.label || "Run";
@@ -1332,6 +1421,9 @@ function injectStyles(
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
+.${PREFIX}-icon-on{background:#fff;color:${accent}}
+.${PREFIX}-icon-on:hover{background:#fff}
+.${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid ${accent}33;background:${accent}0f;color:${accent};border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
 .${PREFIX}-expanded .${PREFIX}-msg{max-width:75%}
 .${PREFIX}-history{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise .18s ease}
