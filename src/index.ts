@@ -204,27 +204,26 @@ interface FormSpec {
   submit?: string;
 }
 
-/** Pull a `[[form:{json}]]` directive out of assistant text, if present. */
+/** Pull a `[[form:{json}]]` directive out of assistant text, if present. Uses
+ *  the shared brace-matching extractor, then validates the form shape. */
 function parseFormDirective(
   text: string
 ): { spec: FormSpec; stripped: string } | null {
-  const start = text.indexOf("[[form:");
-  if (start < 0) return null;
-  const end = text.lastIndexOf("]]");
-  if (end <= start) return null;
-  const json = text.slice(start + "[[form:".length, end).trim();
-  try {
-    const spec = JSON.parse(json) as FormSpec;
-    if (!spec || typeof spec.action !== "string" || !Array.isArray(spec.fields))
-      return null;
-    const stripped = (text.slice(0, start) + text.slice(end + 2)).trim();
-    return { spec, stripped };
-  } catch {
+  const r = parseJsonDirective<FormSpec>(text, "form");
+  if (!r) return null;
+  const { spec } = r;
+  if (!spec || typeof spec.action !== "string" || !Array.isArray(spec.fields))
     return null;
-  }
+  return r;
 }
 
-/** Generic `[[tag:{json}]]` directive extractor (first occurrence). */
+/**
+ * Generic `[[tag:{json}]]` directive extractor (first occurrence). Robust to the
+ * model mis-counting brackets: it brace-matches the JSON object (string-aware,
+ * so a `]]` or `}` inside a quoted value doesn't fool it), then consumes 0–2
+ * trailing `]`. So `[[navigate:{…}]`, `…}]]` and `…}` all parse — otherwise a
+ * single-`]` slip would leave the raw directive showing as text.
+ */
 function parseJsonDirective<T>(
   text: string,
   tag: string
@@ -232,14 +231,37 @@ function parseJsonDirective<T>(
   const open = `[[${tag}:`;
   const start = text.indexOf(open);
   if (start < 0) return null;
-  // Find the matching `]]` for THIS directive (not the last in the message, so
-  // multiple directives in one reply each parse correctly).
-  const end = text.indexOf("]]", start);
-  if (end <= start) return null;
-  const json = text.slice(start + open.length, end).trim();
+  const braceStart = text.indexOf("{", start + open.length);
+  if (braceStart < 0) return null;
+  // Walk the JSON object, tracking string state, to find its true closing brace.
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let end = -1;
+  for (let i = braceStart; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return null;
   try {
-    const spec = JSON.parse(json) as T;
-    const stripped = (text.slice(0, start) + text.slice(end + 2)).trim();
+    const spec = JSON.parse(text.slice(braceStart, end + 1)) as T;
+    // Consume up to two trailing `]` (tolerate `]]`, `]`, or none).
+    let after = end + 1;
+    if (text[after] === "]") after++;
+    if (text[after] === "]") after++;
+    const stripped = (text.slice(0, start) + text.slice(after)).trim();
     return { spec, stripped };
   } catch {
     return null;
