@@ -63,6 +63,12 @@ export interface AiChatWidgetOptions {
   getToken?: () => string | Promise<string>;
   /** Send cookies (same-origin in-app embedding). Default false. */
   withCredentials?: boolean;
+  /**
+   * Authed surfaces (org + admin): a persistent status bar shows the remaining
+   * AI credits and which AYCA role is acting. Called on open + after each turn;
+   * return the current credit balance (null = unknown/hidden).
+   */
+  getBalance?: () => Promise<number | null> | number | null;
   /** Assistant name shown in the header + bubble aria-label. Default "AYCA". */
   title?: string;
   /** Small line under the name. Default "Growth assistant". */
@@ -531,6 +537,54 @@ export function createAiChatWidget(
     meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="width:${pct}%"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
   }
 
+  // Authed status bar — remaining credits + the active AYCA role. Shown only
+  // when a balance provider is wired (org + admin), independent of the visitor
+  // token meter above.
+  const ROLE_NAMES: Record<string, string> = {
+    talk: "Talk",
+    analytics: "Analytics",
+    creation: "Creation",
+    automation: "Automation",
+  };
+  // Which role an in-app ACTION belongs to, so the badge reflects the live task.
+  const ACTION_ROLE: Record<string, string> = {
+    "research-brand": "analytics",
+    "open-dashboards": "analytics",
+    "open-dashboard-builder": "analytics",
+    "open-studio": "creation",
+  };
+  const statusEl = el("div", `${PREFIX}-status`);
+  statusEl.style.display = "none";
+  let activeRole = "talk";
+  let creditBalance: number | null = null;
+  function renderStatus(): void {
+    if (!opts.getBalance) {
+      statusEl.style.display = "none";
+      return;
+    }
+    statusEl.style.display = "flex";
+    const credits =
+      creditBalance === null
+        ? "—"
+        : `${creditBalance.toLocaleString()} credits`;
+    statusEl.innerHTML =
+      `<span class="${PREFIX}-status-role">${ROLE_NAMES[activeRole] ?? activeRole}</span>` +
+      `<span class="${PREFIX}-status-credits">★ ${credits}</span>`;
+  }
+  async function refreshBalance(): Promise<void> {
+    if (!opts.getBalance) return;
+    try {
+      creditBalance = await opts.getBalance();
+    } catch {
+      /* keep last */
+    }
+    renderStatus();
+  }
+  function setRole(role: string): void {
+    activeRole = role;
+    renderStatus();
+  }
+
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
@@ -542,7 +596,8 @@ export function createAiChatWidget(
   sendBtn.textContent = "Send";
   form.append(input, sendBtn);
 
-  panel.append(header, log, meterEl, form);
+  panel.append(header, log, meterEl, statusEl, form);
+  renderStatus();
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
   if (!document.getElementById(`${PREFIX}-av-g`)) {
     const defs = document.createElement("div");
@@ -561,6 +616,7 @@ export function createAiChatWidget(
     log.scrollTop = log.scrollHeight;
     input.focus();
     bindKeyboard();
+    void refreshBalance();
   };
   const close = (): void => {
     unbindKeyboard();
@@ -776,6 +832,7 @@ export function createAiChatWidget(
     busy = true;
     lastUserContent = content;
     sendBtn.disabled = true;
+    setRole("talk"); // each turn starts as the conversational copilot
     addMsg(log, "user", content);
     history.push({ role: "user", content });
     saveState();
@@ -866,6 +923,8 @@ export function createAiChatWidget(
       busy = false;
       sendBtn.disabled = false;
       input.focus();
+      // A turn just consumed credits — refresh the remaining-credits readout.
+      void refreshBalance();
     }
 
     // Clear the typing indicator + the streaming caret now the reply is final.
@@ -1172,6 +1231,9 @@ export function createAiChatWidget(
   /** Render an AI-proposed in-app action as a button (with optional confirm
    *  step), dispatched to the host via onWidgetAction(name, data). */
   function renderAction(spec: ActionSpec): void {
+    // Reflect the acting capability in the status badge (e.g. research-brand →
+    // Analytics, open-studio → Creation); plain navigation stays Talk.
+    if (ACTION_ROLE[spec.name]) setRole(ACTION_ROLE[spec.name]);
     const wrap = el("div", `${PREFIX}-nav`);
     // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
     // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
@@ -1406,6 +1468,9 @@ function injectStyles(
 .${PREFIX}-meter-bar{height:4px;border-radius:999px;background:#eee;overflow:hidden}
 .${PREFIX}-meter-bar>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,${accent},#FBAA34);transition:width .3s ease}
 .${PREFIX}-meter-row{display:flex;justify-content:space-between;gap:8px;margin-top:3px;font-size:10.5px;color:#888}
+.${PREFIX}-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px 0;font-size:11px}
+.${PREFIX}-status-role{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-weight:600;color:${accent};background:${accent}1a}
+.${PREFIX}-status-credits{font-weight:600;color:#555;font-variant-numeric:tabular-nums}
 .${PREFIX}-cta{display:flex;justify-content:center;padding:6px 0 2px}
 .${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;color:#fff;text-decoration:none;background:linear-gradient(90deg,${accent},#FBAA34);box-shadow:0 4px 14px ${accent}40}
 .${PREFIX}-lead{align-self:stretch;border:1px solid #eee;border-radius:14px;padding:11px 12px;background:#fff;animation:${PREFIX}-rise .2s ease}
