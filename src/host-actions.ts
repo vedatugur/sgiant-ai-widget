@@ -1,5 +1,5 @@
 /**
- * Shared host protocol for AYCA — the ONE definition of the page context the
+ * Shared host protocol for Copilot — the ONE definition of the page context the
  * assistant receives and the in-app actions it may take, reused by every
  * surface (org, admin, marketing, onboarding). Keeping this in one place means
  * adding a surface is a few lines, and the action allow-list can't drift between
@@ -14,9 +14,9 @@ export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
 
 /**
  * A structured descriptor of ONE page/route — the "page manifest". It lives next
- * to the app's routes (one source of truth) and teaches AYCA what a page IS:
+ * to the app's routes (one source of truth) and teaches Copilot what a page IS:
  * its purpose, the sections on it, and the actions available there. Feeding
- * these into the turn context turns AYCA from "knows the route name" into a
+ * these into the turn context turns Copilot from "knows the route name" into a
  * page-structure-aware UI assistant.
  */
 export interface PageManifestEntry {
@@ -27,7 +27,7 @@ export interface PageManifestEntry {
   title: string;
   /** One-line "what this page is for". */
   purpose: string;
-  /** Key sections/areas on the page (so AYCA can describe its structure). */
+  /** Key sections/areas on the page (so Copilot can describe its structure). */
   sections?: string[];
   /** Allow-listed action name(s) that open/operate this page, when the host
    *  prefers a named action over a raw path (e.g. org's "open-studio"). */
@@ -55,7 +55,7 @@ export interface PageContext {
   recentPages: string[];
   /** The current page's manifest descriptor (purpose + sections), when known. */
   pageInfo?: PageManifestEntry;
-  /** The catalog of pages AYCA may open (from the manifest) — the single source
+  /** The catalog of pages Copilot may open (from the manifest) — the single source
    *  of truth for navigation, so the prompt never hardcodes a path list. */
   navTargets?: NavTarget[];
 }
@@ -138,7 +138,7 @@ export function formatPageContext(pc: PageContext): string {
 }
 
 /** Machine-readable catalog of the standard actions — feed (filtered by the
- *  account's navigationEnabled + role) into the model's turn context so AYCA
+ *  account's navigationEnabled + role) into the model's turn context so Copilot
  *  only proposes actions that exist and are permitted. */
 export const STANDARD_ACTIONS = [
   {

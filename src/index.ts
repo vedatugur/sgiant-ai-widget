@@ -65,11 +65,11 @@ export interface AiChatWidgetOptions {
   withCredentials?: boolean;
   /**
    * Authed surfaces (org + admin): a persistent status bar shows the remaining
-   * AI credits and which AYCA role is acting. Called on open + after each turn;
+   * AI credits and which Copilot role is acting. Called on open + after each turn;
    * return the current credit balance (null = unknown/hidden).
    */
   getBalance?: () => Promise<number | null> | number | null;
-  /** Assistant name shown in the header + bubble aria-label. Default "AYCA". */
+  /** Assistant name shown in the header + bubble aria-label. Default "Copilot". */
   title?: string;
   /** Small line under the name. Default "Growth assistant". */
   subtitle?: string;
@@ -296,7 +296,7 @@ interface StreamFrame {
 
 const PREFIX = "sgiant-aiw";
 
-// AYCA — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
+// Copilot — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
 // morphs organically with a wet highlight. Editorial, not cartoon; reads
 // cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
 // Shared gradient + goo filter — appended to the root ONCE so the bubble and
@@ -348,7 +348,7 @@ export function createAiChatWidget(
     opts.gradient ?? `linear-gradient(135deg,${accent},${accent})`;
   const side = opts.position === "bottom-left" ? "left" : "right";
   const root = opts.container ?? document.body;
-  const name = opts.title ?? "AYCA";
+  const name = opts.title ?? "Copilot";
   // Avatar markup: the brand logo mark (img) when given, else a crescent glyph.
   const avatarInner = opts.avatarUrl
     ? `<img src="${opts.avatarUrl}" alt="${name}" class="${PREFIX}-av-img"/>`
@@ -426,7 +426,7 @@ export function createAiChatWidget(
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
   }
-  // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, AYCA follows its
+  // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
   const AUTONAV_KEY = "sg_ayca_autonav";
   let autoNav = false;
@@ -442,8 +442,8 @@ export function createAiChatWidget(
     const syncAutoNav = (): void => {
       autoNavBtn!.classList.toggle(`${PREFIX}-icon-on`, autoNav);
       autoNavBtn!.title = autoNav
-        ? "Auto-navigate is ON — AYCA opens pages for you. Click to turn off."
-        : "Auto-navigate is OFF — AYCA asks before opening pages. Click to turn on.";
+        ? "Auto-navigate is ON — Copilot opens pages for you. Click to turn off."
+        : "Auto-navigate is OFF — Copilot asks before opening pages. Click to turn on.";
       autoNavBtn!.setAttribute(
         "aria-label",
         autoNav ? "Auto-navigate on" : "Auto-navigate off"
@@ -559,7 +559,7 @@ export function createAiChatWidget(
     meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="width:${pct}%"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
   }
 
-  // Authed status bar — remaining credits + the active AYCA role. Shown only
+  // Authed status bar — remaining credits + the active Copilot role. Shown only
   // when a balance provider is wired (org + admin), independent of the visitor
   // token meter above.
   const ROLE_NAMES: Record<string, string> = {
