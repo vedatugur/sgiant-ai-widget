@@ -499,8 +499,6 @@ export function createAiChatWidget(
   } else if (opts.greeting) {
     addMsg(log, "assistant", opts.greeting);
   }
-  // Initial page-aware shortcuts (defined below; hoisted). Safe before open.
-  void renderSuggestions();
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
   // already near the bottom — so streaming text doesn't yank the view when they
@@ -901,6 +899,11 @@ export function createAiChatWidget(
   if (opts.openEventName) {
     window.addEventListener(opts.openEventName, onOpenEvent);
   }
+
+  // Initial page-aware shortcuts. Done HERE (not at greeting time) so every
+  // const it reads — suggestionsEl, busy, send — is already initialized; calling
+  // it earlier hits the temporal dead zone (Cannot access before init).
+  void renderSuggestions();
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
