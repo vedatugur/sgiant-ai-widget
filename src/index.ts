@@ -78,6 +78,14 @@ export interface AiChatWidgetOptions {
   /** CSS gradient for the chrome (header/bubble) for a premium look. */
   gradient?: string;
   greeting?: string;
+  /**
+   * Page-aware shortcuts. Returns a few suggested questions/actions for the
+   * CURRENT page (the host derives them from the path) — rendered as clickable
+   * chips under the greeting whenever the conversation is empty. Clicking a chip
+   * sends it as the user's message. Called on open + new chat, so the shortcuts
+   * follow the user around the app. Return [] (or omit) to show none.
+   */
+  getSuggestions?: () => string[] | Promise<string[]>;
   accent?: string;
   position?: "bottom-right" | "bottom-left";
   /** Mount target; defaults to document.body. */
@@ -491,6 +499,8 @@ export function createAiChatWidget(
   } else if (opts.greeting) {
     addMsg(log, "assistant", opts.greeting);
   }
+  // Initial page-aware shortcuts (defined below; hoisted). Safe before open.
+  void renderSuggestions();
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
   // already near the bottom — so streaming text doesn't yank the view when they
@@ -607,6 +617,11 @@ export function createAiChatWidget(
     renderStatus();
   }
 
+  // Page-aware shortcut chips (filled by renderSuggestions); sits just above the
+  // composer and only while the conversation is empty.
+  const suggestionsEl = el("div", `${PREFIX}-suggestions`);
+  suggestionsEl.style.display = "none";
+
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
@@ -618,7 +633,7 @@ export function createAiChatWidget(
   sendBtn.textContent = "Send";
   form.append(input, sendBtn);
 
-  panel.append(header, log, meterEl, statusEl, form);
+  panel.append(header, log, meterEl, statusEl, suggestionsEl, form);
   renderStatus();
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
   if (!document.getElementById(`${PREFIX}-av-g`)) {
@@ -639,6 +654,8 @@ export function createAiChatWidget(
     input.focus();
     bindKeyboard();
     void refreshBalance();
+    // Refresh shortcuts for the page the user opened the widget on.
+    void renderSuggestions();
   };
   const close = (): void => {
     unbindKeyboard();
@@ -756,8 +773,51 @@ export function createAiChatWidget(
     saveState();
     log.innerHTML = "";
     if (opts.greeting) addMsg(log, "assistant", opts.greeting);
+    void renderSuggestions();
     input.focus();
   });
+
+  // Page-aware shortcut chips — rendered only while the conversation is empty
+  // (no user turn yet). The host returns suggestions for the current path, so
+  // the chips change as the user moves around the app. A click sends the chip.
+  let suggestToken = 0;
+  async function renderSuggestions(): Promise<void> {
+    const empty = !busy && !history.some((m) => m.role === "user");
+    if (!opts.getSuggestions || !empty) {
+      suggestionsEl.style.display = "none";
+      suggestionsEl.innerHTML = "";
+      return;
+    }
+    const my = ++suggestToken;
+    let items: string[] = [];
+    try {
+      items = (await opts.getSuggestions()) ?? [];
+    } catch {
+      items = [];
+    }
+    // Superseded by a newer call (navigated again) or conversation started.
+    if (my !== suggestToken) return;
+    const stillEmpty = !busy && !history.some((m) => m.role === "user");
+    items = items.filter((s) => s && s.trim()).slice(0, 4);
+    suggestionsEl.innerHTML = "";
+    if (!items.length || !stillEmpty) {
+      suggestionsEl.style.display = "none";
+      return;
+    }
+    for (const text of items) {
+      const chip = el("button", `${PREFIX}-suggestion`) as HTMLButtonElement;
+      chip.type = "button";
+      chip.textContent = text;
+      chip.addEventListener("click", () => {
+        suggestionsEl.style.display = "none";
+        suggestionsEl.innerHTML = "";
+        void send(text);
+      });
+      suggestionsEl.appendChild(chip);
+    }
+    suggestionsEl.style.display = "flex";
+    scrollDown(true);
+  }
 
   /** Append a "sign up to continue" call-to-action when the free allowance is
    *  spent (only when the host provided a signupUrl). */
@@ -853,6 +913,9 @@ export function createAiChatWidget(
   async function send(content: string): Promise<void> {
     busy = true;
     lastUserContent = content;
+    // The conversation is starting — page shortcuts give way to the thread.
+    suggestionsEl.style.display = "none";
+    suggestionsEl.innerHTML = "";
     sendBtn.disabled = true;
     setRole("talk"); // each turn starts as the conversational copilot
     addMsg(log, "user", content);
@@ -1484,6 +1547,9 @@ function injectStyles(
 .${PREFIX}-error-btn{border:1px solid #e3b9a8;background:#fff;color:#a33;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
 .${PREFIX}-error-retry{background:${accent};border-color:${accent};color:#fff}
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
+.${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:#fff}
+.${PREFIX}-suggestion{border:1px solid ${accent}33;background:${accent}0d;color:${accent};border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
+.${PREFIX}-suggestion:hover{background:${accent}1a;border-color:${accent}66}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff}
 .${PREFIX}-input{flex:1;border:1px solid #ddd;border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
 .${PREFIX}-meter{padding:7px 12px 0;background:#fff}
@@ -1542,7 +1608,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the

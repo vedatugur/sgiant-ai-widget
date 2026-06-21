@@ -32,6 +32,10 @@ export interface PageManifestEntry {
   /** Allow-listed action name(s) that open/operate this page, when the host
    *  prefers a named action over a raw path (e.g. org's "open-studio"). */
   action?: string;
+  /** A few page-aware shortcut questions surfaced as clickable chips in the
+   *  assistant widget while the conversation is empty — the smart "where do I
+   *  start on THIS page" prompts. Clicking one sends it to Copilot. */
+  suggestions?: string[];
 }
 
 /** A compact navigable target the model is offered (derived from the manifest). */
