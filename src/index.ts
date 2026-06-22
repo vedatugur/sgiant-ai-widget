@@ -874,6 +874,19 @@ export function createAiChatWidget(
     "open-dashboard-builder": "analytics",
     "open-studio": "creation",
   };
+  // Which role a live TOOL (activity step) belongs to — flips the badge from
+  // Talk to Analytics/Creation as the agent actually queries data / builds.
+  const TOOL_ROLE: Record<string, string> = {
+    run_stats_query: "analytics",
+    render_chart: "analytics",
+    list_metrics: "analytics",
+    list_dimensions: "analytics",
+    list_hotels: "analytics",
+    list_connections: "analytics",
+    apply_dashboard: "analytics",
+    save_template: "analytics",
+    platform_ai_stats: "analytics",
+  };
   const statusEl = el("div", `${PREFIX}-status`);
   statusEl.style.display = "none";
   let activeRole = "talk";
@@ -1392,10 +1405,15 @@ export function createAiChatWidget(
               producedAny = true;
             }
             // Live agent-activity step — a process chip (running → ok/error). On
-            // start, flush text so the chip sits AFTER it (true order).
+            // start, flush text so the chip sits AFTER it (true order) and flip
+            // the role badge to match the tool (Talk → Analytics, etc.).
             if (frame.type === "activity" && frame.label && frame.status) {
               typing.remove();
-              if (frame.status === "running") flushSegment(false);
+              if (frame.status === "running") {
+                flushSegment(false);
+                if (frame.name && TOOL_ROLE[frame.name])
+                  setRole(TOOL_ROLE[frame.name]);
+              }
               liveActivityFrame(
                 frame.callId ?? frame.label,
                 frame.label,
