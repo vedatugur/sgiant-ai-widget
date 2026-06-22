@@ -38,7 +38,8 @@ import { renderMarkdown } from "./markdown";
  *  text). The render hooks / fallback handle the actual drawing. */
 export type LoadedThreadItem =
   | { role: "user" | "assistant"; content: string }
-  | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown };
+  | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown }
+  | { kind: "activity"; label: string; status: string };
 
 /**
  * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
@@ -59,22 +60,31 @@ export function buildThreadReplay(payload: {
       });
   }
   for (const a of payload.artifacts ?? []) {
-    if (a.kind !== "widget") continue;
-    const p = (a.payload ?? {}) as {
-      spec?: unknown;
-      rows?: unknown;
-      comparisonRows?: unknown;
-    };
-    if (!p.spec) continue;
-    items.push({
-      t: a.createdAt ?? "",
-      item: {
-        kind: "widget",
-        spec: p.spec,
-        rows: p.rows ?? [],
-        comparisonRows: p.comparisonRows ?? null,
-      },
-    });
+    if (a.kind === "widget") {
+      const p = (a.payload ?? {}) as {
+        spec?: unknown;
+        rows?: unknown;
+        comparisonRows?: unknown;
+      };
+      if (!p.spec) continue;
+      items.push({
+        t: a.createdAt ?? "",
+        item: {
+          kind: "widget",
+          spec: p.spec,
+          rows: p.rows ?? [],
+          comparisonRows: p.comparisonRows ?? null,
+        },
+      });
+    } else if (a.kind === "activity") {
+      // A persisted process step — replays the timeline on reopen.
+      const p = (a.payload ?? {}) as { label?: string; status?: string };
+      if (!p.label) continue;
+      items.push({
+        t: a.createdAt ?? "",
+        item: { kind: "activity", label: p.label, status: p.status ?? "ok" },
+      });
+    }
   }
   items.sort((x, y) => x.t.localeCompare(y.t));
   return items.map((s) => s.item);
@@ -359,6 +369,11 @@ interface StreamFrame {
   rows?: unknown;
   /** Optional prior-period rows for the same chart (comparison overlay). */
   comparisonRows?: unknown;
+  /** activity frame — a live agent process step (running → ok/error). */
+  callId?: string;
+  name?: string;
+  label?: string;
+  status?: string;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;
@@ -584,7 +599,11 @@ export function createAiChatWidget(
   // hand back a disposer; we keep them so they can be unmounted when the log is
   // cleared (new chat / history switch / destroy), avoiding leaked roots.
   const richDisposers: Array<() => void> = [];
+  // Live agent-activity chips, keyed by tool callId so a `running` chip can be
+  // updated to `ok`/`error` in place. Cleared whenever the log is replaced.
+  const liveActivity = new Map<string, HTMLElement>();
   function clearRich(): void {
+    liveActivity.clear();
     for (const dispose of richDisposers.splice(0)) {
       try {
         dispose();
@@ -592,6 +611,44 @@ export function createAiChatWidget(
         /* host cleanup best-effort */
       }
     }
+  }
+  // One process-step chip (spinner while running → check / cross when done).
+  function paintActivity(
+    chip: HTMLElement,
+    label: string,
+    status: string
+  ): void {
+    const icon =
+      status === "running"
+        ? `<span class="${PREFIX}-act-spin" aria-hidden="true"></span>`
+        : status === "error"
+          ? `<span class="${PREFIX}-act-x" aria-hidden="true">✕</span>`
+          : `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>`;
+    chip.className =
+      `${PREFIX}-activity` +
+      (status !== "running" ? ` ${PREFIX}-activity-done` : "");
+    chip.innerHTML = `${icon}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
+  }
+  function addActivityChip(label: string, status: string): HTMLElement {
+    const chip = el("div", `${PREFIX}-activity`);
+    paintActivity(chip, label, status);
+    log.appendChild(chip);
+    return chip;
+  }
+  // Live frame: create the chip on `running`, update the same one on ok/error.
+  function liveActivityFrame(
+    callId: string,
+    label: string,
+    status: string
+  ): void {
+    const existing = liveActivity.get(callId);
+    if (existing) {
+      paintActivity(existing, label, status);
+      return;
+    }
+    const chip = addActivityChip(label, status);
+    liveActivity.set(callId, chip);
+    scrollDown();
   }
   // Turn a FINAL assistant bubble's text into rich content: the host's real
   // <Markdown> when wired, else the built-in safe markdown→HTML, else plain.
@@ -636,6 +693,9 @@ export function createAiChatWidget(
           it.rows,
           it.comparisonRows
         );
+      } else if ("kind" in it && it.kind === "activity") {
+        // Replay a persisted process step (static, already finished).
+        addActivityChip(it.label, it.status);
       } else if ("role" in it) {
         if (it.role === "assistant") addAssistantMessage(it.content);
         else addMsg(log, it.role, it.content);
@@ -1190,6 +1250,15 @@ export function createAiChatWidget(
               typing.remove();
               renderServerWidget(frame.spec, frame.rows, frame.comparisonRows);
             }
+            // Live agent-activity step — a process chip (running → ok/error).
+            if (frame.type === "activity" && frame.label && frame.status) {
+              typing.remove();
+              liveActivityFrame(
+                frame.callId ?? frame.label,
+                frame.label,
+                frame.status
+              );
+            }
             // Free-allowance meter (visitor preview). `quota` is the server's
             // snapshot; `usage` is this turn's tokens (count toward the session).
             if (frame.type === "quota") {
@@ -1735,6 +1804,12 @@ function injectStyles(
 .${PREFIX}-rich-in{animation:${PREFIX}-richin .28s cubic-bezier(.22,1,.36,1)}
 @keyframes ${PREFIX}-tokin{from{opacity:0;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
 .${PREFIX}-tok{animation:${PREFIX}-tokin .34s ease forwards}
+.${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid ${accent}26;background:${accent}0d;border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-activity-done{opacity:.72}
+.${PREFIX}-act-label{color:#333}
+.${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid ${accent}44;border-top-color:${accent};animation:${PREFIX}-spin .7s linear infinite}
+.${PREFIX}-act-ok{color:#10b981;font-weight:700}
+.${PREFIX}-act-x{color:#ef4444;font-weight:700}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
@@ -1851,7 +1926,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
