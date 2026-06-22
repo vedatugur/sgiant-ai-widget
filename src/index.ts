@@ -595,7 +595,19 @@ export function createAiChatWidget(
   }
   // Turn a FINAL assistant bubble's text into rich content: the host's real
   // <Markdown> when wired, else the built-in safe markdown→HTML, else plain.
-  function applyAssistantRich(bubble: HTMLElement, text: string): void {
+  function applyAssistantRich(
+    bubble: HTMLElement,
+    text: string,
+    animate?: boolean
+  ): void {
+    // Cool swap: when a streamed reply finishes, the raw markdown text is
+    // replaced by the rendered markdown — fade it in so it doesn't pop.
+    if (animate) {
+      bubble.classList.remove(`${PREFIX}-rich-in`);
+      // reflow so re-adding the class restarts the animation
+      void bubble.offsetWidth;
+      bubble.classList.add(`${PREFIX}-rich-in`);
+    }
     if (opts.renderMarkdown) {
       bubble.textContent = "";
       const dispose = opts.renderMarkdown(bubble, text);
@@ -1286,9 +1298,9 @@ export function createAiChatWidget(
       const finalText = assistant.textContent ?? "";
       history.push({ role: "assistant", content: finalText });
       saveState();
-      // Re-render the final reply as rich content: the host's real <Markdown>
-      // when wired, else the built-in safe markdown renderer.
-      applyAssistantRich(assistant, finalText);
+      // Re-render the final reply as rich content (fade-in on this swap): the
+      // host's real <Markdown> when wired, else the built-in markdown renderer.
+      applyAssistantRich(assistant, finalText, true);
     }
   }
 
@@ -1715,6 +1727,8 @@ function injectStyles(
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+@keyframes ${PREFIX}-richin{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
+.${PREFIX}-rich-in{animation:${PREFIX}-richin .28s cubic-bezier(.22,1,.36,1)}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
@@ -1856,7 +1870,7 @@ function injectStyles(
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
 }
-@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after,.${PREFIX}-rich-in{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
   style.setAttribute("data-sgiant-aiw", "");
