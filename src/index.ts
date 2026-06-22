@@ -1128,6 +1128,34 @@ export function createAiChatWidget(
     log.appendChild(typing);
     scrollDown(true);
     let assistant: HTMLElement | null = null;
+    let assistantRaw = "";
+    let liveDispose: (() => void) | null = null;
+    let liveRaf = false;
+    // Render the streamed reply as MARKDOWN live — so the user never sees raw
+    // ** / ### / | marks while the bot types; it formats as it streams (like the
+    // full-page assistant). Throttled to one render per frame; the host render
+    // hook reuses ONE root per bubble, so repeated calls just update it.
+    const renderLive = (): void => {
+      if (!assistant) return;
+      if (opts.renderMarkdown) {
+        const d = opts.renderMarkdown(assistant, assistantRaw);
+        if (typeof d === "function" && !liveDispose) {
+          liveDispose = d;
+          richDisposers.push(d);
+        }
+      } else {
+        assistant.innerHTML = renderMarkdown(assistantRaw);
+      }
+    };
+    const scheduleLive = (): void => {
+      if (liveRaf) return;
+      liveRaf = true;
+      requestAnimationFrame(() => {
+        liveRaf = false;
+        renderLive();
+        scrollDown();
+      });
+    };
     let failure: string | null = null;
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
@@ -1169,11 +1197,13 @@ export function createAiChatWidget(
               if (!assistant) {
                 typing.remove();
                 assistant = addMsg(log, "assistant", "");
-                // Blinking caret while streaming → live "assistant is typing".
+                // Fade the bubble in as the bot starts typing; blinking caret +
+                // LIVE markdown rendering give a polished "typing" feel.
                 assistant.classList.add(`${PREFIX}-streaming`);
+                assistant.classList.add(`${PREFIX}-rich-in`);
               }
-              assistant.textContent = (assistant.textContent ?? "") + piece;
-              scrollDown();
+              assistantRaw += piece;
+              scheduleLive();
             }
             // Inline data widget from the analytics lane (render_chart). Was
             // previously dropped — now rendered so widget responses are visible.
@@ -1216,69 +1246,55 @@ export function createAiChatWidget(
     // Clear the typing indicator + the streaming caret now the reply is final.
     typing.remove();
     assistant?.classList.remove(`${PREFIX}-streaming`);
-    if (!assistant || !assistant.textContent) {
-      assistant?.remove();
+    if (!assistant || !assistantRaw.trim()) {
+      // Nothing textual streamed (e.g. only a widget frame, or an error).
+      if (assistant) {
+        if (liveDispose) liveDispose();
+        assistant.remove();
+      }
       if (failure) showError(failure);
       else {
         addMsg(log, "assistant", "(no response)");
         scrollDown(true);
       }
     } else {
-      // Render any directives the reply embedded, stripping them from the text.
-      // Order: data widgets (can be several) → navigation → input form → lead.
+      // Strip directives from the RAW text (the bubble shows rendered markdown).
+      // Order: data widgets (can be several) → navigation → action → form/lead.
+      let finalText = assistantRaw;
 
-      // [[widget:{...}]] — inline data widgets (stat/kpis/list/table). Rendered
-      // on EVERY surface (incl. the public marketing bot), so "widget renderer"
-      // responses are visible everywhere, not just text.
+      // [[widget:{...}]] — inline data widgets (stat/kpis/list/table).
       for (let i = 0; i < 6; i++) {
-        const w = parseJsonDirective<WidgetSpec>(
-          assistant.textContent,
-          "widget"
-        );
+        const w = parseJsonDirective<WidgetSpec>(finalText, "widget");
         if (!w) break;
-        assistant.textContent = w.stripped;
+        finalText = w.stripped;
         renderWidget(w.spec);
       }
 
-      // [[navigate:{path,label}]] — the assistant proposes a page. Rendered as a
-      // button that, on click, calls the host's onWidgetAction("navigate",…) so
-      // the host router does the move (user stays in control; host gates it).
-      const nav = parseJsonDirective<NavigateSpec>(
-        assistant.textContent,
-        "navigate"
-      );
+      // [[navigate:{path,label}]] — the assistant proposes a page (host gates it).
+      const nav = parseJsonDirective<NavigateSpec>(finalText, "navigate");
       if (nav && opts.onWidgetAction && nav.spec.path) {
-        assistant.textContent = nav.stripped;
+        finalText = nav.stripped;
         renderNavigate(nav.spec);
       }
 
-      // [[action:{name,label,confirm?,data?}]] — the assistant proposes an
-      // in-app ACTION (open the dashboard builder, apply a widget, etc). Rendered
-      // as a button; if `confirm` is set the user must confirm first ("critic
-      // permission") before the host's onWidgetAction(name,data) runs. The HOST
-      // owns the allowlist of action names → real operations.
+      // [[action:{name,label,confirm?,data?}]] — an in-app ACTION button.
       for (let i = 0; i < 4; i++) {
-        const act = parseJsonDirective<ActionSpec>(
-          assistant.textContent,
-          "action"
-        );
+        const act = parseJsonDirective<ActionSpec>(finalText, "action");
         if (!act || !opts.onWidgetAction || !act.spec.name) break;
-        assistant.textContent = act.stripped;
+        finalText = act.stripped;
         renderAction(act.spec);
       }
 
       // [[form:{...}]] inline input form → host action; [[collect-email]] lead.
-      const form = parseFormDirective(assistant.textContent);
+      const form = parseFormDirective(finalText);
       if (form && (opts.onWidgetAction || opts.onLead)) {
-        assistant.textContent = form.stripped;
+        finalText = form.stripped;
         renderForm(form.spec);
       } else if (
         (opts.onLead || opts.onWidgetAction) &&
-        assistant.textContent.includes(LEAD_TOKEN)
+        finalText.includes(LEAD_TOKEN)
       ) {
-        assistant.textContent = assistant.textContent
-          .replace(LEAD_TOKEN, "")
-          .trim();
+        finalText = finalText.replace(LEAD_TOKEN, "").trim();
         renderForm({
           action: "lead",
           fields: [
@@ -1292,15 +1308,14 @@ export function createAiChatWidget(
           submit: "Send",
         });
       }
-      // Persist the completed assistant turn (+ thread id) for refresh recovery.
-      // Capture the plain text BEFORE rich rendering (history stays raw markdown,
-      // and directives were parsed off textContent above).
-      const finalText = assistant.textContent ?? "";
+      // Persist the raw markdown turn for refresh recovery.
       history.push({ role: "assistant", content: finalText });
       saveState();
-      // Re-render the final reply as rich content (fade-in on this swap): the
-      // host's real <Markdown> when wired, else the built-in markdown renderer.
-      applyAssistantRich(assistant, finalText, true);
+      // Final markdown render of the directive-stripped text (reuses the live
+      // render handle — no second root).
+      assistantRaw = finalText;
+      renderLive();
+      scrollDown();
     }
   }
 
