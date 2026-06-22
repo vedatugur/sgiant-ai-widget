@@ -414,6 +414,8 @@ const ICON_EXPAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none"
 const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>`;
 // Compass — the auto-navigate ("drive me there") toggle.
 const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
+// Download — export the current conversation as a .txt transcript.
+const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -512,6 +514,13 @@ export function createAiChatWidget(
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
   }
+  // Download — export the current conversation as a plain-text transcript.
+  const downloadBtn = el("button", `${PREFIX}-icon`);
+  downloadBtn.setAttribute("aria-label", "Download conversation");
+  downloadBtn.title = "Download chat (.txt)";
+  downloadBtn.innerHTML = ICON_DOWNLOAD;
+  downloadBtn.addEventListener("click", () => exportConversation());
+  hActions.appendChild(downloadBtn);
   // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
   const AUTONAV_KEY = "sg_ayca_autonav";
@@ -602,14 +611,51 @@ export function createAiChatWidget(
     applyAssistantRich(bubble, text);
     return bubble;
   }
+  // Re-render a full thread (messages + inline DATA WIDGETS) into the log,
+  // replacing whatever is shown. Shared by history-reopen + refresh-restore.
+  function renderThreadItems(items: LoadedThreadItem[]): void {
+    clearRich();
+    log.innerHTML = "";
+    history.length = 0;
+    for (const it of items) {
+      if ("kind" in it && it.kind === "widget") {
+        renderServerWidget(
+          it.spec as { title?: string; chartType?: string } | undefined,
+          it.rows,
+          it.comparisonRows
+        );
+      } else if ("role" in it) {
+        if (it.role === "assistant") addAssistantMessage(it.content);
+        else addMsg(log, it.role, it.content);
+        history.push({ role: it.role, content: it.content });
+      }
+    }
+    scrollDown(true);
+  }
 
   if (history.length) {
-    // Restore a prior conversation (survives refresh).
+    // Restore a prior conversation (survives refresh) — text only at first.
     for (const m of history)
       if (m.role === "assistant") addAssistantMessage(m.content);
       else addMsg(log, m.role, m.content);
   } else if (opts.greeting) {
     addAssistantMessage(opts.greeting);
+  }
+  // Persisted history is TEXT-ONLY (data widgets aren't stored in localStorage),
+  // so on refresh the charts/tables were lost. If we have the thread id + a
+  // loader, re-fetch the full thread and re-render WITH its widgets — matching
+  // reopen-from-history. Async + best-effort; the text restore above is the
+  // instant fallback.
+  if (threadId && opts.loadThread) {
+    const tid = threadId;
+    void opts
+      .loadThread(tid)
+      .then((items) => {
+        if (items.length) renderThreadItems(items);
+      })
+      .catch(() => {
+        /* keep the text-only restore */
+      });
   }
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
@@ -945,6 +991,28 @@ export function createAiChatWidget(
     log.appendChild(wrap);
     scrollDown(true);
   }
+  /** Export the current conversation as a plain-text .txt download (client-side;
+   *  reads the in-memory transcript). Data widgets aren't textual, so the
+   *  transcript is the messages — same as the full-page assistant's export. */
+  function exportConversation(): void {
+    const msgs = history.filter((m) => m.content.trim().length > 0);
+    if (msgs.length === 0) return;
+    const body = msgs.map(
+      (m) => `${m.role === "user" ? "You" : name}:\n${m.content}\n`
+    );
+    // BOM so editors read the UTF-8 (incl. Turkish characters) correctly.
+    const text =
+      "﻿" + [`${name} — conversation`, "=".repeat(40), "", ...body].join("\n");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "copilot-conversation.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
   async function openHistory(): Promise<void> {
     if (!opts.listThreads) return;
     const overlay = el("div", `${PREFIX}-history`);
@@ -992,30 +1060,12 @@ export function createAiChatWidget(
     if (!opts.loadThread) return;
     try {
       const items = await opts.loadThread(id);
-      // Replace the visible conversation with the chosen thread (clear rich
-      // roots + every node, so old messages/widgets don't linger).
-      clearRich();
-      log.innerHTML = "";
-      history.length = 0;
-      for (const it of items) {
-        if ("kind" in it && it.kind === "widget") {
-          // Inline data widget — replay via the host renderer (or fallback).
-          renderServerWidget(
-            it.spec as { title?: string; chartType?: string } | undefined,
-            it.rows,
-            it.comparisonRows
-          );
-        } else if ("role" in it) {
-          if (it.role === "assistant") addAssistantMessage(it.content);
-          else addMsg(log, it.role, it.content);
-          // History (refresh recovery) stays text-only; widgets reload on reopen.
-          history.push({ role: it.role, content: it.content });
-        }
-      }
+      // Replace the visible conversation with the chosen thread (messages +
+      // inline data widgets). renderThreadItems clears rich roots + the log.
+      renderThreadItems(items);
       threadId = id;
       saveState();
       overlay.remove();
-      scrollDown(true);
     } catch {
       overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
         "Couldn't open that conversation.";
