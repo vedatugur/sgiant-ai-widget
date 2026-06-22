@@ -231,6 +231,17 @@ export interface AiChatWidgetOptions {
     rows: unknown,
     comparisonRows?: unknown
   ) => (() => void) | void;
+  /**
+   * Apply a confirm-gated WRITE-tool proposal (e.g. `update_creation`). The AI
+   * never mutates directly — it proposes; the widget shows a card and THIS runs
+   * only when the user clicks Apply (a Clerk-authed action in the host). Map the
+   * tool name → a real, access-checked API call. Return a string to show as the
+   * success note; throw to let the user retry. Omit to hide write proposals.
+   */
+  onApplyProposal?: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<string | void>;
 }
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
@@ -374,6 +385,8 @@ interface StreamFrame {
   name?: string;
   label?: string;
   status?: string;
+  /** tool_proposal frame — a confirm-gated write tool's args. */
+  args?: unknown;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;
@@ -1360,6 +1373,67 @@ export function createAiChatWidget(
     return t;
   }
 
+  // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
+  const PROPOSAL_LABELS: Record<string, string> = {
+    update_creation: "Apply this update to the creation?",
+  };
+  function proposalSummary(
+    name: string,
+    args: Record<string, unknown>
+  ): string {
+    if (name === "update_creation") {
+      const parts: string[] = [];
+      if (typeof args.title === "string") parts.push(`Title → “${args.title}”`);
+      if (typeof args.status === "string")
+        parts.push(`Status → ${args.status}`);
+      return parts.join("\n");
+    }
+    return Object.entries(args)
+      .filter(([k]) => k !== "id")
+      .map(([k, v]) => `${k}: ${String(v)}`)
+      .join("\n");
+  }
+  function renderProposal(name: string, args: Record<string, unknown>): void {
+    const wrap = el("div", `${PREFIX}-proposal`);
+    const title = el("div", `${PREFIX}-proposal-title`);
+    title.textContent = PROPOSAL_LABELS[name] ?? "Apply this change?";
+    wrap.appendChild(title);
+    const summary = proposalSummary(name, args);
+    if (summary) {
+      const s = el("div", `${PREFIX}-proposal-summary`);
+      s.textContent = summary;
+      wrap.appendChild(s);
+    }
+    const row = el("div", `${PREFIX}-confirm-row`);
+    const apply = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+    apply.type = "button";
+    apply.textContent = "Apply";
+    const cancel = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
+    cancel.type = "button";
+    cancel.textContent = "Dismiss";
+    cancel.addEventListener("click", () => wrap.remove());
+    apply.addEventListener("click", async () => {
+      apply.disabled = true;
+      apply.textContent = "Applying…";
+      try {
+        const msg = await opts.onApplyProposal!(name, args);
+        wrap.innerHTML = "";
+        const ok = el("div", `${PREFIX}-proposal-ok`);
+        ok.innerHTML =
+          `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
+          `<span>${escapeHtml((typeof msg === "string" && msg) || "Applied")}</span>`;
+        wrap.appendChild(ok);
+      } catch {
+        apply.disabled = false;
+        apply.textContent = "Try again";
+      }
+    });
+    row.append(apply, cancel);
+    wrap.appendChild(row);
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   async function send(content: string): Promise<void> {
     busy = true;
     lastUserContent = content;
@@ -1479,6 +1553,21 @@ export function createAiChatWidget(
                 frame.callId ?? frame.label,
                 frame.label,
                 frame.status
+              );
+              producedAny = true;
+            }
+            // Confirm-gated WRITE tool — the AI PROPOSES; show a card the user
+            // applies (the actual mutation is a host, Clerk-authed action).
+            if (
+              frame.type === "tool_proposal" &&
+              frame.name &&
+              opts.onApplyProposal
+            ) {
+              typing.remove();
+              flushSegment(false);
+              renderProposal(
+                frame.name,
+                (frame.args ?? {}) as Record<string, unknown>
               );
               producedAny = true;
             }
@@ -2145,10 +2234,14 @@ function injectStyles(
 .${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid ${accent};background:${accent}0f;color:${accent};border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-nav-btn:hover{background:${accent}1c}
 .${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
+.${PREFIX}-proposal{align-self:stretch;border:1px solid ${accent}33;background:${accent}0a;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-proposal-title{font-size:13px;font-weight:700}
+.${PREFIX}-proposal-summary{font-size:12.5px;color:#555;white-space:pre-wrap;line-height:1.45}
+.${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:#10b981;display:inline-flex;align-items:center;gap:6px}
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
