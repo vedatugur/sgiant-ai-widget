@@ -1450,6 +1450,7 @@ export function createAiChatWidget(
   // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
   const PROPOSAL_LABELS: Record<string, string> = {
     update_creation: "Apply this update to the creation?",
+    organize_assets: "Apply this change to your assets?",
   };
   function proposalSummary(
     name: string,
@@ -1461,6 +1462,25 @@ export function createAiChatWidget(
       if (typeof args.status === "string")
         parts.push(`Status → ${args.status}`);
       return parts.join("\n");
+    }
+    if (name === "organize_assets") {
+      const ids = Array.isArray(args.mediaIds) ? args.mediaIds.length : 0;
+      const items = `${ids} item${ids === 1 ? "" : "s"}`;
+      const action = String(args.action ?? "");
+      if (action === "move") {
+        const dest =
+          (typeof args.folderName === "string" && args.folderName) ||
+          (typeof args.folderId === "string" && "the selected folder") ||
+          "a folder";
+        return `Move ${items} → ${dest}`;
+      }
+      if (action === "tag") {
+        const tags = Array.isArray(args.tags) ? args.tags.join(", ") : "";
+        return `Tag ${items}${tags ? ` → ${tags}` : ""}`;
+      }
+      if (action === "trash") return `Move ${items} to Trash`;
+      if (action === "restore") return `Restore ${items} from Trash`;
+      return `${action} ${items}`;
     }
     return Object.entries(args)
       .filter(([k]) => k !== "id")
