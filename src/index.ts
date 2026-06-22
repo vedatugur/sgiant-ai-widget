@@ -515,6 +515,25 @@ export function createAiChatWidget(
   // Remember whether the panel was left open, so a page refresh restores it
   // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
   const openStateKey = opts.persistKey ? `ayca:open:${opts.persistKey}` : null;
+  // Keep the UNSENT composer draft across refreshes so typing isn't lost.
+  const draftKey = opts.persistKey ? `ayca:draft:${opts.persistKey}` : null;
+  function saveDraft(v: string): void {
+    if (!draftKey) return;
+    try {
+      if (v) localStorage.setItem(draftKey, v);
+      else localStorage.removeItem(draftKey);
+    } catch {
+      /* storage blocked */
+    }
+  }
+  function loadDraft(): string {
+    if (!draftKey) return "";
+    try {
+      return localStorage.getItem(draftKey) ?? "";
+    } catch {
+      return "";
+    }
+  }
   function rememberOpen(isOpen: boolean): void {
     if (!openStateKey) return;
     try {
@@ -1055,6 +1074,9 @@ export function createAiChatWidget(
   input.placeholder = `Ask ${name} anything…`;
   input.setAttribute("aria-label", `Message ${name}`);
   input.autocomplete = "off";
+  // Restore an unsent draft from a prior session; keep it in sync as they type.
+  input.value = loadDraft();
+  input.addEventListener("input", () => saveDraft(input.value));
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = "Send";
@@ -1378,6 +1400,7 @@ export function createAiChatWidget(
     const content = input.value.trim();
     if (!content || busy) return;
     input.value = "";
+    saveDraft(""); // sent — drop the persisted draft
     void send(content);
   });
 
