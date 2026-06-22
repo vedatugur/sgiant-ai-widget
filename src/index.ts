@@ -312,6 +312,49 @@ function parseFormDirective(
 }
 
 /**
+ * REPLAY view of a stored message: strip every interactive directive (which the
+ * live turn already rendered as buttons/forms) so a reopened conversation shows
+ * clean prose instead of raw `[[navigate:…]]` / `[[form:…]]` code, with a short
+ * INERT note per directive (no re-execution). Used by the history/thread
+ * restore path; live turns still render the real interactive widgets.
+ */
+function stripDirectivesForReplay(text: string): {
+  clean: string;
+  notes: string[];
+} {
+  let t = text;
+  const notes: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const w = parseJsonDirective<NavigateSpec>(t, "navigate");
+    if (!w) break;
+    t = w.stripped;
+    notes.push(`↗ ${w.spec.label || w.spec.path || "Open page"}`);
+  }
+  for (let i = 0; i < 8; i++) {
+    const w = parseJsonDirective<ActionSpec>(t, "action");
+    if (!w) break;
+    t = w.stripped;
+    notes.push(`• ${w.spec.label || w.spec.name}`);
+  }
+  for (let i = 0; i < 8; i++) {
+    const w = parseJsonDirective<WidgetSpec>(t, "widget");
+    if (!w) break;
+    t = w.stripped;
+    notes.push(`▦ ${w.spec.title || "widget"}`);
+  }
+  const f = parseFormDirective(t);
+  if (f) {
+    t = f.stripped;
+    notes.push(`📝 ${f.spec.title || "Form"} — submitted`);
+  }
+  if (t.includes(LEAD_TOKEN)) {
+    t = t.replace(LEAD_TOKEN, "").trim();
+    notes.push("📝 Form — submitted");
+  }
+  return { clean: t, notes };
+}
+
+/**
  * Generic `[[tag:{json}]]` directive extractor (first occurrence). Robust to the
  * model mis-counting brackets: it brace-matches the JSON object (string-aware,
  * so a `]]` or `}` inside a quoted value doesn't fool it), then consumes 0–2
@@ -750,8 +793,16 @@ export function createAiChatWidget(
   // Append a complete assistant message rendered as markdown (history restore,
   // greeting, "no response"). The streaming path stays plain until finalize.
   function addAssistantMessage(text: string): HTMLElement {
+    // Replay: render clean prose (directives the live turn already handled are
+    // stripped) + an inert note per directive — never raw [[…]] code.
+    const { clean, notes } = stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
-    applyAssistantRich(bubble, text);
+    applyAssistantRich(bubble, clean);
+    for (const n of notes) {
+      const note = el("div", `${PREFIX}-replay-note`);
+      note.textContent = n;
+      log.appendChild(note);
+    }
     return bubble;
   }
   // Re-render a full thread (messages + inline DATA WIDGETS) into the log,
@@ -2115,6 +2166,7 @@ function injectStyles(
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid ${accent}44;border-top-color:${accent};animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
+.${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed #d8d8d8;border-radius:9px;padding:4px 10px;font-size:12px;color:#888;background:#fafafa}
 .${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:10.5px;color:#9aa0a6;font-variant-numeric:tabular-nums}
 .${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid #e6e6e6;border-radius:6px;padding:0 5px;line-height:16px}
 .${PREFIX}-usage-sep{opacity:.5}
@@ -2241,7 +2293,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
