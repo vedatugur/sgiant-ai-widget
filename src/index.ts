@@ -887,32 +887,93 @@ export function createAiChatWidget(
     save_template: "analytics",
     platform_ai_stats: "analytics",
   };
+  // Persistent status structure so the credits number can ANIMATE (a live
+  // count-down after a turn / count-up after a top-up) instead of snapping.
   const statusEl = el("div", `${PREFIX}-status`);
   statusEl.style.display = "none";
+  const statusRoleEl = el("span", `${PREFIX}-status-role`);
+  const statusCreditsEl = el("span", `${PREFIX}-status-credits`);
+  const statusCreditsVal = el("span", `${PREFIX}-status-credits-val`);
+  statusCreditsEl.append(
+    document.createTextNode("★ "),
+    statusCreditsVal,
+    document.createTextNode(" credits")
+  );
+  statusEl.append(statusRoleEl, statusCreditsEl);
   let activeRole = "talk";
   let creditBalance: number | null = null;
+  let displayedCredits = 0; // number currently on screen (drives the tween)
+  let creditInit = false; // first value snaps; later changes animate
+  let creditRaf = 0;
+  function setCreditsText(n: number): void {
+    statusCreditsVal.textContent = Math.round(n).toLocaleString();
+  }
   function renderStatus(): void {
     if (!opts.getBalance) {
       statusEl.style.display = "none";
       return;
     }
     statusEl.style.display = "flex";
-    const credits =
-      creditBalance === null
-        ? "—"
-        : `${creditBalance.toLocaleString()} credits`;
-    statusEl.innerHTML =
-      `<span class="${PREFIX}-status-role">${ROLE_NAMES[activeRole] ?? activeRole}</span>` +
-      `<span class="${PREFIX}-status-credits">★ ${credits}</span>`;
+    statusRoleEl.textContent = ROLE_NAMES[activeRole] ?? activeRole;
+    if (creditBalance === null) statusCreditsVal.textContent = "—";
+    else if (!creditRaf) {
+      displayedCredits = creditBalance;
+      setCreditsText(displayedCredits);
+    }
+  }
+  // Tween the on-screen credits to `to` (easeOut), honoring reduced motion.
+  function animateCredits(to: number): void {
+    if (creditRaf) {
+      cancelAnimationFrame(creditRaf);
+      creditRaf = 0;
+    }
+    const from = displayedCredits;
+    const reduce = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (from === to || reduce) {
+      displayedCredits = to;
+      setCreditsText(to);
+      return;
+    }
+    const dur = Math.min(900, 250 + Math.abs(to - from) * 1.2);
+    statusCreditsVal.classList.add(`${PREFIX}-credits-live`);
+    let start = 0;
+    const step = (now: number): void => {
+      if (!start) start = now;
+      const p = Math.min(1, (now - start) / dur);
+      const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      displayedCredits = from + (to - from) * e;
+      setCreditsText(displayedCredits);
+      if (p < 1) creditRaf = requestAnimationFrame(step);
+      else {
+        creditRaf = 0;
+        displayedCredits = to;
+        setCreditsText(to);
+        statusCreditsVal.classList.remove(`${PREFIX}-credits-live`);
+      }
+    };
+    creditRaf = requestAnimationFrame(step);
   }
   async function refreshBalance(): Promise<void> {
     if (!opts.getBalance) return;
     try {
       creditBalance = await opts.getBalance();
     } catch {
-      /* keep last */
+      return; // keep last
     }
-    renderStatus();
+    if (!opts.getBalance) return;
+    statusEl.style.display = "flex";
+    statusRoleEl.textContent = ROLE_NAMES[activeRole] ?? activeRole;
+    if (creditBalance === null) {
+      statusCreditsVal.textContent = "—";
+    } else if (!creditInit) {
+      creditInit = true; // first read snaps (no count-up from zero on open)
+      displayedCredits = creditBalance;
+      setCreditsText(creditBalance);
+    } else {
+      animateCredits(creditBalance); // subsequent changes count to the new value
+    }
   }
   function setRole(role: string): void {
     activeRole = role;
@@ -2035,6 +2096,8 @@ function injectStyles(
 .${PREFIX}-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;font-size:11px;background:#fff;border-top:1px solid #f0f0f0}
 .${PREFIX}-status-role{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-weight:600;color:${accent};background:${accent}1a}
 .${PREFIX}-status-credits{font-weight:600;color:#555;font-variant-numeric:tabular-nums}
+.${PREFIX}-status-credits-val{display:inline-block;transition:color .2s ease}
+.${PREFIX}-credits-live{color:${accent}}
 .${PREFIX}-cta{display:flex;justify-content:center;padding:6px 0 2px}
 .${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;color:#fff;text-decoration:none;background:linear-gradient(90deg,${accent},#FBAA34);box-shadow:0 4px 14px ${accent}40}
 .${PREFIX}-lead{align-self:stretch;border:1px solid #eee;border-radius:14px;padding:11px 12px;background:#fff;animation:${PREFIX}-rise .2s ease}
