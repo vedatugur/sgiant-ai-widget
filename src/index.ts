@@ -33,6 +33,53 @@ export {
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
+/** One item replayed from a past thread: a chat message, or an inline data
+ *  widget (so reopening restores the conversation's charts/tables, not just
+ *  text). The render hooks / fallback handle the actual drawing. */
+export type LoadedThreadItem =
+  | { role: "user" | "assistant"; content: string }
+  | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown };
+
+/**
+ * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
+ * into an ordered replay list — text messages interleaved with their data
+ * widgets by `createdAt`, exactly like the full-page assistant. Pure; hosts pass
+ * it the fetched payload so the widget reopens a conversation WITH its charts.
+ */
+export function buildThreadReplay(payload: {
+  messages?: Array<{ role: string; content: string; createdAt?: string }>;
+  artifacts?: Array<{ kind: string; payload?: unknown; createdAt?: string }>;
+}): LoadedThreadItem[] {
+  const items: Array<{ t: string; item: LoadedThreadItem }> = [];
+  for (const m of payload.messages ?? []) {
+    if ((m.role === "user" || m.role === "assistant") && m.content.trim())
+      items.push({
+        t: m.createdAt ?? "",
+        item: { role: m.role, content: m.content },
+      });
+  }
+  for (const a of payload.artifacts ?? []) {
+    if (a.kind !== "widget") continue;
+    const p = (a.payload ?? {}) as {
+      spec?: unknown;
+      rows?: unknown;
+      comparisonRows?: unknown;
+    };
+    if (!p.spec) continue;
+    items.push({
+      t: a.createdAt ?? "",
+      item: {
+        kind: "widget",
+        spec: p.spec,
+        rows: p.rows ?? [],
+        comparisonRows: p.comparisonRows ?? null,
+      },
+    });
+  }
+  items.sort((x, y) => x.t.localeCompare(y.t));
+  return items.map((s) => s.item);
+}
+
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
   endpoint: string;
@@ -150,10 +197,10 @@ export interface AiChatWidgetOptions {
   listThreads?: () => Promise<
     Array<{ id: string; title?: string | null; updatedAt?: string }>
   >;
-  /** Load one past thread's messages (oldest→newest) for replay in the log. */
-  loadThread?: (
-    threadId: string
-  ) => Promise<Array<{ role: "user" | "assistant"; content: string }>>;
+  /** Load one past thread (oldest→newest) for replay in the log. Items are
+   *  messages OR inline data widgets, so reopening a conversation restores its
+   *  charts/tables — not just text (matching the full-page assistant). */
+  loadThread?: (threadId: string) => Promise<LoadedThreadItem[]>;
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
   signupUrl?: string;
@@ -944,15 +991,26 @@ export function createAiChatWidget(
   ): Promise<void> {
     if (!opts.loadThread) return;
     try {
-      const msgs = await opts.loadThread(id);
-      // Replace the visible conversation with the chosen thread.
+      const items = await opts.loadThread(id);
+      // Replace the visible conversation with the chosen thread (clear rich
+      // roots + every node, so old messages/widgets don't linger).
       clearRich();
-      log.querySelectorAll(`.${PREFIX}-msg`).forEach((n) => n.remove());
+      log.innerHTML = "";
       history.length = 0;
-      for (const m of msgs) {
-        if (m.role === "assistant") addAssistantMessage(m.content);
-        else addMsg(log, m.role, m.content);
-        history.push({ role: m.role, content: m.content });
+      for (const it of items) {
+        if ("kind" in it && it.kind === "widget") {
+          // Inline data widget — replay via the host renderer (or fallback).
+          renderServerWidget(
+            it.spec as { title?: string; chartType?: string } | undefined,
+            it.rows,
+            it.comparisonRows
+          );
+        } else if ("role" in it) {
+          if (it.role === "assistant") addAssistantMessage(it.content);
+          else addMsg(log, it.role, it.content);
+          // History (refresh recovery) stays text-only; widgets reload on reopen.
+          history.push({ role: it.role, content: it.content });
+        }
       }
       threadId = id;
       saveState();
