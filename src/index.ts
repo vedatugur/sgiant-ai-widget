@@ -1451,6 +1451,7 @@ export function createAiChatWidget(
   const PROPOSAL_LABELS: Record<string, string> = {
     update_creation: "Apply this update to the creation?",
     organize_assets: "Apply this change to your assets?",
+    edit_asset: "Save these changes to the file?",
   };
   function proposalSummary(
     name: string,
@@ -1481,6 +1482,14 @@ export function createAiChatWidget(
       if (action === "trash") return `Move ${items} to Trash`;
       if (action === "restore") return `Restore ${items} from Trash`;
       return `${action} ${items}`;
+    }
+    if (name === "edit_asset") {
+      const content = typeof args.content === "string" ? args.content : "";
+      const lines = content ? content.split("\n").length : 0;
+      const preview = content.slice(0, 220);
+      return `Replace the file contents (${lines} line${
+        lines === 1 ? "" : "s"
+      }):\n${preview}${content.length > 220 ? "…" : ""}`;
     }
     return Object.entries(args)
       .filter(([k]) => k !== "id")
