@@ -431,6 +431,9 @@ const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="non
 const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
 // Download — export the current conversation as a .txt transcript.
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+// Bell — toggle a soft chime when a reply arrives.
+const ICON_BELL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
+const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -536,6 +539,64 @@ export function createAiChatWidget(
   downloadBtn.innerHTML = ICON_DOWNLOAD;
   downloadBtn.addEventListener("click", () => exportConversation());
   hActions.appendChild(downloadBtn);
+  // Notification sound — a soft chime when a reply arrives (browser-local toggle).
+  const SOUND_KEY = "sg_ayca_sound";
+  let soundOn = false;
+  try {
+    soundOn = window.localStorage.getItem(SOUND_KEY) === "1";
+  } catch {
+    /* storage blocked */
+  }
+  const soundBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+  const syncSound = (): void => {
+    soundBtn.innerHTML = soundOn ? ICON_BELL : ICON_BELL_OFF;
+    soundBtn.classList.toggle(`${PREFIX}-icon-on`, soundOn);
+    soundBtn.title = soundOn ? "Sound on — click to mute" : "Sound off";
+    soundBtn.setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
+    soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+  };
+  syncSound();
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    try {
+      window.localStorage.setItem(SOUND_KEY, soundOn ? "1" : "0");
+    } catch {
+      /* storage blocked */
+    }
+    syncSound();
+    if (soundOn) maybeDing(true); // preview on enable
+  });
+  hActions.appendChild(soundBtn);
+  // Soft two-note chime via WebAudio (no asset). Plays only when enabled.
+  function maybeDing(force?: boolean): void {
+    if (!soundOn && !force) return;
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      [
+        [880, 0],
+        [1175, 0.12],
+      ].forEach(([freq, at]) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, now + at);
+        g.gain.exponentialRampToValueAtTime(0.12, now + at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.18);
+        o.connect(g).connect(ctx.destination);
+        o.start(now + at);
+        o.stop(now + at + 0.2);
+      });
+      window.setTimeout(() => void ctx.close().catch(() => {}), 500);
+    } catch {
+      /* audio blocked — non-fatal */
+    }
+  }
   // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
   const AUTONAV_KEY = "sg_ayca_autonav";
@@ -1105,14 +1166,25 @@ export function createAiChatWidget(
         listEl.textContent = "No past conversations yet.";
         return;
       }
+      let lastBucket = "";
       for (const th of threads.slice(0, 50)) {
+        // Relative-time group separators (Today / Yesterday / This month / …).
+        if (th.updatedAt) {
+          const bucket = relBucket(th.updatedAt);
+          if (bucket !== lastBucket) {
+            lastBucket = bucket;
+            const sep = el("div", `${PREFIX}-history-sep`);
+            sep.textContent = bucket;
+            listEl.appendChild(sep);
+          }
+        }
         const item = el("button", `${PREFIX}-history-item`);
         const ti = el("span", `${PREFIX}-history-title`);
         ti.textContent = th.title || "Untitled conversation";
         item.appendChild(ti);
         if (th.updatedAt) {
           const dt = el("span", `${PREFIX}-history-date`);
-          dt.textContent = new Date(th.updatedAt).toLocaleDateString();
+          dt.textContent = relTime(th.updatedAt);
           item.appendChild(dt);
         }
         item.addEventListener(
@@ -1171,6 +1243,49 @@ export function createAiChatWidget(
     void send(content);
   });
 
+  /** Parse + render any inline directives in a finished reply, returning the
+   *  text with them stripped. [[widget]]/[[navigate]]/[[action]]/[[form]]/lead. */
+  function renderDirectives(text: string): string {
+    let t = text;
+    for (let i = 0; i < 6; i++) {
+      const w = parseJsonDirective<WidgetSpec>(t, "widget");
+      if (!w) break;
+      t = w.stripped;
+      renderWidget(w.spec);
+    }
+    const nav = parseJsonDirective<NavigateSpec>(t, "navigate");
+    if (nav && opts.onWidgetAction && nav.spec.path) {
+      t = nav.stripped;
+      renderNavigate(nav.spec);
+    }
+    for (let i = 0; i < 4; i++) {
+      const act = parseJsonDirective<ActionSpec>(t, "action");
+      if (!act || !opts.onWidgetAction || !act.spec.name) break;
+      t = act.stripped;
+      renderAction(act.spec);
+    }
+    const form = parseFormDirective(t);
+    if (form && (opts.onWidgetAction || opts.onLead)) {
+      t = form.stripped;
+      renderForm(form.spec);
+    } else if ((opts.onLead || opts.onWidgetAction) && t.includes(LEAD_TOKEN)) {
+      t = t.replace(LEAD_TOKEN, "").trim();
+      renderForm({
+        action: "lead",
+        fields: [
+          {
+            name: "email",
+            type: "email",
+            placeholder: "you@company.com",
+            required: true,
+          },
+        ],
+        submit: "Send",
+      });
+    }
+    return t;
+  }
+
   async function send(content: string): Promise<void> {
     busy = true;
     lastUserContent = content;
@@ -1189,7 +1304,30 @@ export function createAiChatWidget(
     scrollDown(true);
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
+    let producedAny = false;
+    let turnIn = 0;
+    let turnOut = 0;
     let failure: string | null = null;
+    // Close the current text bubble and render its markdown, so the NEXT thing
+    // (a widget/activity, or more text) lands AFTER it — keeping the reply in
+    // true order instead of dumping widgets below all the text. `final` also
+    // parses inline directives. Returns the rendered bubble (for the token tag).
+    const flushSegment = (final: boolean): HTMLElement | null => {
+      const bubble = assistant;
+      if (!bubble) return null;
+      assistant = null;
+      let raw = assistantRaw;
+      assistantRaw = "";
+      bubble.classList.remove(`${PREFIX}-streaming`);
+      if (!raw.trim()) {
+        bubble.remove();
+        return null;
+      }
+      if (final) raw = renderDirectives(raw);
+      history.push({ role: "assistant", content: raw });
+      applyAssistantRich(bubble, raw, true);
+      return bubble;
+    };
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
       const pageContext = opts.getContext ? await opts.getContext() : undefined;
@@ -1233,6 +1371,7 @@ export function createAiChatWidget(
                 assistant.classList.add(`${PREFIX}-streaming`);
               }
               assistantRaw += piece;
+              producedAny = true;
               // Stream MASKED plain text (markdown marks hidden) with a per-token
               // fade+blur reveal — a cool typing feel without showing raw ** / ##
               // / | while typing. The real markdown renders once at the end.
@@ -1244,20 +1383,25 @@ export function createAiChatWidget(
               }
               scrollDown();
             }
-            // Inline data widget from the analytics lane (render_chart). Was
-            // previously dropped — now rendered so widget responses are visible.
+            // Inline data widget (render_chart). Flush the current text first so
+            // the chart lands AFTER it, in order — not below the whole reply.
             if (frame.type === "widget") {
               typing.remove();
+              flushSegment(false);
               renderServerWidget(frame.spec, frame.rows, frame.comparisonRows);
+              producedAny = true;
             }
-            // Live agent-activity step — a process chip (running → ok/error).
+            // Live agent-activity step — a process chip (running → ok/error). On
+            // start, flush text so the chip sits AFTER it (true order).
             if (frame.type === "activity" && frame.label && frame.status) {
               typing.remove();
+              if (frame.status === "running") flushSegment(false);
               liveActivityFrame(
                 frame.callId ?? frame.label,
                 frame.label,
                 frame.status
               );
+              producedAny = true;
             }
             // Free-allowance meter (visitor preview). `quota` is the server's
             // snapshot; `usage` is this turn's tokens (count toward the session).
@@ -1270,6 +1414,8 @@ export function createAiChatWidget(
               if (frame.exhausted) showSignupCta();
             }
             if (frame.type === "usage") {
+              turnIn += frame.inputTokens ?? 0;
+              turnOut += frame.outputTokens ?? 0;
               const turn = (frame.inputTokens ?? 0) + (frame.outputTokens ?? 0);
               sessionUsed += turn;
               if (quotaRemaining !== null)
@@ -1291,78 +1437,34 @@ export function createAiChatWidget(
       void refreshBalance();
     }
 
-    // Clear the typing indicator + the streaming caret now the reply is final.
+    // Clear the typing indicator + render the FINAL text segment (with
+    // directives). Earlier segments were already flushed around widgets/chips.
     typing.remove();
-    assistant?.classList.remove(`${PREFIX}-streaming`);
-    if (!assistant || !assistantRaw.trim()) {
-      // Nothing textual streamed (e.g. only a widget frame, or an error).
-      if (assistant) {
-        assistant.remove();
-      }
+    const lastBubble = flushSegment(true);
+    if (!producedAny) {
       if (failure) showError(failure);
       else {
         addMsg(log, "assistant", "(no response)");
         scrollDown(true);
       }
     } else {
-      // Strip directives from the RAW text (the bubble shows rendered markdown).
-      // Order: data widgets (can be several) → navigation → action → form/lead.
-      let finalText = assistantRaw;
-
-      // [[widget:{...}]] — inline data widgets (stat/kpis/list/table).
-      for (let i = 0; i < 6; i++) {
-        const w = parseJsonDirective<WidgetSpec>(finalText, "widget");
-        if (!w) break;
-        finalText = w.stripped;
-        renderWidget(w.spec);
+      // A reply did stream; surface a late error inline (partial + error).
+      if (failure) showError(failure);
+      // Per-message token badge under the reply (UI-friendly tokens caption).
+      if (turnIn + turnOut > 0) {
+        const cap = el("div", `${PREFIX}-usage`);
+        cap.innerHTML =
+          `<span class="${PREFIX}-usage-pill">↑ ${turnIn.toLocaleString()}</span>` +
+          `<span class="${PREFIX}-usage-pill">↓ ${turnOut.toLocaleString()}</span>` +
+          `<span class="${PREFIX}-usage-sep">·</span>` +
+          `<span>${(turnIn + turnOut).toLocaleString()} tokens</span>`;
+        if (lastBubble) lastBubble.insertAdjacentElement("afterend", cap);
+        else log.appendChild(cap);
       }
-
-      // [[navigate:{path,label}]] — the assistant proposes a page (host gates it).
-      const nav = parseJsonDirective<NavigateSpec>(finalText, "navigate");
-      if (nav && opts.onWidgetAction && nav.spec.path) {
-        finalText = nav.stripped;
-        renderNavigate(nav.spec);
-      }
-
-      // [[action:{name,label,confirm?,data?}]] — an in-app ACTION button.
-      for (let i = 0; i < 4; i++) {
-        const act = parseJsonDirective<ActionSpec>(finalText, "action");
-        if (!act || !opts.onWidgetAction || !act.spec.name) break;
-        finalText = act.stripped;
-        renderAction(act.spec);
-      }
-
-      // [[form:{...}]] inline input form → host action; [[collect-email]] lead.
-      const form = parseFormDirective(finalText);
-      if (form && (opts.onWidgetAction || opts.onLead)) {
-        finalText = form.stripped;
-        renderForm(form.spec);
-      } else if (
-        (opts.onLead || opts.onWidgetAction) &&
-        finalText.includes(LEAD_TOKEN)
-      ) {
-        finalText = finalText.replace(LEAD_TOKEN, "").trim();
-        renderForm({
-          action: "lead",
-          fields: [
-            {
-              name: "email",
-              type: "email",
-              placeholder: "you@company.com",
-              required: true,
-            },
-          ],
-          submit: "Send",
-        });
-      }
-      // Persist the raw markdown turn for refresh recovery.
-      history.push({ role: "assistant", content: finalText });
-      saveState();
-      // Render the final reply as markdown — fades in over the masked streaming
-      // text (the host's real <Markdown> when wired, else the built-in renderer).
-      applyAssistantRich(assistant, finalText, true);
+      maybeDing();
       scrollDown();
     }
+    saveState();
   }
 
   /** Render an AI-described input form inline; submit → host action. */
@@ -1750,6 +1852,41 @@ function el(tag: string, cls: string): HTMLElement {
   return node;
 }
 
+/** Coarse "when" bucket for grouping past conversations (Today / Yesterday / …). */
+function relBucket(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Older";
+  const now = new Date();
+  const startToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  const day = 86_400_000;
+  const t = d.getTime();
+  if (t >= startToday) return "Today";
+  if (t >= startToday - day) return "Yesterday";
+  if (t >= startToday - 6 * day) return "Earlier this week";
+  if (t >= startToday - 29 * day) return "This month";
+  return "Older";
+}
+
+/** Short relative label, e.g. "3h ago", "2w ago" — falls back to a date. */
+function relTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const diff = Date.now() - d.getTime();
+  const min = 60_000;
+  const hr = 3_600_000;
+  const day = 86_400_000;
+  const wk = 7 * day;
+  if (diff < hr) return `${Math.max(1, Math.floor(diff / min))}m ago`;
+  if (diff < day) return `${Math.floor(diff / hr)}h ago`;
+  if (diff < wk) return `${Math.floor(diff / day)}d ago`;
+  if (diff < 30 * day) return `${Math.floor(diff / wk)}w ago`;
+  return d.toLocaleDateString();
+}
+
 /** Hide raw markdown control marks from a streamed chunk so the user reads clean
  *  text WHILE the bot types (the real markdown renders once at the end). Light +
  *  per-chunk — it only needs to look clean for the moment it streams. */
@@ -1810,6 +1947,9 @@ function injectStyles(
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid ${accent}44;border-top-color:${accent};animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
+.${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:10.5px;color:#9aa0a6;font-variant-numeric:tabular-nums}
+.${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid #e6e6e6;border-radius:6px;padding:0 5px;line-height:16px}
+.${PREFIX}-usage-sep{opacity:.5}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
@@ -1901,6 +2041,7 @@ function injectStyles(
 .${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #eee;font-weight:600;font-size:14px}
 .${PREFIX}-history-back{border:1px solid #ddd;background:#fff;border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:#333}
 .${PREFIX}-history-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:#555}
+.${PREFIX}-history-sep{padding:8px 4px 2px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9aa0a6}
 .${PREFIX}-history-item{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid #eee;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer;width:100%}
 .${PREFIX}-history-item:hover{border-color:${accent};background:${accent}0a}
 .${PREFIX}-history-title{font-weight:600;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1926,7 +2067,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
