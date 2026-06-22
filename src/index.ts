@@ -31,6 +31,7 @@ export {
   type HostActionHandler,
 } from "./host-actions";
 import type { PageContext } from "./host-actions";
+import { renderMarkdown } from "./markdown";
 
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
@@ -156,6 +157,23 @@ export interface AiChatWidgetOptions {
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
   signupUrl?: string;
+  /**
+   * Rich-content render hooks (in-app React hosts). When provided, the widget
+   * hands the assistant's final reply markdown / data-widget frames to the host
+   * to render with the REAL @sgiant/ui components (<Markdown>, <AiDataWidget>) —
+   * pixel-identical to the full-page assistant. Each returns an optional
+   * disposer the widget calls when it clears that message (new chat / history
+   * switch / destroy) so the host can unmount its React root. Omit on external
+   * embeds (no React) → the widget uses its built-in lightweight renderers.
+   */
+  renderMarkdown?: (host: HTMLElement, markdown: string) => (() => void) | void;
+  /** Render an assistant `render_chart` frame (spec + rows) as a real chart. */
+  renderDataWidget?: (
+    host: HTMLElement,
+    spec: unknown,
+    rows: unknown,
+    comparisonRows?: unknown
+  ) => (() => void) | void;
 }
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
@@ -292,6 +310,8 @@ interface StreamFrame {
   /** render_chart widget frame (analytics lane): spec = model args, rows = data. */
   spec?: { title?: string; chartType?: string };
   rows?: unknown;
+  /** Optional prior-period rows for the same chart (comparison overlay). */
+  comparisonRows?: unknown;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;
@@ -493,11 +513,45 @@ export function createAiChatWidget(
   log.setAttribute("aria-live", "polite");
   log.setAttribute("aria-label", "Conversation");
   log.setAttribute("tabindex", "0");
+  // Rich-content lifecycle. Host-mounted React roots (markdown / data widgets)
+  // hand back a disposer; we keep them so they can be unmounted when the log is
+  // cleared (new chat / history switch / destroy), avoiding leaked roots.
+  const richDisposers: Array<() => void> = [];
+  function clearRich(): void {
+    for (const dispose of richDisposers.splice(0)) {
+      try {
+        dispose();
+      } catch {
+        /* host cleanup best-effort */
+      }
+    }
+  }
+  // Turn a FINAL assistant bubble's text into rich content: the host's real
+  // <Markdown> when wired, else the built-in safe markdown→HTML, else plain.
+  function applyAssistantRich(bubble: HTMLElement, text: string): void {
+    if (opts.renderMarkdown) {
+      bubble.textContent = "";
+      const dispose = opts.renderMarkdown(bubble, text);
+      if (dispose) richDisposers.push(dispose);
+    } else {
+      bubble.innerHTML = renderMarkdown(text);
+    }
+  }
+  // Append a complete assistant message rendered as markdown (history restore,
+  // greeting, "no response"). The streaming path stays plain until finalize.
+  function addAssistantMessage(text: string): HTMLElement {
+    const bubble = addMsg(log, "assistant", "");
+    applyAssistantRich(bubble, text);
+    return bubble;
+  }
+
   if (history.length) {
     // Restore a prior conversation (survives refresh).
-    for (const m of history) addMsg(log, m.role, m.content);
+    for (const m of history)
+      if (m.role === "assistant") addAssistantMessage(m.content);
+      else addMsg(log, m.role, m.content);
   } else if (opts.greeting) {
-    addMsg(log, "assistant", opts.greeting);
+    addAssistantMessage(opts.greeting);
   }
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
@@ -769,8 +823,9 @@ export function createAiChatWidget(
     threadId = undefined;
     history.length = 0;
     saveState();
+    clearRich();
     log.innerHTML = "";
-    if (opts.greeting) addMsg(log, "assistant", opts.greeting);
+    if (opts.greeting) addAssistantMessage(opts.greeting);
     void renderSuggestions();
     input.focus();
   });
@@ -878,10 +933,12 @@ export function createAiChatWidget(
     try {
       const msgs = await opts.loadThread(id);
       // Replace the visible conversation with the chosen thread.
+      clearRich();
       log.querySelectorAll(`.${PREFIX}-msg`).forEach((n) => n.remove());
       history.length = 0;
       for (const m of msgs) {
-        addMsg(log, m.role, m.content);
+        if (m.role === "assistant") addAssistantMessage(m.content);
+        else addMsg(log, m.role, m.content);
         history.push({ role: m.role, content: m.content });
       }
       threadId = id;
@@ -981,7 +1038,7 @@ export function createAiChatWidget(
             // previously dropped — now rendered so widget responses are visible.
             if (frame.type === "widget") {
               typing.remove();
-              renderServerWidget(frame.spec, frame.rows);
+              renderServerWidget(frame.spec, frame.rows, frame.comparisonRows);
             }
             // Free-allowance meter (visitor preview). `quota` is the server's
             // snapshot; `usage` is this turn's tokens (count toward the session).
@@ -1095,8 +1152,14 @@ export function createAiChatWidget(
         });
       }
       // Persist the completed assistant turn (+ thread id) for refresh recovery.
-      history.push({ role: "assistant", content: assistant.textContent });
+      // Capture the plain text BEFORE rich rendering (history stays raw markdown,
+      // and directives were parsed off textContent above).
+      const finalText = assistant.textContent ?? "";
+      history.push({ role: "assistant", content: finalText });
       saveState();
+      // Re-render the final reply as rich content: the host's real <Markdown>
+      // when wired, else the built-in safe markdown renderer.
+      applyAssistantRich(assistant, finalText);
     }
   }
 
@@ -1252,8 +1315,19 @@ export function createAiChatWidget(
    *  widget. kpi → a stat; everything else → a table of the returned rows. */
   function renderServerWidget(
     spec: { title?: string; chartType?: string } | undefined,
-    rows: unknown
+    rows: unknown,
+    comparisonRows?: unknown
   ): void {
+    // In-app: hand the frame to the host's REAL dashboard renderer (charts).
+    if (opts.renderDataWidget) {
+      const host = el("div", `${PREFIX}-widget ${PREFIX}-widget-host`);
+      log.appendChild(host);
+      const dispose = opts.renderDataWidget(host, spec, rows, comparisonRows);
+      if (dispose) richDisposers.push(dispose);
+      scrollDown(true);
+      return;
+    }
+    // External embed: lightweight fallback (kpi → stat, else a table).
     const title = spec?.title;
     const data = Array.isArray(rows)
       ? (rows as Array<Record<string, unknown>>)
@@ -1448,6 +1522,7 @@ export function createAiChatWidget(
         window.removeEventListener(opts.openEventName, onOpenEvent);
       }
       unbindKeyboard();
+      clearRich();
       bubble.remove();
       panel.remove();
     },
@@ -1539,6 +1614,22 @@ function injectStyles(
 .${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-user{align-self:flex-end;background:${accent};color:#fff;border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:#fff;color:#111;border:1px solid #ececec;border-bottom-left-radius:4px}
+.${PREFIX}-assistant p{margin:0 0 8px}.${PREFIX}-assistant>:last-child{margin-bottom:0}
+.${PREFIX}-assistant h1,.${PREFIX}-assistant h2,.${PREFIX}-assistant h3,.${PREFIX}-assistant h4{margin:10px 0 6px;font-weight:700;line-height:1.25}
+.${PREFIX}-assistant h1{font-size:17px}.${PREFIX}-assistant h2{font-size:16px}.${PREFIX}-assistant h3{font-size:14.5px}.${PREFIX}-assistant h4{font-size:13.5px}
+.${PREFIX}-assistant ul,.${PREFIX}-assistant ol{margin:6px 0;padding-left:20px}
+.${PREFIX}-assistant li{line-height:1.45;margin:2px 0}
+.${PREFIX}-assistant a{color:${accent};text-decoration:underline;text-underline-offset:2px}
+.${PREFIX}-assistant code{background:rgba(0,0,0,.06);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.${PREFIX}-assistant pre.md-pre{background:#0d1117;color:#e6edf3;border-radius:10px;padding:10px 12px;overflow:auto;margin:8px 0}
+.${PREFIX}-assistant pre.md-pre code{background:none;padding:0;color:inherit;font-size:12px;white-space:pre}
+.${PREFIX}-assistant blockquote{margin:8px 0;padding:2px 12px;border-left:3px solid ${accent}66;color:#555}
+.${PREFIX}-assistant hr{border:none;border-top:1px solid #e6e6e6;margin:10px 0}
+.${PREFIX}-assistant table.md-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+.${PREFIX}-assistant table.md-table th{text-align:left;font-weight:700;color:#666;border-bottom:1px solid #e6e6e6;padding:5px 8px}
+.${PREFIX}-assistant table.md-table td{border-bottom:1px solid #f2f2f2;padding:5px 8px}
+.${PREFIX}-assistant strong{font-weight:700}.${PREFIX}-assistant del{opacity:.7}
+.${PREFIX}-widget-host{padding:8px}
 .${PREFIX}-typing{align-self:flex-start;display:flex;gap:4px;padding:10px 12px}
 .${PREFIX}-typing span{width:7px;height:7px;border-radius:50%;background:${accent};animation:${PREFIX}-blink 1.2s infinite}
 .${PREFIX}-typing span:nth-child(2){animation-delay:.2s}
@@ -1612,6 +1703,7 @@ function injectStyles(
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
 @media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}}
+@media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
