@@ -1129,33 +1129,6 @@ export function createAiChatWidget(
     scrollDown(true);
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
-    let liveDispose: (() => void) | null = null;
-    let liveRaf = false;
-    // Render the streamed reply as MARKDOWN live — so the user never sees raw
-    // ** / ### / | marks while the bot types; it formats as it streams (like the
-    // full-page assistant). Throttled to one render per frame; the host render
-    // hook reuses ONE root per bubble, so repeated calls just update it.
-    const renderLive = (): void => {
-      if (!assistant) return;
-      if (opts.renderMarkdown) {
-        const d = opts.renderMarkdown(assistant, assistantRaw);
-        if (typeof d === "function" && !liveDispose) {
-          liveDispose = d;
-          richDisposers.push(d);
-        }
-      } else {
-        assistant.innerHTML = renderMarkdown(assistantRaw);
-      }
-    };
-    const scheduleLive = (): void => {
-      if (liveRaf) return;
-      liveRaf = true;
-      requestAnimationFrame(() => {
-        liveRaf = false;
-        renderLive();
-        scrollDown();
-      });
-    };
     let failure: string | null = null;
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
@@ -1197,13 +1170,19 @@ export function createAiChatWidget(
               if (!assistant) {
                 typing.remove();
                 assistant = addMsg(log, "assistant", "");
-                // Fade the bubble in as the bot starts typing; blinking caret +
-                // LIVE markdown rendering give a polished "typing" feel.
                 assistant.classList.add(`${PREFIX}-streaming`);
-                assistant.classList.add(`${PREFIX}-rich-in`);
               }
               assistantRaw += piece;
-              scheduleLive();
+              // Stream MASKED plain text (markdown marks hidden) with a per-token
+              // fade+blur reveal — a cool typing feel without showing raw ** / ##
+              // / | while typing. The real markdown renders once at the end.
+              const masked = maskMarkdown(piece);
+              if (masked) {
+                const tok = el("span", `${PREFIX}-tok`);
+                tok.textContent = masked;
+                assistant.appendChild(tok);
+              }
+              scrollDown();
             }
             // Inline data widget from the analytics lane (render_chart). Was
             // previously dropped — now rendered so widget responses are visible.
@@ -1249,7 +1228,6 @@ export function createAiChatWidget(
     if (!assistant || !assistantRaw.trim()) {
       // Nothing textual streamed (e.g. only a widget frame, or an error).
       if (assistant) {
-        if (liveDispose) liveDispose();
         assistant.remove();
       }
       if (failure) showError(failure);
@@ -1311,10 +1289,9 @@ export function createAiChatWidget(
       // Persist the raw markdown turn for refresh recovery.
       history.push({ role: "assistant", content: finalText });
       saveState();
-      // Final markdown render of the directive-stripped text (reuses the live
-      // render handle — no second root).
-      assistantRaw = finalText;
-      renderLive();
+      // Render the final reply as markdown — fades in over the masked streaming
+      // text (the host's real <Markdown> when wired, else the built-in renderer).
+      applyAssistantRich(assistant, finalText, true);
       scrollDown();
     }
   }
@@ -1704,6 +1681,18 @@ function el(tag: string, cls: string): HTMLElement {
   return node;
 }
 
+/** Hide raw markdown control marks from a streamed chunk so the user reads clean
+ *  text WHILE the bot types (the real markdown renders once at the end). Light +
+ *  per-chunk — it only needs to look clean for the moment it streams. */
+function maskMarkdown(s: string): string {
+  return s
+    .replace(/`+/g, "") // code ticks
+    .replace(/[*~]/g, "") // bold / italic / strike markers
+    .replace(/^#{1,6}\s*/gm, "") // heading hashes
+    .replace(/^\s{0,3}>\s?/gm, "") // blockquote
+    .replace(/\|/g, " "); // table pipes
+}
+
 /** Escape text for the few places we build innerHTML (nav button label). */
 function escapeHtml(s: string): string {
   return s.replace(
@@ -1744,6 +1733,8 @@ function injectStyles(
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 @keyframes ${PREFIX}-richin{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
 .${PREFIX}-rich-in{animation:${PREFIX}-richin .28s cubic-bezier(.22,1,.36,1)}
+@keyframes ${PREFIX}-tokin{from{opacity:0;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
+.${PREFIX}-tok{animation:${PREFIX}-tokin .34s ease forwards}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
@@ -1885,7 +1876,7 @@ function injectStyles(
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
 }
-@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after,.${PREFIX}-rich-in{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after,.${PREFIX}-rich-in,.${PREFIX}-tok{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
 `;
   const style = document.createElement("style");
   style.setAttribute("data-sgiant-aiw", "");
