@@ -389,6 +389,17 @@ export function createAiChatWidget(
   // localStorage so a refresh restores the thread + messages.
   type StoredMsg = { role: "user" | "assistant"; content: string };
   const storeKey = opts.persistKey ? `ayca:v1:${opts.persistKey}` : null;
+  // Remember whether the panel was left open, so a page refresh restores it
+  // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
+  const openStateKey = opts.persistKey ? `ayca:open:${opts.persistKey}` : null;
+  function rememberOpen(isOpen: boolean): void {
+    if (!openStateKey) return;
+    try {
+      localStorage.setItem(openStateKey, isOpen ? "1" : "0");
+    } catch {
+      /* storage blocked — non-fatal */
+    }
+  }
   const history: StoredMsg[] = [];
   function loadState(): void {
     if (!storeKey) return;
@@ -708,6 +719,7 @@ export function createAiChatWidget(
     void refreshBalance();
     // Refresh shortcuts for the page the user opened the widget on.
     void renderSuggestions();
+    rememberOpen(true);
   };
   const close = (): void => {
     unbindKeyboard();
@@ -717,6 +729,7 @@ export function createAiChatWidget(
     panel.style.height = "";
     panel.style.top = "";
     bubble.style.display = "flex";
+    rememberOpen(false);
   };
   const toggle = (): void =>
     panel.style.display === "none" ? open() : close();
@@ -961,6 +974,14 @@ export function createAiChatWidget(
   // const it reads — suggestionsEl, busy, send — is already initialized; calling
   // it earlier hits the temporal dead zone (Cannot access before init).
   void renderSuggestions();
+
+  // Restore the open/closed state across reloads — a user who left the assistant
+  // open finds it open again (done after open() + bindKeyboard are defined).
+  try {
+    if (openStateKey && localStorage.getItem(openStateKey) === "1") open();
+  } catch {
+    /* storage blocked — start closed */
+  }
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
