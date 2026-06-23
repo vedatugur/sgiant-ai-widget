@@ -1459,6 +1459,7 @@ export function createAiChatWidget(
   const PROPOSAL_LABELS: Record<string, string> = {
     update_creation: "Apply this update to the creation?",
     render_creation: "Add this creation to your studio?",
+    add_stock_to_assets: "Add this stock media to your assets?",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
   };
@@ -1466,6 +1467,13 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): string {
+    if (name === "add_stock_to_assets") {
+      const parts: string[] = [];
+      if (typeof args.type === "string") parts.push(String(args.type));
+      if (typeof args.provider === "string") parts.push(String(args.provider));
+      if (typeof args.creator === "string") parts.push(`© ${args.creator}`);
+      return parts.join(" · ");
+    }
     if (name === "render_creation") {
       const parts: string[] = [];
       if (typeof args.name === "string") parts.push(`“${args.name}”`);
