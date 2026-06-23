@@ -886,27 +886,32 @@ export function createAiChatWidget(
   // Defensive wheel scrolling. The widget lives in the host's light DOM, so a
   // host that installs a global wheel handler — scroll-lock from an open
   // drawer/dialog (react-remove-scroll/Radix), or a smooth-scroll library —
-  // can preventDefault our wheel events and the conversation won't scroll. We
-  // drive the scroll ourselves and only claim the gesture when the log actually
-  // moves, so page overscroll still hands off cleanly at the top/bottom edge.
-  log.addEventListener(
-    "wheel",
-    (e) => {
-      const step =
-        e.deltaMode === 1
-          ? e.deltaY * 16 // lines → px
-          : e.deltaMode === 2
-            ? e.deltaY * log.clientHeight // pages → px
-            : e.deltaY;
-      const before = log.scrollTop;
-      log.scrollTop = before + step;
-      if (log.scrollTop !== before) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    { passive: false }
-  );
+  // can preventDefault our wheel events and a scroll region won't move. We
+  // drive the scroll ourselves and only claim the gesture when the region
+  // actually moves, so page overscroll still hands off cleanly at the edges.
+  // Applied to EVERY internal scroll area (the log AND the history list — the
+  // latter previously relied on native scrolling and was dead on such hosts).
+  const attachWheelScroll = (elm: HTMLElement): void => {
+    elm.addEventListener(
+      "wheel",
+      (e) => {
+        const step =
+          e.deltaMode === 1
+            ? e.deltaY * 16 // lines → px
+            : e.deltaMode === 2
+              ? e.deltaY * elm.clientHeight // pages → px
+              : e.deltaY;
+        const before = elm.scrollTop;
+        elm.scrollTop = before + step;
+        if (elm.scrollTop !== before) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      { passive: false }
+    );
+  };
+  attachWheelScroll(log);
   const scrollDown = (force?: boolean): void => {
     if (force) pinned = true;
     if (!pinned || scrollQueued) return;
@@ -1317,6 +1322,9 @@ export function createAiChatWidget(
     head.appendChild(back);
     const listEl = el("div", `${PREFIX}-history-list`);
     listEl.textContent = "Loading…";
+    // Same defensive wheel handling as the log, so the past-conversations list
+    // scrolls even on hosts that globally intercept wheel events.
+    attachWheelScroll(listEl);
     overlay.append(head, listEl);
     panel.appendChild(overlay);
     try {
@@ -2233,7 +2241,7 @@ function injectStyles(
 .${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease}
+.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:#fff;color:#111;border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1)}
 .${PREFIX}-header{background:${gradient};color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
 .${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,17,30,.55)}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
@@ -2352,7 +2360,7 @@ function injectStyles(
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
    chat is comfortably usable instead of a cramped corner card. */
 @media (max-width:640px){
-  .${PREFIX}-panel{inset:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1)}
+  .${PREFIX}-panel{inset:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1);transition:none}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
   /* Give the title its own full-width row: avatar + actions share the top row,
