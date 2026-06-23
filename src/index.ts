@@ -1458,6 +1458,7 @@ export function createAiChatWidget(
   // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
   const PROPOSAL_LABELS: Record<string, string> = {
     update_creation: "Apply this update to the creation?",
+    render_creation: "Add this creation to your studio?",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
   };
@@ -1465,6 +1466,17 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): string {
+    if (name === "render_creation") {
+      const parts: string[] = [];
+      if (typeof args.name === "string") parts.push(`“${args.name}”`);
+      if (typeof args.format === "string") parts.push(String(args.format));
+      const payload = args.payload as { scenes?: unknown[] } | undefined;
+      const scenes = Array.isArray(payload?.scenes)
+        ? payload!.scenes.length
+        : 0;
+      if (scenes) parts.push(`${scenes} scene${scenes === 1 ? "" : "s"}`);
+      return parts.join(" · ");
+    }
     if (name === "update_creation") {
       const parts: string[] = [];
       if (typeof args.title === "string") parts.push(`Title → “${args.title}”`);
