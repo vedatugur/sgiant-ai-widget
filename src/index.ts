@@ -232,6 +232,14 @@ export interface AiChatWidgetOptions {
     comparisonRows?: unknown
   ) => (() => void) | void;
   /**
+   * Render a `.sgiant` creation PAYLOAD as a live visual preview — the SAME
+   * CreationPreview the Studio uses. Wired by the in-app host (mounts a React
+   * root); used in the `render_creation` proposal card so the user SEES the
+   * design before they apply it. Returns a disposer (unmount). Omit on external
+   * embeds (no React) → the card falls back to its text summary.
+   */
+  renderCreation?: (host: HTMLElement, payload: unknown) => (() => void) | void;
+  /**
    * Apply a confirm-gated WRITE-tool proposal (e.g. `update_creation`). The AI
    * never mutates directly — it proposes; the widget shows a card and THIS runs
    * only when the user clicks Apply (a Clerk-authed action in the host). Map the
@@ -1529,6 +1537,20 @@ export function createAiChatWidget(
     const title = el("div", `${PREFIX}-proposal-title`);
     title.textContent = PROPOSAL_LABELS[name] ?? "Apply this change?";
     wrap.appendChild(title);
+    // Live `.sgiant` preview — for render_creation, show the actual design (the
+    // host mounts CreationPreview) so the user sees what they're about to add.
+    let disposePreview: (() => void) | undefined;
+    if (
+      name === "render_creation" &&
+      opts.renderCreation &&
+      args.payload &&
+      typeof args.payload === "object"
+    ) {
+      const previewHost = el("div", `${PREFIX}-creation-preview`);
+      wrap.appendChild(previewHost);
+      const d = opts.renderCreation(previewHost, args.payload);
+      if (d) disposePreview = d;
+    }
     const summary = proposalSummary(name, args);
     if (summary) {
       const s = el("div", `${PREFIX}-proposal-summary`);
@@ -1542,12 +1564,16 @@ export function createAiChatWidget(
     const cancel = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
     cancel.type = "button";
     cancel.textContent = "Dismiss";
-    cancel.addEventListener("click", () => wrap.remove());
+    cancel.addEventListener("click", () => {
+      disposePreview?.();
+      wrap.remove();
+    });
     apply.addEventListener("click", async () => {
       apply.disabled = true;
       apply.textContent = "Applying…";
       try {
         const msg = await opts.onApplyProposal!(name, args);
+        disposePreview?.();
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-proposal-ok`);
         ok.innerHTML =
@@ -2354,6 +2380,7 @@ function injectStyles(
 .${PREFIX}-widget-cap{font-size:13px;color:#666;margin-top:2px}
 .${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:${accent};margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.${PREFIX}-creation-preview{display:flex;justify-content:center;border-radius:12px;overflow:hidden}
 .${PREFIX}-kpi{border:1px solid #f0f0f0;border-radius:10px;padding:8px 10px;background:#fafafa}
 .${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:#111}
 .${PREFIX}-kpi-l{font-size:11px;color:#888;margin-top:1px}
