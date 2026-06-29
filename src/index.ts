@@ -39,7 +39,13 @@ import { renderMarkdown } from "./markdown";
 export type LoadedThreadItem =
   | { role: "user" | "assistant"; content: string }
   | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown }
-  | { kind: "activity"; label: string; status: string; agent?: string }
+  | {
+      kind: "activity";
+      label: string;
+      status: string;
+      agent?: string;
+      model?: string;
+    }
   | { kind: "creation"; name?: string; format?: string; payload: unknown };
 
 /**
@@ -83,6 +89,7 @@ export function buildThreadReplay(payload: {
         label?: string;
         status?: string;
         agent?: string;
+        model?: string;
       };
       if (!p.label) continue;
       items.push({
@@ -92,6 +99,7 @@ export function buildThreadReplay(payload: {
           label: p.label,
           status: p.status ?? "ok",
           agent: p.agent,
+          model: p.model,
         },
       });
     } else if (a.kind === "creation") {
@@ -787,11 +795,18 @@ export function createAiChatWidget(
   // One process-step chip (spinner while running → check / cross when done).
   // `agent` is the AI role that ran the step (Vega/Nova/…) — shown as a small
   // badge so the user sees WHICH agent did WHAT.
+  // A model id → a compact label for the flow chip ("claude-sonnet-4-6" →
+  // "sonnet-4-6"; "managed" stays). Keeps the badge short.
+  function shortModel(model?: string): string {
+    if (!model) return "";
+    return model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+  }
   function paintActivity(
     chip: HTMLElement,
     label: string,
     status: string,
-    agent?: string
+    agent?: string,
+    model?: string
   ): void {
     const icon =
       status === "running"
@@ -802,18 +817,24 @@ export function createAiChatWidget(
     const badge = agent
       ? `<span class="${PREFIX}-act-agent">${escapeHtml(agent)}</span>`
       : "";
+    // The MODEL acting on this step — shown so the user sees model selection live.
+    const m = shortModel(model);
+    const modelBadge = m
+      ? `<span class="${PREFIX}-act-model">${escapeHtml(m)}</span>`
+      : "";
     chip.className =
       `${PREFIX}-activity` +
       (status !== "running" ? ` ${PREFIX}-activity-done` : "");
-    chip.innerHTML = `${icon}${badge}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
+    chip.innerHTML = `${icon}${badge}${modelBadge}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
   }
   function addActivityChip(
     label: string,
     status: string,
-    agent?: string
+    agent?: string,
+    model?: string
   ): HTMLElement {
     const chip = el("div", `${PREFIX}-activity`);
-    paintActivity(chip, label, status, agent);
+    paintActivity(chip, label, status, agent, model);
     log.appendChild(chip);
     return chip;
   }
@@ -822,14 +843,15 @@ export function createAiChatWidget(
     callId: string,
     label: string,
     status: string,
-    agent?: string
+    agent?: string,
+    model?: string
   ): void {
     const existing = liveActivity.get(callId);
     if (existing) {
-      paintActivity(existing, label, status, agent);
+      paintActivity(existing, label, status, agent, model);
       return;
     }
-    const chip = addActivityChip(label, status, agent);
+    const chip = addActivityChip(label, status, agent, model);
     liveActivity.set(callId, chip);
     scrollDown();
   }
@@ -886,7 +908,7 @@ export function createAiChatWidget(
         );
       } else if ("kind" in it && it.kind === "activity") {
         // Replay a persisted process step (static, already finished) + its agent.
-        addActivityChip(it.label, it.status, it.agent);
+        addActivityChip(it.label, it.status, it.agent, it.model);
       } else if ("kind" in it && it.kind === "creation") {
         renderCreationCard(it.name, it.payload);
       } else if ("role" in it) {
@@ -1511,6 +1533,8 @@ export function createAiChatWidget(
     add_stock_to_assets: "Add this stock media to your assets?",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
+    create_asset: "Create this file in your library?",
+    update_brand_profile: "Update your brand profile?",
   };
   function proposalSummary(
     name: string,
@@ -1567,6 +1591,40 @@ export function createAiChatWidget(
       return `Replace the file contents (${lines} line${
         lines === 1 ? "" : "s"
       }):\n${preview}${content.length > 220 ? "…" : ""}`;
+    }
+    if (name === "create_asset") {
+      const filename =
+        typeof args.filename === "string" ? args.filename : "file";
+      const folder =
+        typeof args.folderName === "string" && args.folderName
+          ? ` → ${args.folderName}`
+          : "";
+      const content = typeof args.content === "string" ? args.content : "";
+      const preview = content.slice(0, 200);
+      return `New file: ${filename}${folder}\n${preview}${
+        content.length > 200 ? "…" : ""
+      }`;
+    }
+    if (name === "update_brand_profile") {
+      const lines: string[] = [];
+      const scalar = (k: string, label: string) => {
+        if (typeof args[k] === "string" && args[k])
+          lines.push(`${label}: ${args[k]}`);
+      };
+      const list = (k: string, label: string) => {
+        if (Array.isArray(args[k]) && args[k].length)
+          lines.push(`${label}: ${(args[k] as unknown[]).join(", ")}`);
+      };
+      scalar("summary", "Brief");
+      scalar("audience", "Audience");
+      scalar("voice", "Voice");
+      scalar("positioning", "Positioning");
+      list("facts", "Facts");
+      list("dos", "Always");
+      list("donts", "Never");
+      list("preferredFormats", "Formats");
+      list("winningPatterns", "Patterns");
+      return lines.join("\n");
     }
     return Object.entries(args)
       .filter(([k]) => k !== "id")
@@ -1764,7 +1822,8 @@ export function createAiChatWidget(
                 frame.callId ?? frame.label,
                 frame.label,
                 frame.status,
-                (frame as { agent?: string }).agent
+                (frame as { agent?: string }).agent,
+                (frame as { model?: string }).model
               );
               producedAny = true;
             }
@@ -2346,6 +2405,7 @@ function injectStyles(
 .${PREFIX}-activity-done{opacity:.72}
 .${PREFIX}-act-label{color:#333}
 .${PREFIX}-act-agent{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:${accent};background:${accent}1f;border:1px solid ${accent}3d;border-radius:6px;padding:1px 6px}
+.${PREFIX}-act-model{flex:0 0 auto;font-size:9.5px;font-weight:600;letter-spacing:.2px;color:#9aa0a6;background:#9aa0a614;border:1px solid #9aa0a630;border-radius:6px;padding:1px 5px;font-variant-numeric:tabular-nums}
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid ${accent}44;border-top-color:${accent};animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
