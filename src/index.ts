@@ -39,7 +39,8 @@ import { renderMarkdown } from "./markdown";
 export type LoadedThreadItem =
   | { role: "user" | "assistant"; content: string }
   | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown }
-  | { kind: "activity"; label: string; status: string };
+  | { kind: "activity"; label: string; status: string; agent?: string }
+  | { kind: "creation"; name?: string; format?: string; payload: unknown };
 
 /**
  * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
@@ -77,12 +78,39 @@ export function buildThreadReplay(payload: {
         },
       });
     } else if (a.kind === "activity") {
-      // A persisted process step — replays the timeline on reopen.
-      const p = (a.payload ?? {}) as { label?: string; status?: string };
+      // A persisted process step — replays the timeline (+ acting agent) on reopen.
+      const p = (a.payload ?? {}) as {
+        label?: string;
+        status?: string;
+        agent?: string;
+      };
       if (!p.label) continue;
       items.push({
         t: a.createdAt ?? "",
-        item: { kind: "activity", label: p.label, status: p.status ?? "ok" },
+        item: {
+          kind: "activity",
+          label: p.label,
+          status: p.status ?? "ok",
+          agent: p.agent,
+        },
+      });
+    } else if (a.kind === "creation") {
+      // A creation the AI designed in this thread — replays the .sgiant preview
+      // (clickable → lightbox) on reopen, so past reels/posts stay visible.
+      const p = (a.payload ?? {}) as {
+        name?: string;
+        format?: string;
+        payload?: unknown;
+      };
+      if (!p.payload) continue;
+      items.push({
+        t: a.createdAt ?? "",
+        item: {
+          kind: "creation",
+          name: p.name,
+          format: p.format,
+          payload: p.payload,
+        },
       });
     }
   }
@@ -757,10 +785,13 @@ export function createAiChatWidget(
     }
   }
   // One process-step chip (spinner while running → check / cross when done).
+  // `agent` is the AI role that ran the step (Vega/Nova/…) — shown as a small
+  // badge so the user sees WHICH agent did WHAT.
   function paintActivity(
     chip: HTMLElement,
     label: string,
-    status: string
+    status: string,
+    agent?: string
   ): void {
     const icon =
       status === "running"
@@ -768,14 +799,21 @@ export function createAiChatWidget(
         : status === "error"
           ? `<span class="${PREFIX}-act-x" aria-hidden="true">✕</span>`
           : `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>`;
+    const badge = agent
+      ? `<span class="${PREFIX}-act-agent">${escapeHtml(agent)}</span>`
+      : "";
     chip.className =
       `${PREFIX}-activity` +
       (status !== "running" ? ` ${PREFIX}-activity-done` : "");
-    chip.innerHTML = `${icon}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
+    chip.innerHTML = `${icon}${badge}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
   }
-  function addActivityChip(label: string, status: string): HTMLElement {
+  function addActivityChip(
+    label: string,
+    status: string,
+    agent?: string
+  ): HTMLElement {
     const chip = el("div", `${PREFIX}-activity`);
-    paintActivity(chip, label, status);
+    paintActivity(chip, label, status, agent);
     log.appendChild(chip);
     return chip;
   }
@@ -783,14 +821,15 @@ export function createAiChatWidget(
   function liveActivityFrame(
     callId: string,
     label: string,
-    status: string
+    status: string,
+    agent?: string
   ): void {
     const existing = liveActivity.get(callId);
     if (existing) {
-      paintActivity(existing, label, status);
+      paintActivity(existing, label, status, agent);
       return;
     }
-    const chip = addActivityChip(label, status);
+    const chip = addActivityChip(label, status, agent);
     liveActivity.set(callId, chip);
     scrollDown();
   }
@@ -846,8 +885,10 @@ export function createAiChatWidget(
           it.comparisonRows
         );
       } else if ("kind" in it && it.kind === "activity") {
-        // Replay a persisted process step (static, already finished).
-        addActivityChip(it.label, it.status);
+        // Replay a persisted process step (static, already finished) + its agent.
+        addActivityChip(it.label, it.status, it.agent);
+      } else if ("kind" in it && it.kind === "creation") {
+        renderCreationCard(it.name, it.payload);
       } else if ("role" in it) {
         if (it.role === "assistant") addAssistantMessage(it.content);
         else addMsg(log, it.role, it.content);
@@ -1532,10 +1573,23 @@ export function createAiChatWidget(
       .map(([k, v]) => `${k}: ${String(v)}`)
       .join("\n");
   }
-  function renderProposal(name: string, args: Record<string, unknown>): void {
+  function renderProposal(
+    name: string,
+    args: Record<string, unknown>,
+    agent?: string
+  ): void {
     const wrap = el("div", `${PREFIX}-proposal`);
     const title = el("div", `${PREFIX}-proposal-title`);
-    title.textContent = PROPOSAL_LABELS[name] ?? "Apply this change?";
+    // Show the acting agent (e.g. Nova) so the user sees WHO proposed this.
+    if (agent) {
+      const badge = el("span", `${PREFIX}-act-agent`);
+      badge.textContent = agent;
+      badge.style.marginRight = "6px";
+      title.appendChild(badge);
+    }
+    title.appendChild(
+      document.createTextNode(PROPOSAL_LABELS[name] ?? "Apply this change?")
+    );
     wrap.appendChild(title);
     // Live `.sgiant` preview — for render_creation, show the actual design (the
     // host mounts CreationPreview) so the user sees what they're about to add.
@@ -1709,7 +1763,8 @@ export function createAiChatWidget(
               liveActivityFrame(
                 frame.callId ?? frame.label,
                 frame.label,
-                frame.status
+                frame.status,
+                (frame as { agent?: string }).agent
               );
               producedAny = true;
             }
@@ -1724,7 +1779,8 @@ export function createAiChatWidget(
               flushSegment(false);
               renderProposal(
                 frame.name,
-                (frame.args ?? {}) as Record<string, unknown>
+                (frame.args ?? {}) as Record<string, unknown>,
+                (frame as { agent?: string }).agent
               );
               producedAny = true;
             }
@@ -1942,6 +1998,26 @@ export function createAiChatWidget(
 
   /** Map an analytics render_chart frame (spec + StatsQueryRow[]) to an inline
    *  widget. kpi → a stat; everything else → a table of the returned rows. */
+  /** Replay a past creation in the log — the host mounts the real .sgiant
+   *  preview (clickable → lightbox), so reopening a thread shows the reels/posts
+   *  the AI designed, not just the text around them. */
+  function renderCreationCard(
+    name: string | undefined,
+    payload: unknown
+  ): void {
+    if (!opts.renderCreation || !payload || typeof payload !== "object") return;
+    const card = el("div", `${PREFIX}-proposal ${PREFIX}-creation-card`);
+    const title = el("div", `${PREFIX}-proposal-title`);
+    title.textContent = name ? `Creation · ${name}` : "Creation";
+    card.appendChild(title);
+    const host = el("div", `${PREFIX}-creation-preview`);
+    card.appendChild(host);
+    log.appendChild(card);
+    const dispose = opts.renderCreation(host, payload);
+    if (dispose) richDisposers.push(dispose);
+    scrollDown(true);
+  }
+
   function renderServerWidget(
     spec: { title?: string; chartType?: string } | undefined,
     rows: unknown,
@@ -2269,6 +2345,7 @@ function injectStyles(
 .${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid ${accent}26;background:${accent}0d;border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-activity-done{opacity:.72}
 .${PREFIX}-act-label{color:#333}
+.${PREFIX}-act-agent{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:${accent};background:${accent}1f;border:1px solid ${accent}3d;border-radius:6px;padding:1px 6px}
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid ${accent}44;border-top-color:${accent};animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
