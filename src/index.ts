@@ -200,6 +200,17 @@ export interface AiChatWidgetOptions {
     threadId?: string;
   }) => void | Promise<void>;
   /**
+   * Flag the CURRENT conversation for oversight (agent/admin surfaces only). When
+   * provided, a flag control appears in the header; clicking it asks for a reason
+   * and calls this with the reason + the live thread id. Wire it to the flags API
+   * (e.g. POST /admin/ai/conversations/:kind/:threadId/flag). Omit to hide the
+   * control (e.g. the public visitor widget). Throw to surface a failure.
+   */
+  onFlag?: (details: {
+    reason: string;
+    threadId?: string;
+  }) => void | Promise<void>;
+  /**
    * Lead capture. When the assistant emits the sentinel `[[collect-email]]` in a
    * reply, the widget strips it and renders an inline email form; submitting it
    * calls this with the email (+ the last user message as context). Wire it to
@@ -531,6 +542,8 @@ const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="non
 const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
 // Download — export the current conversation as a .txt transcript.
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+// Flag — agent/admin oversight: flag the current conversation with a reason.
+const ICON_FLAG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
 // Bell — toggle a soft chime when a reply arrives.
 const ICON_BELL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
 const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
@@ -658,6 +671,34 @@ export function createAiChatWidget(
   downloadBtn.innerHTML = ICON_DOWNLOAD;
   downloadBtn.addEventListener("click", () => exportConversation());
   hActions.appendChild(downloadBtn);
+  // Flag — oversight control (agent/admin surfaces). Asks for a reason, then
+  // hands it to the host's onFlag with the live thread id. Hidden when unwired.
+  if (opts.onFlag) {
+    const flagBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+    flagBtn.setAttribute("aria-label", "Flag conversation");
+    flagBtn.title = "Flag this conversation";
+    flagBtn.innerHTML = ICON_FLAG;
+    flagBtn.addEventListener("click", () => {
+      const reason = window.prompt(
+        "Flag this conversation — why? (reason is logged for review)"
+      );
+      if (!reason || !reason.trim()) return;
+      flagBtn.disabled = true;
+      flagBtn.classList.add(`${PREFIX}-icon-on`);
+      Promise.resolve(opts.onFlag!({ reason: reason.trim(), threadId }))
+        .then(() => {
+          flagBtn.title = "Flagged ✓";
+        })
+        .catch(() => {
+          flagBtn.title = "Flag failed — try again";
+          flagBtn.classList.remove(`${PREFIX}-icon-on`);
+        })
+        .finally(() => {
+          flagBtn.disabled = false;
+        });
+    });
+    hActions.appendChild(flagBtn);
+  }
   // Notification sound — a soft chime when a reply arrives (browser-local toggle).
   const SOUND_KEY = "sg_ayca_sound";
   let soundOn = false;
