@@ -1576,6 +1576,7 @@ export function createAiChatWidget(
     edit_asset: "Save these changes to the file?",
     create_asset: "Create this file in your library?",
     update_brand_profile: "Update your brand profile?",
+    edit_brand: "Update your brand?",
   };
   function proposalSummary(
     name: string,
@@ -1665,6 +1666,30 @@ export function createAiChatWidget(
       list("donts", "Never");
       list("preferredFormats", "Formats");
       list("winningPatterns", "Patterns");
+      return lines.join("\n");
+    }
+    if (name === "edit_brand") {
+      const lines: string[] = [];
+      const scalar = (k: string, label: string) => {
+        if (typeof args[k] === "string" && args[k])
+          lines.push(`${label}: ${args[k]}`);
+      };
+      scalar("name", "Name");
+      scalar("tagline", "Tagline");
+      scalar("voice", "Voice");
+      scalar("audience", "Audience");
+      const colours = [
+        typeof args.primary === "string" ? `primary ${args.primary}` : "",
+        typeof args.accent === "string" ? `accent ${args.accent}` : "",
+      ].filter(Boolean);
+      if (colours.length) lines.push(`Colours: ${colours.join(", ")}`);
+      const fonts = [
+        typeof args.fontDisplay === "string" ? String(args.fontDisplay) : "",
+        typeof args.fontSans === "string" ? String(args.fontSans) : "",
+      ].filter(Boolean);
+      if (fonts.length) lines.push(`Fonts: ${fonts.join(" / ")}`);
+      if (Array.isArray(args.keyPhrases) && args.keyPhrases.length)
+        lines.push(`Phrases: ${(args.keyPhrases as unknown[]).join(", ")}`);
       return lines.join("\n");
     }
     return Object.entries(args)
