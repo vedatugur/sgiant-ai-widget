@@ -695,6 +695,12 @@ export function createAiChatWidget(
     flagBtn.title = "Flag this conversation";
     flagBtn.innerHTML = ICON_FLAG;
     flagBtn.addEventListener("click", () => {
+      // A flag needs a live conversation (the thread id is created on the first
+      // turn). Tell the user plainly instead of silently doing nothing.
+      if (!threadId) {
+        flagNote("Send a message first — then you can flag this chat.", false);
+        return;
+      }
       const reason = window.prompt(
         "Flag this conversation — why? (reason is logged for review)"
       );
@@ -704,10 +710,17 @@ export function createAiChatWidget(
       Promise.resolve(opts.onFlag!({ reason: reason.trim(), threadId }))
         .then(() => {
           flagBtn.title = "Flagged ✓";
+          // Visible confirmation — a tooltip change alone is invisible, so the
+          // user couldn't tell the flag worked.
+          flagNote("🚩 Conversation flagged for review ✓", true);
         })
-        .catch(() => {
+        .catch((err) => {
           flagBtn.title = "Flag failed — try again";
           flagBtn.classList.remove(`${PREFIX}-icon-on`);
+          flagNote(
+            `Couldn't flag: ${(err as Error)?.message || "please try again"}`,
+            false
+          );
         })
         .finally(() => {
           flagBtn.disabled = false;
@@ -1049,6 +1062,20 @@ export function createAiChatWidget(
       log.scrollTop = log.scrollHeight;
     });
   };
+
+  /** Show a brief, VISIBLE system line in the transcript (flag result, guidance)
+   *  — a tooltip/title change alone is invisible, so users can't tell it worked. */
+  function flagNote(text: string, ok: boolean): void {
+    const note = el(
+      "div",
+      `${PREFIX}-replay-note ${PREFIX}-flag-note${ok ? ` ${PREFIX}-flag-ok` : ""}`
+    );
+    note.textContent = text;
+    log.appendChild(note);
+    scrollDown(true);
+    // Auto-dismiss the ephemeral notice so it doesn't clutter the transcript.
+    setTimeout(() => note.remove(), 6000);
+  }
 
   // Token meter — shown only for the free visitor preview (when signupUrl is
   // set). Surfaces remaining allowance + tokens used this browser session.
@@ -2647,6 +2674,8 @@ function injectStyles(
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
 .${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed #d8d8d8;border-radius:9px;padding:4px 10px;font-size:12px;color:#888;background:#fafafa}
+.${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:#e5b8b8;color:#a23b3b;background:#fdf3f3;font-weight:600}
+.${PREFIX}-flag-ok{border-color:#bfe3c8;color:#2f7d43;background:#f2fbf5}
 .${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:10.5px;color:#9aa0a6;font-variant-numeric:tabular-nums}
 .${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid #e6e6e6;border-radius:6px;padding:0 5px;line-height:16px}
 .${PREFIX}-usage-sep{opacity:.5}
@@ -2758,12 +2787,13 @@ function injectStyles(
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6}
 .${PREFIX}-proposal-media-holder{position:relative}
 .${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:600}
-.${PREFIX}-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
-.${PREFIX}-chip{padding:7px 12px;border-radius:999px;border:1px solid #d1d5db;background:#fff;color:#111;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
-.${PREFIX}-chip:hover{background:#f3f4f6}
-.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:#111;color:#fff;border-color:transparent}
-.${PREFIX}-chip-other{border-style:dashed;color:#555}
-.${PREFIX}-chip:disabled{opacity:.5;cursor:default}
+.${PREFIX}-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.${PREFIX}-chip{padding:8px 14px;border-radius:999px;border:1px solid ${accent}59;background:${accent}12;color:${accent};font-size:13px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.${PREFIX}-chip:hover{background:${accent}24}
+.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}
+.${PREFIX}-chip-send:hover{background:${accent}}
+.${PREFIX}-chip-other{border-style:dashed;background:transparent;color:#6b7280;border-color:#cbd5e1}
+.${PREFIX}-chip:disabled{opacity:.45;cursor:default}
 .${PREFIX}-kpi{border:1px solid #f0f0f0;border-radius:10px;padding:8px 10px;background:#fafafa}
 .${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:#111}
 .${PREFIX}-kpi-l{font-size:11px;color:#888;margin-top:1px}
@@ -2783,7 +2813,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:#1d1d1d;color:#eee;border-color:#333}.${PREFIX}-chip:hover{background:#262626}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:#eee;color:#111;border-color:transparent}.${PREFIX}-chip-other{color:#aaa}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:${accent}26;color:#fff;border-color:${accent}80}.${PREFIX}-chip:hover{background:${accent}3a}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}.${PREFIX}-chip-other{background:transparent;color:#aaa;border-color:#444}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
