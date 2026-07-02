@@ -1605,6 +1605,7 @@ export function createAiChatWidget(
     update_creation: "Apply this update to the creation?",
     render_creation: "Add this creation to your studio?",
     add_stock_to_assets: "Add this stock media to your assets?",
+    add_scraped_media: "Add this image to your assets?",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
     create_asset: "Create this file in your library?",
@@ -1620,6 +1621,18 @@ export function createAiChatWidget(
       if (typeof args.type === "string") parts.push(String(args.type));
       if (typeof args.provider === "string") parts.push(String(args.provider));
       if (typeof args.creator === "string") parts.push(`© ${args.creator}`);
+      return parts.join(" · ");
+    }
+    if (name === "add_scraped_media") {
+      const parts: string[] = [];
+      if (typeof args.filename === "string") parts.push(String(args.filename));
+      if (typeof args.sourceUrl === "string") {
+        try {
+          parts.push(`from ${new URL(String(args.sourceUrl)).hostname}`);
+        } catch {
+          /* ignore bad url */
+        }
+      }
       return parts.join(" · ");
     }
     if (name === "render_creation") {
@@ -1791,6 +1804,33 @@ export function createAiChatWidget(
         } else {
           wrap.appendChild(img);
         }
+      }
+    }
+    // Scraped-media import — PREVIEW the actual image/video (loaded from its
+    // source URL, NOT saved) before the user clicks Apply.
+    if (name === "add_scraped_media") {
+      const src = typeof args.url === "string" ? args.url : "";
+      if (src && args.type === "video") {
+        const video = el(
+          "video",
+          `${PREFIX}-proposal-media`
+        ) as HTMLVideoElement;
+        video.src = src;
+        video.controls = true;
+        video.preload = "metadata";
+        video.playsInline = true;
+        if (typeof args.poster === "string" && args.poster)
+          video.poster = String(args.poster);
+        wrap.appendChild(video);
+      } else if (src) {
+        const img = el("img", `${PREFIX}-proposal-media`) as HTMLImageElement;
+        img.src = src;
+        img.loading = "lazy";
+        img.alt =
+          typeof args.alt === "string" && args.alt
+            ? String(args.alt)
+            : "Web image preview";
+        wrap.appendChild(img);
       }
     }
     const summary = proposalSummary(name, args);
