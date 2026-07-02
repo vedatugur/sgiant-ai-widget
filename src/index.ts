@@ -1742,6 +1742,35 @@ export function createAiChatWidget(
       const d = opts.renderCreation(previewHost, args.payload);
       if (d) disposePreview = d;
     }
+    // Stock import — PREVIEW the media (loaded from the provider, NOT saved) so
+    // the user sees exactly what they're about to add before clicking Apply.
+    if (name === "add_stock_to_assets") {
+      const thumb =
+        typeof args.thumbUrl === "string" && args.thumbUrl ? args.thumbUrl : "";
+      const full =
+        typeof args.url === "string" && args.url && args.type !== "video"
+          ? args.url
+          : "";
+      const src = thumb || full;
+      if (src) {
+        const img = el("img", `${PREFIX}-proposal-media`) as HTMLImageElement;
+        img.src = src;
+        img.loading = "lazy";
+        img.alt =
+          typeof args.creator === "string" && args.creator
+            ? `Stock preview — ${args.creator}`
+            : "Stock preview";
+        if (args.type === "video") {
+          const badge = el("span", `${PREFIX}-proposal-media-badge`);
+          badge.textContent = "▶ video";
+          const holder = el("div", `${PREFIX}-proposal-media-holder`);
+          holder.append(img, badge);
+          wrap.appendChild(holder);
+        } else {
+          wrap.appendChild(img);
+        }
+      }
+    }
     const summary = proposalSummary(name, args);
     if (summary) {
       const s = el("div", `${PREFIX}-proposal-summary`);
@@ -2597,6 +2626,9 @@ function injectStyles(
 .${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:${accent};margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 .${PREFIX}-creation-preview{display:flex;justify-content:center;border-radius:12px;overflow:hidden}
+.${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6}
+.${PREFIX}-proposal-media-holder{position:relative}
+.${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:600}
 .${PREFIX}-kpi{border:1px solid #f0f0f0;border-radius:10px;padding:8px 10px;background:#fafafa}
 .${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:#111}
 .${PREFIX}-kpi-l{font-size:11px;color:#888;margin-top:1px}
