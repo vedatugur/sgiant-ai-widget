@@ -1210,13 +1210,20 @@ export function createAiChatWidget(
   }
   root.append(bubble, panel);
 
-  const open = (): void => {
+  const open = (prefill?: unknown): void => {
     panel.style.display = "flex";
     panel.style.transform = ""; // clear any leftover drag offset
     bubble.style.display = "none";
     // Show the latest message + focus the composer (always-ready assistant feel).
     pinned = true;
     log.scrollTop = log.scrollHeight;
+    // A caller (e.g. the "Build with AI" button) can open PREFILLED with a
+    // starter via a CustomEvent detail — seed the composer if it's empty, so the
+    // user just hits send. Non-string args (a click MouseEvent) are ignored.
+    if (typeof prefill === "string" && prefill.trim() && !input.value.trim()) {
+      input.value = prefill;
+      saveDraft(input.value);
+    }
     input.focus();
     bindKeyboard();
     void refreshBalance();
@@ -1496,8 +1503,12 @@ export function createAiChatWidget(
     }
   }
 
-  // Let a nav/sidebar link anywhere in the host app open the panel.
-  const onOpenEvent = (): void => open();
+  // Let a nav/sidebar link anywhere in the host app open the panel — optionally
+  // PREFILLED via `new CustomEvent(name, { detail: { prompt } })`.
+  const onOpenEvent = (e: Event): void => {
+    const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
+    open(prompt);
+  };
   if (opts.openEventName) {
     window.addEventListener(opts.openEventName, onOpenEvent);
   }
