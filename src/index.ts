@@ -334,6 +334,16 @@ interface ActionSpec {
   data?: Record<string, string>;
 }
 
+/** Quick-reply chips the assistant offers via `[[chips:{json}]]` — tappable
+ *  answer options so the user picks instead of typing. Single-select sends on
+ *  tap; multi-select toggles + a Send button; `other` adds a "type your own"
+ *  chip. The chosen text is sent as a NORMAL message (history stays in order). */
+interface ChipsSpec {
+  options: string[];
+  multi?: boolean;
+  other?: boolean;
+}
+
 /** Sentinel the assistant emits to ask the widget to render an email form. */
 const LEAD_TOKEN = "[[collect-email]]";
 
@@ -396,6 +406,12 @@ function stripDirectivesForReplay(text: string): {
     if (!w) break;
     t = w.stripped;
     notes.push(`▦ ${w.spec.title || "widget"}`);
+  }
+  for (let i = 0; i < 4; i++) {
+    const c = parseJsonDirective<ChipsSpec>(t, "chips");
+    if (!c) break;
+    t = c.stripped;
+    notes.push("💬 options offered");
   }
   const f = parseFormDirective(t);
   if (f) {
@@ -1556,6 +1572,12 @@ export function createAiChatWidget(
       t = act.stripped;
       renderAction(act.spec);
     }
+    // Quick-reply chips — tappable answer options for a choice question.
+    const chips = parseJsonDirective<ChipsSpec>(t, "chips");
+    if (chips && Array.isArray(chips.spec.options)) {
+      t = chips.stripped;
+      renderChips(chips.spec);
+    }
     const form = parseFormDirective(t);
     if (form && (opts.onWidgetAction || opts.onLead)) {
       t = form.stripped;
@@ -2264,6 +2286,73 @@ export function createAiChatWidget(
 
   /** Render an AI-proposed in-app action as a button (with optional confirm
    *  step), dispatched to the host via onWidgetAction(name, data). */
+  function renderChips(spec: ChipsSpec): void {
+    const options = (Array.isArray(spec.options) ? spec.options : [])
+      .map((o) => String(o).trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    if (!options.length) return;
+    const multi = spec.multi === true;
+    const wrap = el("div", `${PREFIX}-chips`);
+    const chosen = new Set<string>();
+    let answered = false;
+    const answer = (text: string): void => {
+      if (answered || !text.trim()) return;
+      answered = true;
+      wrap
+        .querySelectorAll("button")
+        .forEach((b) => ((b as HTMLButtonElement).disabled = true));
+      void send(text.trim());
+    };
+    for (const opt of options) {
+      const b = el("button", `${PREFIX}-chip`) as HTMLButtonElement;
+      b.type = "button";
+      b.textContent = opt;
+      b.addEventListener("click", () => {
+        if (answered) return;
+        if (!multi) {
+          answer(opt);
+          return;
+        }
+        if (chosen.has(opt)) {
+          chosen.delete(opt);
+          b.classList.remove(`${PREFIX}-chip-on`);
+        } else {
+          chosen.add(opt);
+          b.classList.add(`${PREFIX}-chip-on`);
+        }
+      });
+      wrap.appendChild(b);
+    }
+    // "Other" — let the user type a free answer instead of picking.
+    if (spec.other !== false) {
+      const other = el(
+        "button",
+        `${PREFIX}-chip ${PREFIX}-chip-other`
+      ) as HTMLButtonElement;
+      other.type = "button";
+      other.textContent = "+ Other…";
+      other.addEventListener("click", () => input.focus());
+      wrap.appendChild(other);
+    }
+    // Multi-select needs an explicit Send (collect the toggled options).
+    if (multi) {
+      const go = el(
+        "button",
+        `${PREFIX}-chip ${PREFIX}-chip-send`
+      ) as HTMLButtonElement;
+      go.type = "button";
+      go.textContent = "Send";
+      go.addEventListener("click", () => {
+        const picks = options.filter((o) => chosen.has(o));
+        if (picks.length) answer(picks.join(", "));
+      });
+      wrap.appendChild(go);
+    }
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   function renderAction(spec: ActionSpec): void {
     // Reflect the acting capability in the status badge (e.g. research-brand →
     // Analytics, open-studio → Creation); plain navigation stays Talk.
@@ -2629,6 +2718,12 @@ function injectStyles(
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6}
 .${PREFIX}-proposal-media-holder{position:relative}
 .${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:600}
+.${PREFIX}-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
+.${PREFIX}-chip{padding:7px 12px;border-radius:999px;border:1px solid #d1d5db;background:#fff;color:#111;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
+.${PREFIX}-chip:hover{background:#f3f4f6}
+.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:#111;color:#fff;border-color:transparent}
+.${PREFIX}-chip-other{border-style:dashed;color:#555}
+.${PREFIX}-chip:disabled{opacity:.5;cursor:default}
 .${PREFIX}-kpi{border:1px solid #f0f0f0;border-radius:10px;padding:8px 10px;background:#fafafa}
 .${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:#111}
 .${PREFIX}-kpi-l{font-size:11px;color:#888;margin-top:1px}
@@ -2648,7 +2743,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:#1d1d1d;color:#eee;border-color:#333}.${PREFIX}-chip:hover{background:#262626}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:#eee;color:#111;border-color:transparent}.${PREFIX}-chip-other{color:#aaa}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
