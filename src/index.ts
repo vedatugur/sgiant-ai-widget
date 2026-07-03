@@ -1633,6 +1633,7 @@ export function createAiChatWidget(
     render_creation: "Add this creation to your studio?",
     add_stock_to_assets: "Add this stock media to your assets?",
     add_scraped_media: "Add this image to your assets?",
+    generate_image: "Generate this image? (uses credits)",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
     create_asset: "Create this file in your library?",
@@ -1660,6 +1661,15 @@ export function createAiChatWidget(
           /* ignore bad url */
         }
       }
+      return parts.join(" · ");
+    }
+    if (name === "generate_image") {
+      // No image to preview — it doesn't exist until Apply. Show the prompt +
+      // aspect so the user knows what they're about to spend a credit on.
+      const parts: string[] = [];
+      if (typeof args.prompt === "string")
+        parts.push(`“${String(args.prompt).slice(0, 140)}”`);
+      if (typeof args.aspect === "string") parts.push(String(args.aspect));
       return parts.join(" · ");
     }
     if (name === "render_creation") {
