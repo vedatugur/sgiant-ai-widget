@@ -129,6 +129,11 @@ export function buildThreadReplay(payload: {
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
   endpoint: string;
+  /** Media-upload endpoint (POST multipart) for chat attachments — e.g.
+   *  https://api.sgiant.io/accounts/:id/assets/media. When set (authed
+   *  surfaces), the composer shows a paperclip so the user can attach files the
+   *  assistant reads. Omit on the anonymous surface (no library to store into). */
+  uploadEndpoint?: string;
   /** Account the chat is scoped to. Omit for the public/anonymous endpoint. */
   accountId?: string;
   /**
@@ -583,7 +588,17 @@ export function createAiChatWidget(
 
   // Conversation memory across page reloads (opt-in via persistKey). Kept in
   // localStorage so a refresh restores the thread + messages.
-  type StoredMsg = { role: "user" | "assistant"; content: string };
+  type WidgetAtt = {
+    mediaId: string;
+    kind: string;
+    filename: string;
+    contentType: string;
+  };
+  type StoredMsg = {
+    role: "user" | "assistant";
+    content: string;
+    attachments?: WidgetAtt[];
+  };
   const storeKey = opts.persistKey ? `ayca:v1:${opts.persistKey}` : null;
   // Remember whether the panel was left open, so a page refresh restores it
   // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
@@ -994,7 +1009,7 @@ export function createAiChatWidget(
     // Restore a prior conversation (survives refresh) — text only at first.
     for (const m of history)
       if (m.role === "assistant") addAssistantMessage(m.content);
-      else addMsg(log, m.role, m.content);
+      else addMsg(log, m.role, m.content, m.attachments);
   } else if (opts.greeting) {
     addAssistantMessage(opts.greeting);
   }
@@ -1240,9 +1255,97 @@ export function createAiChatWidget(
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = "Send";
-  form.append(input, sendBtn);
 
-  panel.append(header, log, meterEl, statusEl, suggestionsEl, form);
+  // Attachments (authed surfaces only): a paperclip that opens a file picker,
+  // uploads into the media library, and stages refs for the next turn.
+  const stagedAtts: WidgetAtt[] = [];
+  const attBar = el("div", `${PREFIX}-attbar`);
+  attBar.style.display = "none";
+  let attachBtn: HTMLButtonElement | null = null;
+  let fileInput: HTMLInputElement | null = null;
+  function renderStaged(): void {
+    attBar.innerHTML = "";
+    attBar.style.display = stagedAtts.length ? "flex" : "none";
+    stagedAtts.forEach((a, i) => {
+      const chip = el("span", `${PREFIX}-att ${PREFIX}-att-staged`);
+      chip.title = `${a.filename} (${a.contentType})`;
+      const label = el("span", "");
+      label.textContent = `${a.kind === "image" ? "🖼" : "📄"} ${a.filename}`;
+      const x = el("button", `${PREFIX}-att-x`) as HTMLButtonElement;
+      x.type = "button";
+      x.textContent = "×";
+      x.setAttribute("aria-label", `Remove ${a.filename}`);
+      x.addEventListener("click", () => {
+        stagedAtts.splice(i, 1);
+        renderStaged();
+      });
+      chip.append(label, x);
+      attBar.appendChild(chip);
+    });
+  }
+  async function uploadFiles(files: FileList | null): Promise<void> {
+    if (!files || !opts.uploadEndpoint) return;
+    if (attachBtn) attachBtn.disabled = true;
+    try {
+      const token = opts.getToken ? await opts.getToken() : opts.token;
+      for (const file of Array.from(files).slice(0, 6)) {
+        if (stagedAtts.length >= 6) break;
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(opts.uploadEndpoint, {
+          method: "POST",
+          headers: token ? { authorization: `Bearer ${token}` } : {},
+          credentials: opts.withCredentials ? "include" : "same-origin",
+          body: fd,
+        });
+        if (!res.ok) continue;
+        const j = (await res.json()) as {
+          media?: { id: string; filename: string; contentType: string };
+        };
+        if (!j.media) continue;
+        const ct = j.media.contentType || file.type || "";
+        stagedAtts.push({
+          mediaId: j.media.id,
+          kind: ct.startsWith("image/")
+            ? "image"
+            : ct.includes("pdf")
+              ? "pdf"
+              : "doc",
+          filename: j.media.filename,
+          contentType: ct,
+        });
+        renderStaged();
+      }
+    } catch {
+      /* upload failed — silent; the user can retry */
+    } finally {
+      if (attachBtn) attachBtn.disabled = false;
+      if (fileInput) fileInput.value = "";
+    }
+  }
+  if (opts.uploadEndpoint) {
+    fileInput = el("input", "") as HTMLInputElement;
+    fileInput.type = "file";
+    fileInput.multiple = true;
+    fileInput.accept =
+      "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json";
+    fileInput.style.display = "none";
+    fileInput.addEventListener(
+      "change",
+      () => void uploadFiles(fileInput!.files)
+    );
+    attachBtn = el("button", `${PREFIX}-attach`) as HTMLButtonElement;
+    attachBtn.type = "button";
+    attachBtn.textContent = "📎";
+    attachBtn.setAttribute("aria-label", "Attach a file");
+    attachBtn.title = "Attach images, PDFs or documents";
+    attachBtn.addEventListener("click", () => fileInput!.click());
+    form.append(attachBtn, input, sendBtn, fileInput);
+  } else {
+    form.append(input, sendBtn);
+  }
+
+  panel.append(header, log, meterEl, statusEl, suggestionsEl, attBar, form);
   renderStatus();
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
   if (!document.getElementById(`${PREFIX}-av-g`)) {
@@ -1572,7 +1675,8 @@ export function createAiChatWidget(
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const content = input.value.trim();
-    if (!content || busy) return;
+    // A turn needs text OR at least one staged attachment.
+    if ((!content && stagedAtts.length === 0) || busy) return;
     input.value = "";
     saveDraft(""); // sent — drop the persisted draft
     void send(content);
@@ -1913,13 +2017,20 @@ export function createAiChatWidget(
   async function send(content: string): Promise<void> {
     busy = true;
     lastUserContent = content;
+    // Take + clear any staged attachments for THIS turn.
+    const atts = stagedAtts.splice(0);
+    renderStaged();
     // The conversation is starting — page shortcuts give way to the thread.
     suggestionsEl.style.display = "none";
     suggestionsEl.innerHTML = "";
     sendBtn.disabled = true;
     setRole("talk"); // each turn starts as the conversational copilot
-    addMsg(log, "user", content);
-    history.push({ role: "user", content });
+    addMsg(log, "user", content, atts.length ? atts : undefined);
+    history.push({
+      role: "user",
+      content,
+      ...(atts.length ? { attachments: atts } : {}),
+    });
     saveState();
     // Animated typing indicator until the first token lands.
     const typing = el("div", `${PREFIX}-typing`);
@@ -1968,6 +2079,7 @@ export function createAiChatWidget(
           accountId: opts.accountId ?? "",
           threadId,
           content,
+          ...(atts.length ? { attachments: atts.map((a) => a.mediaId) } : {}),
         }),
       });
       if (!res.ok || !res.body) {
@@ -2651,10 +2763,24 @@ function escapeHtml(s: string): string {
 function addMsg(
   log: HTMLElement,
   role: "user" | "assistant",
-  text: string
+  text: string,
+  attachments?: { kind: string; filename: string; contentType: string }[]
 ): HTMLElement {
+  // Attachment chips render as their own row above the text bubble so a
+  // file-only turn (no text) still shows what the user sent.
+  if (attachments && attachments.length) {
+    const chips = el("div", `${PREFIX}-atts ${PREFIX}-${role}`);
+    for (const a of attachments) {
+      const chip = el("span", `${PREFIX}-att`);
+      chip.title = `${a.filename} (${a.contentType})`;
+      chip.textContent = `${a.kind === "image" ? "🖼" : "📄"} ${a.filename}`;
+      chips.appendChild(chip);
+    }
+    log.appendChild(chips);
+  }
   const msg = el("div", `${PREFIX}-msg ${PREFIX}-${role}`);
   msg.textContent = text;
+  if (!text && attachments && attachments.length) msg.style.display = "none";
   log.appendChild(msg);
   return msg;
 }
@@ -2770,6 +2896,16 @@ function injectStyles(
 .${PREFIX}-input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}22}
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
+.${PREFIX}-attach{flex:0 0 auto;border:1px solid #ddd;background:#fff;border-radius:11px;width:38px;font-size:16px;line-height:1;cursor:pointer;color:#555}
+.${PREFIX}-attach:hover{border-color:${accent};color:${accent}}
+.${PREFIX}-attach:disabled{opacity:.5;cursor:default}
+.${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:#fff}
+.${PREFIX}-att{display:inline-flex;align-items:center;gap:5px;max-width:180px;border:1px solid #e2e2e2;background:#f7f7f8;border-radius:9px;padding:3px 8px;font-size:12px;color:#333;white-space:nowrap}
+.${PREFIX}-att>span{overflow:hidden;text-overflow:ellipsis}
+.${PREFIX}-atts{display:flex;flex-wrap:wrap;gap:6px;max-width:92%}
+.${PREFIX}-atts.${PREFIX}-user{align-self:flex-end;justify-content:flex-end}
+.${PREFIX}-att-x{border:none;background:transparent;color:#999;font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
+.${PREFIX}-att-x:hover{color:#e11}
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
