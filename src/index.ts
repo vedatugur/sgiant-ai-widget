@@ -1283,6 +1283,18 @@ export function createAiChatWidget(
       attBar.appendChild(chip);
     });
   }
+  // Max size for one attachment (matches the api's multipart cap).
+  const MAX_ATT_BYTES = 25 * 1024 * 1024;
+  function attError(msg: string): void {
+    const chip = el("span", `${PREFIX}-att ${PREFIX}-att-err`);
+    chip.textContent = `⚠ ${msg}`;
+    attBar.appendChild(chip);
+    attBar.style.display = "flex";
+    setTimeout(() => {
+      chip.remove();
+      if (!attBar.children.length) attBar.style.display = "none";
+    }, 4000);
+  }
   async function uploadFiles(files: FileList | null): Promise<void> {
     if (!files || !opts.uploadEndpoint) return;
     if (attachBtn) attachBtn.disabled = true;
@@ -1290,6 +1302,10 @@ export function createAiChatWidget(
       const token = opts.getToken ? await opts.getToken() : opts.token;
       for (const file of Array.from(files).slice(0, 6)) {
         if (stagedAtts.length >= 6) break;
+        if (file.size > MAX_ATT_BYTES) {
+          attError(`"${file.name}" is too large (max 25 MB)`);
+          continue;
+        }
         const fd = new FormData();
         fd.append("file", file);
         const res = await fetch(opts.uploadEndpoint, {
@@ -1328,7 +1344,7 @@ export function createAiChatWidget(
     fileInput.type = "file";
     fileInput.multiple = true;
     fileInput.accept =
-      "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json";
+      "image/*,.svg,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json";
     fileInput.style.display = "none";
     fileInput.addEventListener(
       "change",
@@ -2906,6 +2922,7 @@ function injectStyles(
 .${PREFIX}-atts.${PREFIX}-user{align-self:flex-end;justify-content:flex-end}
 .${PREFIX}-att-x{border:none;background:transparent;color:#999;font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
+.${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
