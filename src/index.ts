@@ -573,6 +573,8 @@ const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 // Flag — agent/admin oversight: flag the current conversation with a reason.
 const ICON_FLAG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+// Auto-save assets — a "save" disk with a lightning bolt (applies without asking).
+const ICON_AUTOSAVE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M13 8.5 10 13h3l-2 3.5"/></svg>`;
 // Bell — toggle a soft chime when a reply arrives.
 const ICON_BELL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
 const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
@@ -613,6 +615,30 @@ export function createAiChatWidget(
   const openStateKey = opts.persistKey ? `ayca:open:${opts.persistKey}` : null;
   // Keep the UNSENT composer draft across refreshes so typing isn't lost.
   const draftKey = opts.persistKey ? `ayca:draft:${opts.persistKey}` : null;
+  // "Auto-save assets" preference (per account via persistKey) — when ON, the AI's
+  // asset-SAVE proposals (import a page, save scraped/stock/generated media, write
+  // a file) apply WITHOUT a per-card confirm, so a user doing lots of saving isn't
+  // asked every time. Only additive asset writes auto-apply; brand/creation/
+  // dashboard writes still confirm. Default OFF (opt-in).
+  const autoSaveKey = opts.persistKey
+    ? `ayca:autosave:${opts.persistKey}`
+    : null;
+  const AUTO_SAVE_TOOLS = new Set([
+    "ingest_website",
+    "add_scraped_media",
+    "add_stock_to_assets",
+    "create_asset",
+    "generate_image",
+    "generate_video",
+  ]);
+  let autoSaveAssets = false;
+  try {
+    autoSaveAssets = autoSaveKey
+      ? localStorage.getItem(autoSaveKey) === "1"
+      : false;
+  } catch {
+    /* storage blocked — default off */
+  }
   function saveDraft(v: string): void {
     if (!draftKey) return;
     try {
@@ -710,6 +736,35 @@ export function createAiChatWidget(
   downloadBtn.innerHTML = ICON_DOWNLOAD;
   downloadBtn.addEventListener("click", () => exportConversation());
   hActions.appendChild(downloadBtn);
+  // Auto-save assets toggle — when ON, asset-save proposals apply without a
+  // per-card confirm. Available to every role (persisted per account).
+  const autoSaveBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+  autoSaveBtn.setAttribute("aria-label", "Auto-save assets");
+  autoSaveBtn.innerHTML = ICON_AUTOSAVE;
+  const paintAutoSave = () => {
+    autoSaveBtn.title = autoSaveAssets
+      ? "Auto-save assets: ON — saves apply without asking"
+      : "Auto-save assets: OFF — you confirm each save";
+    autoSaveBtn.classList.toggle(`${PREFIX}-icon-on`, autoSaveAssets);
+  };
+  paintAutoSave();
+  autoSaveBtn.addEventListener("click", () => {
+    autoSaveAssets = !autoSaveAssets;
+    try {
+      if (autoSaveKey)
+        localStorage.setItem(autoSaveKey, autoSaveAssets ? "1" : "0");
+    } catch {
+      /* storage blocked — session-only */
+    }
+    paintAutoSave();
+    flagNote(
+      autoSaveAssets
+        ? "Auto-save assets ON — I'll save into your library without asking each time."
+        : "Auto-save assets OFF — I'll ask before each save.",
+      true
+    );
+  });
+  hActions.appendChild(autoSaveBtn);
   // Flag — oversight control (agent/admin surfaces). Asks for a reason, then
   // hands it to the host's onFlag with the live thread id. Hidden when unwired.
   if (opts.onFlag) {
@@ -2069,6 +2124,34 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  // Auto-save path — apply an asset-save proposal with NO confirm card, showing a
+  // compact "saved" line (or an error the user can see). Used when the auto-save
+  // toggle is ON. Failures surface plainly so a silent no-op never happens.
+  async function autoApplyProposal(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<void> {
+    const line = el("div", `${PREFIX}-proposal-ok`);
+    line.innerHTML =
+      `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
+      `<span>Saving…</span>`;
+    log.appendChild(line);
+    scrollDown(true);
+    try {
+      const msg = await opts.onApplyProposal!(name, args);
+      line.innerHTML =
+        `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
+        `<span>${escapeHtml((typeof msg === "string" && msg) || "Saved")}</span>`;
+    } catch (err) {
+      line.innerHTML =
+        `<span aria-hidden="true">⚠️</span>` +
+        `<span>Couldn't save: ${escapeHtml(
+          (err as Error)?.message || "try again"
+        )}</span>`;
+    }
+    scrollDown(true);
+  }
+
   async function send(content: string): Promise<void> {
     busy = true;
     lastUserContent = content;
@@ -2210,11 +2293,18 @@ export function createAiChatWidget(
             ) {
               typing.remove();
               flushSegment(false);
-              renderProposal(
-                frame.name,
-                (frame.args ?? {}) as Record<string, unknown>,
-                (frame as { agent?: string }).agent
-              );
+              const pArgs = (frame.args ?? {}) as Record<string, unknown>;
+              // Auto-save: an asset-SAVE proposal applies straight away (no card)
+              // when the user turned the toggle on. Everything else still confirms.
+              if (autoSaveAssets && AUTO_SAVE_TOOLS.has(frame.name)) {
+                void autoApplyProposal(frame.name, pArgs);
+              } else {
+                renderProposal(
+                  frame.name,
+                  pArgs,
+                  (frame as { agent?: string }).agent
+                );
+              }
               producedAny = true;
             }
             // Free-allowance meter (visitor preview). `quota` is the server's
