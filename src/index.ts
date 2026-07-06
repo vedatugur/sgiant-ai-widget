@@ -1754,6 +1754,7 @@ export function createAiChatWidget(
     add_stock_to_assets: "Add this stock media to your assets?",
     add_scraped_media: "Add this image to your assets?",
     generate_image: "Generate this image? (uses credits)",
+    generate_video: "Generate this video? (renders in the background)",
     organize_assets: "Apply this change to your assets?",
     edit_asset: "Save these changes to the file?",
     create_asset: "Create this file in your library?",
@@ -1783,13 +1784,15 @@ export function createAiChatWidget(
       }
       return parts.join(" · ");
     }
-    if (name === "generate_image") {
-      // No image to preview — it doesn't exist until Apply. Show the prompt +
-      // aspect so the user knows what they're about to spend a credit on.
+    if (name === "generate_image" || name === "generate_video") {
+      // No media to preview — it doesn't exist until Apply. Show the prompt +
+      // aspect (+ duration for video) so the user knows what they're generating.
       const parts: string[] = [];
       if (typeof args.prompt === "string")
         parts.push(`“${String(args.prompt).slice(0, 140)}”`);
       if (typeof args.aspect === "string") parts.push(String(args.aspect));
+      if (name === "generate_video" && typeof args.durationS === "number")
+        parts.push(`${args.durationS}s`);
       return parts.join(" · ");
     }
     if (name === "render_creation") {
