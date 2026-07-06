@@ -9,6 +9,8 @@
  * mapping below. The model never receives a raw URL or endpoint.
  */
 
+import { isUiControlAction, runUiControl } from "./ui-control";
+
 /** Which product surface the user is on. */
 export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
 
@@ -62,6 +64,10 @@ export interface PageContext {
   /** The catalog of pages Copilot may open (from the manifest) — the single source
    *  of truth for navigation, so the prompt never hardcodes a path list. */
   navTargets?: NavTarget[];
+  /** On-page controls the Copilot may point at (highlight/scroll-to/focus-field)
+   *  — scanned from the live DOM via `scanAiTargets()`. Ids the host owns, never
+   *  selectors. Fed into the turn so the model knows what's on THIS page. */
+  uiTargets?: Array<{ id: string; label: string }>;
 }
 
 /** Normalize a path for manifest matching: drop a leading 2-letter locale
@@ -138,6 +144,14 @@ export function formatPageContext(pc: PageContext): string {
       lines.push(`- ${t.title} — ${t.purpose} (${how}).`);
     }
   }
+  if (pc.uiTargets?.length) {
+    lines.push(
+      "Controls on this page (point the user at ONE with a highlight/scroll-to/focus-field action, by its id):"
+    );
+    for (const t of pc.uiTargets.slice(0, 40)) {
+      lines.push(`- id "${t.id}"${t.label ? ` — ${t.label}` : ""}.`);
+    }
+  }
   return lines.join("\n");
 }
 
@@ -169,6 +183,27 @@ export const STANDARD_ACTIONS = [
     name: "open-billing",
     description: "Open billing & credits.",
     surfaces: ["org"],
+  },
+  // Read-only UI control — point the user at a control ON the current page. Safe
+  // and reversible (no state change), so no confirm. The `target` in `data` is a
+  // `data-ai-target` id from the page's `uiTargets` catalog (see ui-control.ts).
+  {
+    name: "highlight",
+    description:
+      "Pulse a ring around an on-page control (by its data-ai-target id in data.target) and scroll it into view. Read-only.",
+    surfaces: ["org", "admin", "marketing", "onboarding"],
+  },
+  {
+    name: "scroll-to",
+    description:
+      "Scroll an on-page control (data.target) into view without highlighting. Read-only.",
+    surfaces: ["org", "admin", "marketing", "onboarding"],
+  },
+  {
+    name: "focus-field",
+    description:
+      "Focus an on-page input/field (data.target) so the user can type. Read-only.",
+    surfaces: ["org", "admin", "marketing", "onboarding"],
   },
 ] as const;
 
@@ -222,6 +257,12 @@ export function createHostActions(
     ...(cfg.handlers ?? {}),
   };
   return async (action, data) => {
+    // Read-only UI control (highlight / scroll-to / focus-field) works on EVERY
+    // surface via the pure-DOM twin — no per-app wiring, no confirm (reversible).
+    if (isUiControlAction(action)) {
+      const ok = runUiControl(action, data.target ?? "");
+      return ok ? "Shown on the page" : undefined;
+    }
     const fn = map[action];
     if (!fn) return;
     return await fn(data);

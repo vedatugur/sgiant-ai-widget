@@ -30,6 +30,17 @@ export {
   type HostActionsConfig,
   type HostActionHandler,
 } from "./host-actions";
+// Read-only UI control — point the Copilot at on-page controls by their stable
+// `data-ai-target` id. `scanAiTargets` feeds the current page's controls into
+// the turn context so the model knows what it may highlight/scroll-to/focus.
+export {
+  scanAiTargets,
+  clearHighlight,
+  isUiControlAction,
+  UI_CONTROL_ACTIONS,
+  type AiTargetInfo,
+  type UiControlAction,
+} from "./ui-control";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
