@@ -257,8 +257,16 @@ export interface AiChatWidgetOptions {
    * to disable history (the widget still restores the last thread via persistKey).
    */
   listThreads?: () => Promise<
-    Array<{ id: string; title?: string | null; updatedAt?: string }>
+    Array<{
+      id: string;
+      title?: string | null;
+      updatedAt?: string;
+      starred?: boolean;
+    }>
   >;
+  /** Toggle the SHARED star (team bookmark) on a past thread from the history
+   *  panel. Resolves to the new starred state. Omit to hide the star toggle. */
+  starThread?: (threadId: string) => Promise<{ starred: boolean }>;
   /** Load one past thread (oldest→newest) for replay in the log. Items are
    *  messages OR inline data widgets, so reopening a conversation restores its
    *  charts/tables — not just text (matching the full-page assistant). */
@@ -1636,6 +1644,34 @@ export function createAiChatWidget(
           dt.textContent = relTime(th.updatedAt);
           item.appendChild(dt);
         }
+        // Shared star toggle — team-visible bookmark on the conversation.
+        if (opts.starThread) {
+          const star = el("span", `${PREFIX}-history-star`);
+          let on = Boolean(th.starred);
+          const paint = () => {
+            star.textContent = on ? "★" : "☆";
+            star.style.color = on ? "#f59e0b" : "";
+            star.title = on ? "Unstar" : "Star this conversation";
+          };
+          paint();
+          star.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const prev = on;
+            on = !on;
+            paint(); // optimistic
+            opts.starThread!(th.id).then(
+              (r) => {
+                on = r.starred;
+                paint();
+              },
+              () => {
+                on = prev;
+                paint();
+              }
+            );
+          });
+          item.appendChild(star);
+        }
         item.addEventListener(
           "click",
           () => void loadPastThread(th.id, overlay)
@@ -2943,6 +2979,8 @@ function injectStyles(
 .${PREFIX}-history-item:hover{border-color:${accent};background:${accent}0a}
 .${PREFIX}-history-title{font-weight:600;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .${PREFIX}-history-date{font-size:11px;color:#999;flex:0 0 auto}
+.${PREFIX}-history-star{font-size:15px;line-height:1;color:#cbcbcb;flex:0 0 auto;padding:0 2px;cursor:pointer}
+.${PREFIX}-history-star:hover{color:#f59e0b}
 .${PREFIX}-widget{align-self:stretch;border:1px solid #ececec;border-radius:14px;padding:12px;background:#fff;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-widget-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:8px}
 .${PREFIX}-widget-stat{font-size:30px;font-weight:800;line-height:1.1;color:#111}
