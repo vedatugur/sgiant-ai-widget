@@ -9,7 +9,12 @@
  * mapping below. The model never receives a raw URL or endpoint.
  */
 
-import { isUiControlAction, runUiControl } from "./ui-control";
+import {
+  isUiControlAction,
+  runUiControl,
+  isOperateAction,
+  runOperateAction,
+} from "./ui-control";
 
 /** Which product surface the user is on. */
 export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
@@ -205,6 +210,21 @@ export const STANDARD_ACTIONS = [
       "Focus an on-page input/field (data.target) so the user can type. Read-only.",
     surfaces: ["org", "admin", "marketing", "onboarding"],
   },
+  // State-changing UI control — ALWAYS confirm-gated (the widget forces a Confirm
+  // step before dispatch). `target` is a data-ai-target id; `fill` also needs
+  // `value` in data.
+  {
+    name: "fill",
+    description:
+      "Type a value into an on-page field (data.target id + data.value). Changes state — ALWAYS include a confirm.",
+    surfaces: ["org", "admin", "marketing", "onboarding"],
+  },
+  {
+    name: "click",
+    description:
+      "Click an on-page button/control (data.target id). Changes state — ALWAYS include a confirm.",
+    surfaces: ["org", "admin", "marketing", "onboarding"],
+  },
 ] as const;
 
 export type HostActionHandler = (
@@ -262,6 +282,12 @@ export function createHostActions(
     if (isUiControlAction(action)) {
       const ok = runUiControl(action, data.target ?? "");
       return ok ? "Shown on the page" : undefined;
+    }
+    // State-changing UI control (fill / click). The widget has already forced a
+    // Confirm step before we get here (renderAction), so this runs post-approval.
+    if (isOperateAction(action)) {
+      const ok = runOperateAction(action, data.target ?? "", data.value);
+      return ok ? "Done on the page" : undefined;
     }
     const fn = map[action];
     if (!fn) return;

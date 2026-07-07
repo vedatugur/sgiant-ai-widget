@@ -185,3 +185,66 @@ export function runUiControl(
       return false;
   }
 }
+
+// --- Operate actions (phase 2) -------------------------------------------------
+// fill / click CHANGE state, so — unlike the read-only nudges above — they are
+// ALWAYS confirm-gated: the widget forces a Confirm/Cancel step before dispatch
+// (see renderAction), even in auto-navigate mode. The host still owns id→element
+// resolution; the model only names an id from the catalog + a value.
+
+/** State-changing UI actions the AI may request (always confirm-gated). */
+export const OPERATE_ACTIONS = ["fill", "click"] as const;
+export type OperateAction = (typeof OPERATE_ACTIONS)[number];
+
+/** True when `name` is a state-changing (confirm-required) UI action. */
+export function isOperateAction(name: string): name is OperateAction {
+  return (OPERATE_ACTIONS as readonly string[]).includes(name);
+}
+
+/** Set a React-controlled input's value so React's onChange still fires — React
+ *  tracks the value via a native setter it patches; we call the real one. */
+function setNativeValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+): void {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  if (setter) setter.call(el, value);
+  else el.value = value;
+}
+
+/**
+ * Run one state-changing UI action against a target id. Returns true when the
+ * element was found and acted on. Only reached AFTER the user confirms in the
+ * widget (renderAction forces a Confirm step for operate actions).
+ */
+export function runOperateAction(
+  action: OperateAction,
+  targetId: string,
+  value?: string
+): boolean {
+  const el = resolveTarget(targetId);
+  if (!el) return false;
+  switch (action) {
+    case "fill": {
+      if (
+        !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)
+      )
+        return false;
+      el.scrollIntoView({ block: "center" });
+      setNativeValue(el, value ?? "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+    case "click":
+      el.scrollIntoView({ block: "center" });
+      el.click();
+      return true;
+    default:
+      return false;
+  }
+}

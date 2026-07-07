@@ -37,10 +37,14 @@ export {
   scanAiTargets,
   clearHighlight,
   isUiControlAction,
+  isOperateAction,
   UI_CONTROL_ACTIONS,
+  OPERATE_ACTIONS,
   type AiTargetInfo,
   type UiControlAction,
+  type OperateAction,
 } from "./ui-control";
+import { isOperateAction } from "./ui-control";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
@@ -2698,11 +2702,31 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  // Default confirm copy for a state-changing UI action the model didn't caption.
+  function operateConfirmText(spec: ActionSpec): string {
+    const target = spec.data?.target ?? "this control";
+    if (spec.name === "fill") {
+      const v = spec.data?.value ?? "";
+      const short = v.length > 40 ? `${v.slice(0, 40)}…` : v;
+      return short
+        ? `Type “${short}” into ${target}?`
+        : `Fill ${target} for you?`;
+    }
+    return `Click ${target} for you?`;
+  }
+
   function renderAction(spec: ActionSpec): void {
     // Reflect the acting capability in the status badge (e.g. research-brand →
     // Analytics, open-studio → Creation); plain navigation stays Talk.
     if (ACTION_ROLE[spec.name]) setRole(ACTION_ROLE[spec.name]);
     const wrap = el("div", `${PREFIX}-nav`);
+    // State-changing UI control (fill / click) is ALWAYS confirm-gated: force a
+    // confirm prompt even if the model forgot one, and never auto-run it — the
+    // user must approve typing/clicking on their behalf. Read-only nudges
+    // (highlight/scroll/focus) never reach renderAction (they carry no button).
+    if (isOperateAction(spec.name) && !spec.confirm) {
+      spec = { ...spec, confirm: operateConfirmText(spec) };
+    }
     // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
     // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
     // state / costs credits) ALWAYS asks, even in auto mode.
