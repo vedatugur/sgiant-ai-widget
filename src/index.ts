@@ -351,6 +351,14 @@ interface NavigateSpec {
   label?: string;
 }
 
+/** A dynamic HTML preview the assistant draws via `[[preview:{json}]]` — rendered
+ *  in a fully sandboxed iframe (no scripts, no same-origin) so arbitrary HTML+CSS
+ *  paints the real look but nothing can execute or reach out. */
+interface PreviewSpec {
+  html: string;
+  title?: string;
+}
+
 /** An in-app action the assistant proposes via `[[action:{json}]]`. The host
  *  maps `name` to a real operation; `confirm` (if set) requires user approval. */
 interface ActionSpec {
@@ -434,6 +442,12 @@ function stripDirectivesForReplay(text: string): {
     if (!w) break;
     t = w.stripped;
     notes.push(`▦ ${w.spec.title || "widget"}`);
+  }
+  for (let i = 0; i < 3; i++) {
+    const p = parseJsonDirective<PreviewSpec>(t, "preview");
+    if (!p) break;
+    t = p.stripped;
+    notes.push(`[preview] ${p.spec.title || "Preview"}`);
   }
   for (let i = 0; i < 4; i++) {
     const c = parseJsonDirective<ChipsSpec>(t, "chips");
@@ -1814,6 +1828,14 @@ export function createAiChatWidget(
       t = w.stripped;
       renderWidget(w.spec);
     }
+    // Dynamic HTML previews — the AI draws a mockup/preview and we paint it in a
+    // FULLY sandboxed iframe (no scripts, no same-origin) right in the chat.
+    for (let i = 0; i < 3; i++) {
+      const p = parseJsonDirective<PreviewSpec>(t, "preview");
+      if (!p || typeof p.spec.html !== "string") break;
+      t = p.stripped;
+      renderPreview(p.spec);
+    }
     const nav = parseJsonDirective<NavigateSpec>(t, "navigate");
     if (nav && opts.onWidgetAction && nav.spec.path) {
       t = nav.stripped;
@@ -2702,6 +2724,26 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  /** Render an AI-authored HTML preview in a fully sandboxed iframe (sandbox=""
+   *  → no scripts, no same-origin) so it paints the real look but can't execute
+   *  or reach out. The chat-side twin of @sgiant/ui's <AiPlayground>. */
+  function renderPreview(spec: PreviewSpec): void {
+    const wrap = el("div", `${PREFIX}-preview`);
+    const bar = el("div", `${PREFIX}-preview-bar`);
+    const dots = el("span", `${PREFIX}-preview-dots`);
+    dots.innerHTML = `<i></i><i></i><i></i>`;
+    const title = el("span", `${PREFIX}-preview-title`);
+    title.textContent = spec.title || "Preview";
+    bar.append(dots, title);
+    const frame = el("iframe", `${PREFIX}-preview-frame`) as HTMLIFrameElement;
+    frame.setAttribute("sandbox", "");
+    frame.setAttribute("title", spec.title || "Preview");
+    frame.srcdoc = wrapPreviewHtml(spec.html);
+    wrap.append(bar, frame);
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   // Default confirm copy for a state-changing UI action the model didn't caption.
   function operateConfirmText(spec: ActionSpec): string {
     const target = spec.data?.target ?? "this control";
@@ -2940,6 +2982,14 @@ function escapeHtml(s: string): string {
   );
 }
 
+/** Wrap a bare HTML fragment in a minimal document so a preview always renders
+ *  sanely; a full document is used as-is. Mirrors @sgiant/ui's AiPlayground. */
+function wrapPreviewHtml(html: string): string {
+  const s = (html ?? "").trim();
+  if (/<!doctype|<html[\s>]/i.test(s)) return s;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#0f172a}</style></head><body>${s}</body></html>`;
+}
+
 function addMsg(
   log: HTMLElement,
   role: "user" | "assistant",
@@ -3112,6 +3162,15 @@ function injectStyles(
 .${PREFIX}-widget-cap{font-size:13px;color:#666;margin-top:2px}
 .${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:${accent};margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.${PREFIX}-preview{align-self:stretch;border:1px solid #ececec;border-radius:14px;overflow:hidden;background:#fff;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-preview-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f0f0}
+.${PREFIX}-preview-dots{display:inline-flex;gap:4px}
+.${PREFIX}-preview-dots i{width:9px;height:9px;border-radius:50%;background:#e2e2e2}
+.${PREFIX}-preview-dots i:nth-child(1){background:#ff5f57}
+.${PREFIX}-preview-dots i:nth-child(2){background:#febc2e}
+.${PREFIX}-preview-dots i:nth-child(3){background:#28c840}
+.${PREFIX}-preview-title{font-size:12px;font-weight:600;color:#888}
+.${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:#fff}
 .${PREFIX}-creation-preview{display:flex;justify-content:center;border-radius:12px;overflow:hidden}
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6}
 .${PREFIX}-proposal-media-holder{position:relative}
