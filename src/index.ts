@@ -52,7 +52,21 @@ import { renderMarkdown } from "./markdown";
  *  widget (so reopening restores the conversation's charts/tables, not just
  *  text). The render hooks / fallback handle the actual drawing. */
 export type LoadedThreadItem =
-  | { role: "user" | "assistant"; content: string }
+  | {
+      role: "user" | "assistant";
+      content: string;
+      /** Stable message id (branching). Absent on hosts that predate branching. */
+      id?: string;
+      /** Parent turn in the conversation tree (null on a root message). */
+      parentId?: string | null;
+      /** ‹n/m› sibling switcher data — present when this turn has siblings. */
+      branch?: {
+        index: number;
+        count: number;
+        prevLeaf?: string;
+        nextLeaf?: string;
+      };
+    }
   | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown }
   | {
       kind: "activity";
@@ -63,25 +77,158 @@ export type LoadedThreadItem =
     }
   | { kind: "creation"; name?: string; format?: string; payload: unknown };
 
+/** The message variant of a replay item (carries the branch metadata). */
+type ReplayMessageItem = Extract<
+  LoadedThreadItem,
+  { role: "user" | "assistant" }
+>;
+
+/** ‹n/m› sibling navigation for one message (mirrors the panel's BranchNav). */
+interface BranchNav {
+  index: number;
+  count: number;
+  prevLeaf?: string;
+  nextLeaf?: string;
+}
+
+/** A stored message reduced to what branch navigation needs. */
+interface BranchMsg {
+  id?: string;
+  parentId?: string | null;
+  createdAt?: string;
+}
+
+const ROOT_KEY = "__root__";
+
+/** Deepest leaf under a message, following the most recent child at each step
+ *  (memoised, cycle-guarded) — the target the ‹n/m› switcher jumps to. Mirrors
+ *  the full-page panel's `leafUnder`. */
+function leafUnder(
+  id: string,
+  childrenByParent: Map<string, BranchMsg[]>,
+  memo: Map<string, string>,
+  guard = 0
+): string {
+  const cached = memo.get(id);
+  if (cached) return cached;
+  const kids = childrenByParent.get(id);
+  if (!kids || kids.length === 0 || guard > 1000) {
+    memo.set(id, id);
+    return id;
+  }
+  const last = kids[kids.length - 1];
+  const leaf = last?.id
+    ? leafUnder(last.id, childrenByParent, memo, guard + 1)
+    : id;
+  memo.set(id, leaf);
+  return leaf;
+}
+
+/**
+ * Compute the ‹n/m› sibling switcher for every message on the active path.
+ * Siblings share a parent; editing a user turn or regenerating an assistant
+ * reply adds one. The prev/next targets are the deepest leaf under the adjacent
+ * sibling, so switching lands on a full branch. Mirrors the panel's
+ * `computeBranchNav` exactly.
+ */
+function computeBranchNav(
+  messages: BranchMsg[],
+  activePathIds: string[]
+): Map<string, BranchNav> {
+  const childrenByParent = new Map<string, BranchMsg[]>();
+  for (const m of messages) {
+    const key = m.parentId ?? ROOT_KEY;
+    const arr = childrenByParent.get(key);
+    if (arr) arr.push(m);
+    else childrenByParent.set(key, [m]);
+  }
+  for (const arr of childrenByParent.values()) {
+    arr.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+  }
+  const memo = new Map<string, string>();
+  const byId = new Map<string, BranchMsg>();
+  for (const m of messages) if (m.id) byId.set(m.id, m);
+  const nav = new Map<string, BranchNav>();
+  for (const id of activePathIds) {
+    const m = byId.get(id);
+    if (!m) continue;
+    const siblings = childrenByParent.get(m.parentId ?? ROOT_KEY) ?? [];
+    if (siblings.length < 2) continue;
+    const i = siblings.findIndex((s) => s.id === id);
+    if (i < 0) continue;
+    const prev = siblings[i - 1];
+    const next = siblings[i + 1];
+    nav.set(id, {
+      index: i + 1,
+      count: siblings.length,
+      ...(prev?.id
+        ? { prevLeaf: leafUnder(prev.id, childrenByParent, memo) }
+        : {}),
+      ...(next?.id
+        ? { nextLeaf: leafUnder(next.id, childrenByParent, memo) }
+        : {}),
+    });
+  }
+  return nav;
+}
+
 /**
  * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
  * into an ordered replay list — text messages interleaved with their data
  * widgets by `createdAt`, exactly like the full-page assistant. Pure; hosts pass
  * it the fetched payload so the widget reopens a conversation WITH its charts.
+ *
+ * Branching: when the server sends a non-empty `activePath`, the visible
+ * transcript is that branch ONLY — messages (and message-scoped artifacts) are
+ * filtered to it, and each surviving message carries its ‹n/m› sibling switcher
+ * (computed over ALL messages). Absent/empty path → behave exactly as before
+ * (back-compat with pre-branching hosts).
  */
 export function buildThreadReplay(payload: {
-  messages?: Array<{ role: string; content: string; createdAt?: string }>;
-  artifacts?: Array<{ kind: string; payload?: unknown; createdAt?: string }>;
+  messages?: Array<{
+    id?: string;
+    parentId?: string | null;
+    role: string;
+    content: string;
+    createdAt?: string;
+  }>;
+  artifacts?: Array<{
+    kind: string;
+    messageId?: string | null;
+    payload?: unknown;
+    createdAt?: string;
+  }>;
+  activePath?: string[];
 }): LoadedThreadItem[] {
+  const activePathIds =
+    payload.activePath && payload.activePath.length > 0
+      ? payload.activePath
+      : null;
+  const activeSet = activePathIds ? new Set(activePathIds) : null;
+  const branchNav = activePathIds
+    ? computeBranchNav(payload.messages ?? [], activePathIds)
+    : null;
   const items: Array<{ t: string; item: LoadedThreadItem }> = [];
   for (const m of payload.messages ?? []) {
-    if ((m.role === "user" || m.role === "assistant") && m.content.trim())
-      items.push({
-        t: m.createdAt ?? "",
-        item: { role: m.role, content: m.content },
-      });
+    // Off-branch messages don't appear in the active transcript.
+    if (activeSet && m.id && !activeSet.has(m.id)) continue;
+    if ((m.role === "user" || m.role === "assistant") && m.content.trim()) {
+      const item: ReplayMessageItem = {
+        role: m.role,
+        content: m.content,
+        ...(m.id ? { id: m.id } : {}),
+        ...(m.parentId !== undefined ? { parentId: m.parentId } : {}),
+        ...(m.id && branchNav?.has(m.id)
+          ? { branch: branchNav.get(m.id) }
+          : {}),
+      };
+      items.push({ t: m.createdAt ?? "", item });
+    }
   }
   for (const a of payload.artifacts ?? []) {
+    // Branch-scoped artifacts (tied to a message) only belong to the active
+    // branch; artifacts with no messageId are thread-wide and always stay.
+    if (activeSet && a.messageId && !activeSet.has(a.messageId)) continue;
     if (a.kind === "widget") {
       const p = (a.payload ?? {}) as {
         spec?: unknown;
@@ -286,6 +433,19 @@ export interface AiChatWidgetOptions {
    *  messages OR inline data widgets, so reopening a conversation restores its
    *  charts/tables — not just text (matching the full-page assistant). */
   loadThread?: (threadId: string) => Promise<LoadedThreadItem[]>;
+  /** Switch the active branch of a conversation tree (the ‹n/m› sibling
+   *  switcher, ChatGPT/Claude-style edit-and-continue). POSTs the chosen leaf so
+   *  the server recomputes the active path; the widget then reloads the thread
+   *  via `loadThread`. Omit on hosts without branching → the edit/regenerate/
+   *  switcher controls stay hidden. */
+  setActiveLeaf?: (threadId: string, messageId: string) => Promise<void>;
+  /** UI labels for the branching controls. The host feeds translated strings
+   *  (per the repo i18n rule); the widget uses the English fallbacks below only
+   *  when an override is absent — it never hardcodes a user-visible string. */
+  editLabel?: string;
+  regenerateLabel?: string;
+  saveLabel?: string;
+  cancelLabel?: string;
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
   signupUrl?: string;
@@ -624,6 +784,12 @@ const ICON_MORE = `<svg viewBox="0 0 24 24" width="17" height="17" fill="current
 // Paperclip — the composer's attach-a-file control. A crisp line icon replaces
 // the flat 📎 emoji so the button reads as part of the widget, not an OS glyph.
 const ICON_ATTACH = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>`;
+// Branching controls: edit a user turn, regenerate an assistant reply, and the
+// ‹n/m› sibling switcher arrows.
+const ICON_EDIT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+const ICON_REGEN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L3 8"/></svg>`;
+const ICON_CHEV_L = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>`;
+const ICON_CHEV_R = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -1238,12 +1404,176 @@ export function createAiChatWidget(
       } else if ("kind" in it && it.kind === "creation") {
         renderCreationCard(it.name, it.payload);
       } else if ("role" in it) {
+        // The message's first DOM node — the anchor an edit/regenerate rewrites
+        // the transcript FROM (bubble, or attachment row before it).
+        const before = log.lastChild;
         if (it.role === "assistant") addAssistantMessage(it.content);
         else addMsg(log, it.role, it.content);
         history.push({ role: it.role, content: it.content });
+        // Branch controls (edit / regenerate / ‹n/m›) — only on branching hosts.
+        if (opts.setActiveLeaf) {
+          const anchor = before ? before.nextSibling : log.firstChild;
+          addMessageActions(it, anchor);
+        }
       }
     }
     scrollDown(true);
+  }
+
+  /** ‹n/m› sibling-branch switcher (ChatGPT/Claude-style): the arrows jump to the
+   *  deepest leaf of the previous/next sibling branch (disabled at the ends). */
+  function buildBranchNav(branch: BranchNav): HTMLElement {
+    const nav = el("div", `${PREFIX}-branchnav`);
+    const prev = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
+    prev.type = "button";
+    prev.setAttribute("aria-label", "Previous version");
+    prev.innerHTML = ICON_CHEV_L;
+    prev.disabled = !branch.prevLeaf;
+    if (branch.prevLeaf) {
+      const leaf = branch.prevLeaf;
+      prev.addEventListener("click", () => void switchBranch(leaf));
+    }
+    const count = el("span", `${PREFIX}-branch-count`);
+    count.textContent = `${branch.index}/${branch.count}`;
+    const next = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
+    next.type = "button";
+    next.setAttribute("aria-label", "Next version");
+    next.innerHTML = ICON_CHEV_R;
+    next.disabled = !branch.nextLeaf;
+    if (branch.nextLeaf) {
+      const leaf = branch.nextLeaf;
+      next.addEventListener("click", () => void switchBranch(leaf));
+    }
+    nav.appendChild(prev);
+    nav.appendChild(count);
+    nav.appendChild(next);
+    return nav;
+  }
+
+  /** Remove `anchor` and every DOM node after it from the log — the "rewrite from
+   *  here onward" a fork (edit / regenerate) does before streaming its branch. */
+  function removeFrom(anchor: ChildNode | null): void {
+    let node: ChildNode | null = anchor;
+    while (node) {
+      const next = node.nextSibling;
+      node.remove();
+      node = next;
+    }
+  }
+
+  // Swap a replayed user bubble for an inline editor (prefilled text + Save /
+  // Cancel). Save forks a new branch off this turn's parent and re-runs from
+  // there; Cancel restores the original message. `nodes` are the message's DOM
+  // rows (hidden while editing), `anchor` its first node (the rewrite point).
+  function beginEdit(
+    item: ReplayMessageItem,
+    anchor: ChildNode | null,
+    nodes: HTMLElement[]
+  ): void {
+    if (busy) return;
+    const editor = el("div", `${PREFIX}-edit ${PREFIX}-user`);
+    const ta = el("textarea", `${PREFIX}-edit-input`) as HTMLTextAreaElement;
+    ta.value = item.content;
+    ta.rows = Math.min(8, Math.max(2, item.content.split("\n").length));
+    const row = el("div", `${PREFIX}-edit-actions`);
+    const cancel = el("button", `${PREFIX}-edit-cancel`) as HTMLButtonElement;
+    cancel.type = "button";
+    cancel.textContent = opts.cancelLabel ?? "Cancel";
+    const save = el("button", `${PREFIX}-edit-save`) as HTMLButtonElement;
+    save.type = "button";
+    save.textContent = opts.saveLabel ?? "Save & send";
+    row.appendChild(cancel);
+    row.appendChild(save);
+    editor.appendChild(ta);
+    editor.appendChild(row);
+    log.insertBefore(editor, anchor);
+    for (const n of nodes) n.style.display = "none";
+    ta.focus();
+    const restore = (): void => {
+      editor.remove();
+      for (const n of nodes) n.style.display = "";
+    };
+    const submit = (): void => {
+      const text = ta.value.trim();
+      if (!text || busy) return;
+      editor.remove();
+      // Drop the old (now off-branch) DOM, then stream the edited turn; the
+      // reload in `send` brings back the canonical ids + ‹n/m› switchers.
+      removeFrom(anchor);
+      void send(text, { parentId: item.parentId ?? null });
+    };
+    cancel.addEventListener("click", restore);
+    save.addEventListener("click", submit);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") restore();
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+  }
+
+  // Hover action row under a replayed message: EDIT (user) / REGENERATE
+  // (assistant) + the ‹n/m› switcher. Rendered only on branching hosts (those
+  // that wired `setActiveLeaf`); appended right after the message's bubble.
+  function addMessageActions(
+    item: ReplayMessageItem,
+    anchor: ChildNode | null
+  ): void {
+    if (!opts.setActiveLeaf) return;
+    const isUser = item.role === "user";
+    // A regenerate needs the user turn it answered (an assistant's parentId).
+    const canRegen = !isUser && typeof item.parentId === "string";
+    if (!item.branch && !isUser && !canRegen) return;
+    const rowEl = el("div", `${PREFIX}-msgactions ${PREFIX}-${item.role}`);
+    if (item.branch) rowEl.appendChild(buildBranchNav(item.branch));
+    if (isUser) {
+      // The message's DOM rows (attachment chips + bubble) to hide while editing.
+      const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
+      btn.type = "button";
+      const label = opts.editLabel ?? "Edit";
+      btn.setAttribute("aria-label", label);
+      btn.innerHTML = ICON_EDIT;
+      btn.addEventListener("click", () => {
+        const nodes: HTMLElement[] = [];
+        for (let n: ChildNode | null = anchor; n; n = n.nextSibling) {
+          if (n instanceof HTMLElement) nodes.push(n);
+          if (n === rowEl) break;
+        }
+        beginEdit(item, anchor, nodes);
+      });
+      rowEl.appendChild(btn);
+    } else if (canRegen) {
+      const parentId = item.parentId;
+      const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
+      btn.type = "button";
+      const label = opts.regenerateLabel ?? "Regenerate";
+      btn.setAttribute("aria-label", label);
+      btn.innerHTML = `${ICON_REGEN}<span>${escapeHtml(label)}</span>`;
+      btn.addEventListener("click", () => {
+        if (busy || typeof parentId !== "string") return;
+        // Drop the current assistant turn's DOM, then stream a fresh sibling
+        // answer to the same user turn (empty content + regenerate flag).
+        removeFrom(anchor);
+        void send("", { regenerate: true, parentId });
+      });
+      rowEl.appendChild(btn);
+    }
+    log.appendChild(rowEl);
+  }
+
+  // Switch which branch is active (the ‹n/m› arrows): persist the chosen leaf
+  // server-side, then reload so the transcript follows that path.
+  async function switchBranch(leaf: string): Promise<void> {
+    if (busy || !threadId || !opts.setActiveLeaf || !opts.loadThread) return;
+    try {
+      await opts.setActiveLeaf(threadId, leaf);
+      const items = await opts.loadThread(threadId);
+      renderThreadItems(items);
+      saveState();
+    } catch {
+      /* leave the current branch visible on failure */
+    }
   }
 
   if (history.length) {
@@ -2366,9 +2696,15 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
-  async function send(content: string): Promise<void> {
+  async function send(
+    content: string,
+    fork?: { parentId?: string | null; regenerate?: boolean }
+  ): Promise<void> {
+    // A regenerate re-answers an existing user turn — it carries no new user
+    // message, so it must NOT push a user bubble to the DOM / history.
+    const isRegen = fork?.regenerate === true;
     busy = true;
-    lastUserContent = content;
+    if (!isRegen) lastUserContent = content;
     // Take + clear any staged attachments for THIS turn.
     const atts = stagedAtts.splice(0);
     renderStaged();
@@ -2377,12 +2713,14 @@ export function createAiChatWidget(
     suggestionsEl.innerHTML = "";
     sendBtn.disabled = true;
     setRole("talk"); // each turn starts as the conversational copilot
-    addMsg(log, "user", content, atts.length ? atts : undefined);
-    history.push({
-      role: "user",
-      content,
-      ...(atts.length ? { attachments: atts } : {}),
-    });
+    if (!isRegen) {
+      addMsg(log, "user", content, atts.length ? atts : undefined);
+      history.push({
+        role: "user",
+        content,
+        ...(atts.length ? { attachments: atts } : {}),
+      });
+    }
     saveState();
     // Animated typing indicator until the first token lands.
     const typing = el("div", `${PREFIX}-typing`);
@@ -2432,6 +2770,8 @@ export function createAiChatWidget(
           threadId,
           content,
           ...(atts.length ? { attachments: atts.map((a) => a.mediaId) } : {}),
+          ...(fork?.parentId !== undefined ? { parentId: fork.parentId } : {}),
+          ...(fork?.regenerate ? { regenerate: true } : {}),
         }),
       });
       if (!res.ok || !res.body) {
@@ -2583,6 +2923,17 @@ export function createAiChatWidget(
       scrollDown();
     }
     saveState();
+    // A fork turn (edit / regenerate) rewrote the tree — reload so the canonical
+    // ids + ‹n/m› switchers land (mirrors the panel's runTurn finally). The
+    // normal linear send path never reloads.
+    if (fork && threadId && opts.loadThread) {
+      try {
+        const reloaded = await opts.loadThread(threadId);
+        renderThreadItems(reloaded);
+      } catch {
+        /* keep the streamed view if the reload fails */
+      }
+    }
   }
 
   /** Render an AI-described input form inline; submit → host action. */
@@ -3314,6 +3665,26 @@ function injectStyles(
 .${PREFIX}-att-x{border:none;background:transparent;color:#999;font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
 .${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
+.${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:-2px;color:#9aa0a6;opacity:.55;transition:opacity .15s ease}
+.${PREFIX}-msgactions:hover{opacity:1}
+.${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end}
+.${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
+.${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
+.${PREFIX}-msgact:hover{color:${accent};background:${accent}12}
+.${PREFIX}-branchnav{display:inline-flex;align-items:center;gap:2px;color:inherit;font-variant-numeric:tabular-nums}
+.${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px;cursor:pointer;line-height:1}
+.${PREFIX}-branch-btn:hover:not(:disabled){color:${accent}}
+.${PREFIX}-branch-btn:disabled{opacity:.35;cursor:default}
+.${PREFIX}-branch-count{font-size:11px;padding:0 2px}
+.${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:85%;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-edit.${PREFIX}-user{align-self:flex-end}
+.${PREFIX}-edit-input{width:100%;box-sizing:border-box;border:1px solid ${accent};border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none}
+.${PREFIX}-edit-input:focus{box-shadow:0 0 0 3px ${accent}22}
+.${PREFIX}-edit-actions{display:flex;justify-content:flex-end;gap:6px}
+.${PREFIX}-edit-cancel{border:none;background:transparent;color:#888;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-edit-cancel:hover{background:#f0f0f0}
+.${PREFIX}-edit-save{border:none;background:${accent};color:#fff;border-radius:999px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-edit-save:hover{opacity:.92}
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
@@ -3389,7 +3760,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-menu{background:#1d1d1d;color:#eee;border-color:#333}.${PREFIX}-menu::before{background:#1d1d1d;border-color:#333}.${PREFIX}-menu-item{color:#ddd}.${PREFIX}-menu-ico{color:#9b9b9b}.${PREFIX}-menu-state{background:#2c2c2c;color:#aaa}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:${accent}26;color:#fff;border-color:${accent}80}.${PREFIX}-chip:hover{background:${accent}3a}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}.${PREFIX}-chip-other{background:transparent;color:#aaa;border-color:#444}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-menu{background:#1d1d1d;color:#eee;border-color:#333}.${PREFIX}-menu::before{background:#1d1d1d;border-color:#333}.${PREFIX}-menu-item{color:#ddd}.${PREFIX}-menu-ico{color:#9b9b9b}.${PREFIX}-menu-state{background:#2c2c2c;color:#aaa}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:${accent}26;color:#fff;border-color:${accent}80}.${PREFIX}-chip:hover{background:${accent}3a}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}.${PREFIX}-chip-other{background:transparent;color:#aaa;border-color:#444}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}.${PREFIX}-edit-input{background:#101010;color:#eee;border-color:${accent}}.${PREFIX}-edit-cancel{color:#aaa}.${PREFIX}-edit-cancel:hover{background:#2c2c2c}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
