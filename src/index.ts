@@ -1126,7 +1126,10 @@ export function createAiChatWidget(
     );
     scrollDown(true);
     try {
-      const res = await opts.onApplyProposal!(name, args);
+      // Carry the originating thread so the api can persist this generation onto
+      // the conversation (history replay + admin viewer), not just the live chip.
+      const genArgs = threadId ? { ...args, threadId } : args;
+      const res = await opts.onApplyProposal!(name, genArgs);
       const jobId = res && typeof res === "object" ? res.jobId : undefined;
       const message = typeof res === "string" ? res : res?.message;
       const getJob = opts.getMediaJob;
