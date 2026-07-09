@@ -621,6 +621,9 @@ const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="non
 // Kebab (vertical dots) — the "More" overflow menu that collects the secondary
 // header controls so they no longer crowd the title bar side-by-side.
 const ICON_MORE = `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`;
+// Paperclip — the composer's attach-a-file control. A crisp line icon replaces
+// the flat 📎 emoji so the button reads as part of the widget, not an OS glyph.
+const ICON_ATTACH = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -1587,7 +1590,7 @@ export function createAiChatWidget(
     );
     attachBtn = el("button", `${PREFIX}-attach`) as HTMLButtonElement;
     attachBtn.type = "button";
-    attachBtn.textContent = "📎";
+    attachBtn.innerHTML = ICON_ATTACH;
     attachBtn.setAttribute("aria-label", "Attach a file");
     attachBtn.title = "Attach images, PDFs or documents";
     attachBtn.addEventListener("click", () => fileInput!.click());
@@ -3282,7 +3285,7 @@ function injectStyles(
 .${PREFIX}-input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}22}
 .${PREFIX}-send{border:none;background:${accent};color:#fff;border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
-.${PREFIX}-attach{flex:0 0 auto;border:1px solid #ddd;background:#fff;border-radius:11px;width:38px;font-size:16px;line-height:1;cursor:pointer;color:#555}
+.${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid #ddd;background:#fff;border-radius:11px;width:38px;line-height:1;cursor:pointer;color:#555;transition:border-color .12s,color .12s,background .12s}
 .${PREFIX}-attach:hover{border-color:${accent};color:${accent}}
 .${PREFIX}-attach:disabled{opacity:.5;cursor:default}
 .${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:#fff}
