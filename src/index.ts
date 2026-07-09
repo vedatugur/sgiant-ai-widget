@@ -51,6 +51,17 @@ import {
   type FrameTransport,
   type BridgeAction,
 } from "@sgiant/ai-agent-bridge";
+export {
+  AI_DOMAIN_KEYS,
+  AI_ACTION_DOMAINS,
+  invalidateAiTouched,
+  invalidateForAction,
+  broadcastAiChange,
+  subscribeAiChange,
+  applyAiChange,
+  type QueryInvalidator,
+  type AiChangeEvent,
+} from "./ai-invalidation";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
