@@ -570,6 +570,7 @@ export const WIDGET_LABELS = {
   expandChat: "Expand chat",
   expand: "Expand",
   restore: "Restore",
+  restoreChat: "Restore chat size",
   closeChat: "Close chat",
   conversation: "Conversation",
   // "More" overflow menu
@@ -2279,17 +2280,25 @@ export function createAiChatWidget(
   header.addEventListener("touchcancel", endDrag, { passive: true });
 
   // Expand / restore the panel (bigger reading area). Toggles a class + icon.
+  // "Wide view" in the UI: the same button flips between grow (expand) and
+  // shrink-back-to-widget (restore). Advanced view reuses `setExpanded(false)`
+  // to drop the plain wide size, so the icon/label never drift out of sync.
   let expanded = false;
+  const setExpanded = (v: boolean): void => {
+    expanded = v;
+    panel.classList.toggle(`${PREFIX}-expanded`, expanded);
+    if (expandBtn) {
+      expandBtn.innerHTML = expanded ? ICON_COLLAPSE : ICON_EXPAND;
+      expandBtn.setAttribute(
+        "aria-label",
+        expanded ? L("restoreChat") : L("expandChat")
+      );
+      expandBtn.title = expanded ? L("restore") : L("expand");
+    }
+  };
   if (expandBtn) {
     expandBtn.addEventListener("click", () => {
-      expanded = !expanded;
-      panel.classList.toggle(`${PREFIX}-expanded`, expanded);
-      expandBtn!.innerHTML = expanded ? ICON_COLLAPSE : ICON_EXPAND;
-      expandBtn!.setAttribute(
-        "aria-label",
-        expanded ? "Restore chat size" : L("expandChat")
-      );
-      expandBtn!.title = expanded ? L("restore") : L("expand");
+      setExpanded(!expanded);
       scrollDown(true);
     });
   }
@@ -2374,7 +2383,11 @@ export function createAiChatWidget(
     // No sandbox: the framed page is our OWN app and needs full capability
     // (same-origin session cookies, storage, popups). For untrusted third-party
     // targets an embedder would add a sandbox with explicit allows.
-    pane.append(bar, frame);
+    // The frame sits in a padded body so the driven app reads as an inset,
+    // rounded "screen" with breathing room rather than a flush edge-to-edge slab.
+    const body = el("div", `${PREFIX}-pane-body`);
+    body.append(frame);
+    pane.append(bar, body);
     advFrame = frame;
     transport = createFrameTransport(frame, {
       targetOrigin: opts.advancedOrigin || location.origin,
@@ -2405,11 +2418,10 @@ export function createAiChatWidget(
     advanced = true;
     setPaneCollapsed(false);
     panel.classList.add(`${PREFIX}-advanced`);
-    if (expanded) {
-      // Advanced owns the full screen; drop the plain "expanded" size class.
-      expanded = false;
-      panel.classList.remove(`${PREFIX}-expanded`);
-    }
+    // Advanced owns the full screen and IS the wide view, so the "wide" button
+    // is redundant here (hidden via CSS). Drop the plain expanded size + reset
+    // the button so it shows the right icon/label when advanced is exited.
+    if (expanded) setExpanded(false);
     buildFrame();
     navigateFrame(opts.getAdvancedUrl());
     updateAdvancedBtn();
@@ -4112,33 +4124,39 @@ function injectStyles(
 /* Advanced view — chat column + drivable app pane. The chat column always wraps
    the chat (fills the panel in normal mode); the pane only shows in advanced. */
 .${PREFIX}-chatcol{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;height:100%}
-.${PREFIX}-pane{display:none;flex-direction:column;min-width:0;min-height:0;background:#fff}
+.${PREFIX}-pane{display:none;flex-direction:column;min-width:0;min-height:0;background:#f4f5f7}
 .${PREFIX}-advbtn-on{background:rgba(255,255,255,.34)}
+/* Advanced view IS the wide view (owns the screen), so the plain "wide" toggle
+   is redundant here — hide it and leave advanced/exit + close. */
+.${PREFIX}-advanced .${PREFIX}-expand{display:none}
 .${PREFIX}-advanced{width:calc(100vw - 40px);max-width:1240px;height:calc(100vh - 40px);flex-direction:row;align-items:stretch}
-.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 384px;max-width:52%;border-right:1px solid #ececec}
+.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 400px;min-width:320px;max-width:52%;border-right:1px solid #ececec}
 .${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
-.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;max-width:none;border-right:0}
+.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0}
 /* Collapsed: the pane shrinks to a thin strip that still shows the toggle (so it
-   can be re-opened), and its url + iframe hide. */
+   can be re-opened), and its url + framed body hide. */
 .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{flex:0 0 40px;min-height:0}
-.${PREFIX}-pane-collapsed .${PREFIX}-pane-frame{display:none}
+.${PREFIX}-pane-collapsed .${PREFIX}-pane-body{display:none}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-url{display:none}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-bar{padding:6px 5px}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-collapse{transform:rotate(180deg)}
-.${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #eee;background:#f7f7f8;flex:0 0 auto}
+.${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e7e8ec;background:#eef0f3;flex:0 0 auto}
 .${PREFIX}-pane-url{font-size:11.5px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:0;background:#fff;min-height:0}
+/* Padded gutter around the driven app so it reads as an inset "screen". */
+.${PREFIX}-pane-body{flex:1 1 auto;min-width:0;min-height:0;display:flex;padding:12px}
+.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid #e6e7ea;border-radius:12px;background:#fff;min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
 /* Narrow: stack the app pane on top and the chat (with composer) below. */
 @media (max-width:820px){
   .${PREFIX}-advanced{flex-direction:column-reverse}
-  .${PREFIX}-advanced .${PREFIX}-chatcol{flex:1 1 auto;max-width:none;border-right:0;border-top:1px solid #ececec}
+  .${PREFIX}-advanced .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0;border-top:1px solid #ececec}
   .${PREFIX}-advanced .${PREFIX}-pane{flex:1 1 auto;min-height:38%}
+  .${PREFIX}-pane-body{padding:8px}
 }
 @media (prefers-color-scheme:dark){
-  .${PREFIX}-pane{background:#161616}
-  .${PREFIX}-pane-bar{background:#1d1d1d;border-bottom-color:#262626}
+  .${PREFIX}-pane{background:#121212}
+  .${PREFIX}-pane-bar{background:#1a1a1a;border-bottom-color:#262626}
   .${PREFIX}-pane-url{color:#9b9b9b}
-  .${PREFIX}-pane-frame{background:#161616}
+  .${PREFIX}-pane-frame{background:#161616;border-color:#2a2a2a;box-shadow:0 1px 4px rgba(0,0,0,.4)}
   .${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
   .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
 }
