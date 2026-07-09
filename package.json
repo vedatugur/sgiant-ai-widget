@@ -11,6 +11,9 @@
     "build": "tsc -b",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@sgiant/ai-agent-bridge": "*"
+  },
   "devDependencies": {
     "@sgiant/tsconfig": "*",
     "typescript": "^5.7.2"

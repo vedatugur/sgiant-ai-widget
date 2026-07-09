@@ -23,6 +23,7 @@ export {
   formatPageContext,
   createHostActions,
   STANDARD_ACTIONS,
+  STANDARD_ACTION_PATHS,
   type PageContext,
   type PageManifestEntry,
   type NavTarget,
@@ -44,7 +45,12 @@ export {
   type UiControlAction,
   type OperateAction,
 } from "./ui-control";
-import { isOperateAction } from "./ui-control";
+import { isOperateAction, isUiControlAction } from "./ui-control";
+import {
+  createFrameTransport,
+  type FrameTransport,
+  type BridgeAction,
+} from "@sgiant/ai-agent-bridge";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
@@ -412,6 +418,34 @@ export interface AiChatWidgetOptions {
    */
   autoNavOption?: boolean;
   /**
+   * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
+   * full-screen split: the chat on the left and the app in an <iframe> on the
+   * right that Copilot can DRIVE (highlight / fill / click) via the postMessage
+   * agent bridge (`@sgiant/ai-agent-bridge`). The framed page must mount the
+   * agent (`mountAiAgent`). `getAdvancedUrl()` returns the embed URL for the
+   * CURRENT page; `getAdvancedUrl(path)` returns it for an account-relative path
+   * (used to navigate the frame). Omit to disable advanced view.
+   */
+  getAdvancedUrl?: (path?: string) => string;
+  /**
+   * Map a navigation-class action (`navigate` / `open-*`) to the account-relative
+   * path it opens, so advanced view can route it to the FRAME instead of the
+   * parent app. Return null for non-navigation actions (they run host-side). Only
+   * consulted in advanced view.
+   */
+  resolveActionPath?: (
+    name: string,
+    data: Record<string, string>
+  ) => string | null;
+  /** Origin the embedded app is served from, for the agent bridge. Defaults to
+   *  the current origin (same-origin embedding). */
+  advancedOrigin?: string;
+  /** Labels for the advanced-view controls (i18n; host supplies translations). */
+  advancedLabel?: string;
+  exitAdvancedLabel?: string;
+  collapsePaneLabel?: string;
+  expandPaneLabel?: string;
+  /**
    * Past-conversation history. When provided, a history control appears in the
    * header; opening it lists the user's prior threads. Picking one calls
    * `loadThread` and replays its messages. Wire these to the authed endpoints
@@ -769,6 +803,9 @@ const ICON_EXPAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none"
 const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>`;
 // Compass — the auto-navigate ("drive me there") toggle.
 const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
+// Advanced view: a panel split into a sidebar + main area (Copilot ⇆ live app).
+const ICON_ADVANCED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="4" x2="10" y2="20"/></svg>`;
+const ICON_CHEVRON_R = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
 // Download — export the current conversation as a .txt transcript.
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 // Flag — agent/admin oversight: flag the current conversation with a reason.
@@ -1181,6 +1218,19 @@ export function createAiChatWidget(
     expandBtn.title = "Expand";
     expandBtn.innerHTML = ICON_EXPAND;
     hActions.appendChild(expandBtn);
+  }
+  // Advanced view — full-screen split with the app in a drivable iframe. Only
+  // shown when the host wired `getAdvancedUrl`.
+  let advancedBtn: HTMLElement | null = null;
+  if (opts.getAdvancedUrl) {
+    advancedBtn = el("button", `${PREFIX}-icon ${PREFIX}-advbtn`);
+    advancedBtn.setAttribute(
+      "aria-label",
+      opts.advancedLabel || "Advanced view"
+    );
+    advancedBtn.title = opts.advancedLabel || "Advanced view";
+    advancedBtn.innerHTML = ICON_ADVANCED;
+    hActions.appendChild(advancedBtn);
   }
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
@@ -1932,7 +1982,12 @@ export function createAiChatWidget(
     form.append(input, sendBtn);
   }
 
-  panel.append(header, log, meterEl, statusEl, suggestionsEl, attBar, form);
+  // The chat lives in its own column so advanced view can lay a drivable app
+  // pane beside it. In normal mode `chatCol` fills the panel; `pane` is hidden.
+  const chatCol = el("div", `${PREFIX}-chatcol`);
+  chatCol.append(header, log, meterEl, statusEl, suggestionsEl, attBar, form);
+  const pane = el("div", `${PREFIX}-pane`);
+  panel.append(chatCol, pane);
   renderStatus();
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
   if (!document.getElementById(`${PREFIX}-av-g`)) {
@@ -2086,6 +2141,161 @@ export function createAiChatWidget(
       scrollDown(true);
     });
   }
+
+  // --- Advanced view -----------------------------------------------------------
+  // A full-screen split: chat on the left, the app in an <iframe> on the right
+  // that Copilot drives via the agent bridge. Navigation moves the FRAME; on-page
+  // actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
+  // hit the app the user is watching — not the parent shell behind the overlay.
+  let advanced = false;
+  let transport: FrameTransport | null = null;
+  let advFrame: HTMLIFrameElement | null = null;
+  let frameUrlLabel: HTMLElement | null = null;
+  const advKey = opts.persistKey ? `ayca:adv:${opts.persistKey}` : "";
+  const rememberAdvanced = (): void => {
+    if (!advKey) return;
+    try {
+      localStorage.setItem(advKey, advanced ? "1" : "0");
+    } catch {
+      /* storage blocked */
+    }
+  };
+
+  const setFrameUrlLabel = (url: string): void => {
+    if (!frameUrlLabel) return;
+    let text = url;
+    try {
+      const u = new URL(url, location.href);
+      text = u.pathname + u.search;
+    } catch {
+      /* keep raw */
+    }
+    frameUrlLabel.textContent = text;
+  };
+
+  /** Point the frame at a full URL (a full document load — the embedded app boots
+   *  at that route and re-mounts its agent). */
+  const navigateFrame = (url: string): void => {
+    if (!advFrame) return;
+    advFrame.src = url;
+    setFrameUrlLabel(url);
+  };
+
+  const setPaneCollapsed = (v: boolean): void => {
+    panel.classList.toggle(`${PREFIX}-pane-collapsed`, v);
+  };
+
+  const buildFrame = (): void => {
+    pane.innerHTML = "";
+    const bar = el("div", `${PREFIX}-pane-bar`);
+    const collapseBtn = el(
+      "button",
+      `${PREFIX}-icon ${PREFIX}-pane-collapse`
+    ) as HTMLButtonElement;
+    collapseBtn.type = "button";
+    collapseBtn.setAttribute(
+      "aria-label",
+      opts.collapsePaneLabel || "Hide page"
+    );
+    collapseBtn.title = opts.collapsePaneLabel || "Hide page";
+    collapseBtn.innerHTML = ICON_CHEVRON_R;
+    collapseBtn.addEventListener("click", () => setPaneCollapsed(true));
+    frameUrlLabel = el("div", `${PREFIX}-pane-url`);
+    bar.append(collapseBtn, frameUrlLabel);
+    const frame = el("iframe", `${PREFIX}-pane-frame`) as HTMLIFrameElement;
+    frame.setAttribute("title", opts.advancedLabel || "App preview");
+    // No sandbox: the framed page is our OWN app and needs full capability
+    // (same-origin session cookies, storage, popups). For untrusted third-party
+    // targets an embedder would add a sandbox with explicit allows.
+    pane.append(bar, frame);
+    advFrame = frame;
+    transport = createFrameTransport(frame, {
+      targetOrigin: opts.advancedOrigin || location.origin,
+    });
+  };
+
+  const teardownFrame = (): void => {
+    transport?.destroy();
+    transport = null;
+    advFrame = null;
+    frameUrlLabel = null;
+    pane.innerHTML = "";
+  };
+
+  const updateAdvancedBtn = (): void => {
+    if (!advancedBtn) return;
+    advancedBtn.classList.toggle(`${PREFIX}-advbtn-on`, advanced);
+    const label = advanced
+      ? opts.exitAdvancedLabel || "Exit advanced view"
+      : opts.advancedLabel || "Advanced view";
+    advancedBtn.setAttribute("aria-label", label);
+    advancedBtn.title = label;
+  };
+
+  const openAdvanced = (): void => {
+    if (advanced || !opts.getAdvancedUrl) return;
+    advanced = true;
+    setPaneCollapsed(false);
+    panel.classList.add(`${PREFIX}-advanced`);
+    if (expanded) {
+      // Advanced owns the full screen; drop the plain "expanded" size class.
+      expanded = false;
+      panel.classList.remove(`${PREFIX}-expanded`);
+    }
+    buildFrame();
+    navigateFrame(opts.getAdvancedUrl());
+    updateAdvancedBtn();
+    rememberAdvanced();
+    scrollDown(true);
+  };
+
+  const closeAdvanced = (): void => {
+    if (!advanced) return;
+    advanced = false;
+    panel.classList.remove(`${PREFIX}-advanced`, `${PREFIX}-pane-collapsed`);
+    teardownFrame();
+    updateAdvancedBtn();
+    rememberAdvanced();
+    scrollDown(true);
+  };
+
+  if (advancedBtn) {
+    advancedBtn.addEventListener("click", () =>
+      advanced ? closeAdvanced() : openAdvanced()
+    );
+  }
+
+  /**
+   * The single funnel for every in-app action Copilot requests. In advanced view
+   * it retargets: on-page control/operate → the iframe (via the bridge); a
+   * navigation-class action → the iframe's URL. Otherwise (and for app-specific
+   * handlers like research-brand) it falls back to the host's `onWidgetAction`.
+   */
+  const dispatchAction = async (
+    name: string,
+    data: Record<string, string>
+  ): Promise<string | void> => {
+    if (advanced && transport) {
+      if (isUiControlAction(name) || isOperateAction(name)) {
+        const r = await transport.act(name as BridgeAction, {
+          target: data.target ?? "",
+          ...(data.value !== undefined ? { value: data.value } : {}),
+        });
+        return r.ok
+          ? "Shown on the page"
+          : r.message || "Couldn't do that on the page";
+      }
+      const relPath =
+        name === "navigate"
+          ? (data.path ?? null)
+          : (opts.resolveActionPath?.(name, data) ?? null);
+      if (relPath != null && opts.getAdvancedUrl) {
+        navigateFrame(opts.getAdvancedUrl(relPath));
+        return "Opened";
+      }
+    }
+    return opts.onWidgetAction ? opts.onWidgetAction(name, data) : undefined;
+  };
 
   // History (past conversations) — fetch the thread list, show a picker, and on
   // select replay that thread's messages into the log (sets it as the active
@@ -2281,9 +2491,17 @@ export function createAiChatWidget(
   // Let a nav/sidebar link anywhere in the host app open the panel — optionally
   // PREFILLED via `new CustomEvent(name, { detail: { prompt } })`.
   const onOpenEvent = (e: Event): void => {
-    const detail = (e as CustomEvent<{ prompt?: string; newChat?: boolean }>)
-      .detail;
+    const detail = (
+      e as CustomEvent<{
+        prompt?: string;
+        newChat?: boolean;
+        advanced?: boolean;
+      }>
+    ).detail;
     open(detail?.prompt, detail?.newChat);
+    // Let a host entry point (e.g. the AI Hub "Open assistant" button) jump
+    // straight into advanced view.
+    if (detail?.advanced) openAdvanced();
   };
   if (opts.openEventName) {
     window.addEventListener(opts.openEventName, onOpenEvent);
@@ -2755,7 +2973,18 @@ export function createAiChatWidget(
     };
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
-      const pageContext = opts.getContext ? await opts.getContext() : undefined;
+      const baseCtx = opts.getContext ? await opts.getContext() : undefined;
+      // In advanced view the controllable page is the FRAME, not the parent
+      // shell — so the on-page targets (and the current path) come from the
+      // frame's agent, overriding whatever the host scanned locally.
+      const pageContext =
+        advanced && transport && baseCtx && typeof baseCtx === "object"
+          ? {
+              ...(baseCtx as Record<string, unknown>),
+              path: transport.getPath() ?? (baseCtx as { path?: string }).path,
+              uiTargets: transport.getTargets(),
+            }
+          : baseCtx;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -3160,7 +3389,7 @@ export function createAiChatWidget(
       log.appendChild(wrap);
       scrollDown(true);
       void Promise.resolve(
-        opts.onWidgetAction!("navigate", { path: spec.path })
+        dispatchAction("navigate", { path: spec.path })
       ).catch(() => {
         chip.querySelector("span")!.textContent = `Couldn't open ${label}`;
       });
@@ -3172,7 +3401,7 @@ export function createAiChatWidget(
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
-        await opts.onWidgetAction!("navigate", { path: spec.path });
+        await dispatchAction("navigate", { path: spec.path });
         btn.innerHTML = `<span>${escapeHtml(label)} ✓</span>`;
       } catch {
         btn.disabled = false;
@@ -3307,9 +3536,7 @@ export function createAiChatWidget(
       wrap.appendChild(chip);
       log.appendChild(wrap);
       scrollDown(true);
-      void Promise.resolve(
-        opts.onWidgetAction!(spec.name, spec.data ?? {})
-      ).then(
+      void Promise.resolve(dispatchAction(spec.name, spec.data ?? {})).then(
         (msg) => {
           chip.querySelector("span")!.textContent =
             (typeof msg === "string" && msg) || `${label} ✓`;
@@ -3327,7 +3554,7 @@ export function createAiChatWidget(
     const run = async (): Promise<void> => {
       btn.disabled = true;
       try {
-        const msg = await opts.onWidgetAction!(spec.name, spec.data ?? {});
+        const msg = await dispatchAction(spec.name, spec.data ?? {});
         btn.innerHTML = `<span>${escapeHtml(
           (typeof msg === "string" && msg) || `${label} ✓`
         )}</span>`;
@@ -3423,6 +3650,7 @@ export function createAiChatWidget(
       }
       unbindKeyboard();
       clearRich();
+      teardownFrame();
       bubble.remove();
       panel.remove();
     },
@@ -3704,6 +3932,34 @@ function injectStyles(
 .${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid ${accent}33;background:${accent}0f;color:${accent};border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
 .${PREFIX}-expanded .${PREFIX}-msg{max-width:75%}
+/* Advanced view — chat column + drivable app pane. The chat column always wraps
+   the chat (fills the panel in normal mode); the pane only shows in advanced. */
+.${PREFIX}-chatcol{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;height:100%}
+.${PREFIX}-pane{display:none;flex-direction:column;min-width:0;min-height:0;background:#fff}
+.${PREFIX}-advbtn-on{background:rgba(255,255,255,.34)}
+.${PREFIX}-advanced{width:calc(100vw - 40px);max-width:1240px;height:calc(100vh - 40px);flex-direction:row;align-items:stretch}
+.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 384px;max-width:52%;border-right:1px solid #ececec}
+.${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
+.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;max-width:none;border-right:0}
+.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{display:none}
+.${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #eee;background:#f7f7f8;flex:0 0 auto}
+.${PREFIX}-pane-collapse{transform:rotate(180deg)}
+.${PREFIX}-pane-url{font-size:11.5px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:0;background:#fff;min-height:0}
+/* Narrow: stack the app pane on top and the chat (with composer) below. */
+@media (max-width:820px){
+  .${PREFIX}-advanced{flex-direction:column-reverse}
+  .${PREFIX}-advanced .${PREFIX}-chatcol{flex:1 1 auto;max-width:none;border-right:0;border-top:1px solid #ececec}
+  .${PREFIX}-advanced .${PREFIX}-pane{flex:1 1 auto;min-height:38%}
+}
+@media (prefers-color-scheme:dark){
+  .${PREFIX}-pane{background:#161616}
+  .${PREFIX}-pane-bar{background:#1d1d1d;border-bottom-color:#262626}
+  .${PREFIX}-pane-url{color:#9b9b9b}
+  .${PREFIX}-pane-frame{background:#161616}
+  .${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
+  .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
+}
 .${PREFIX}-history{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise .18s ease}
 .${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #eee;font-weight:600;font-size:14px}
 .${PREFIX}-history-back{border:1px solid #ddd;background:#fff;border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:#333}
