@@ -1613,17 +1613,38 @@ export function createAiChatWidget(
   }
   root.append(bubble, panel);
 
-  const open = (prefill?: unknown): void => {
+  // Drop the active thread + transcript (the old one stays in history) and
+  // start fresh with the greeting. Shared by the "New chat" button and any
+  // caller that opens the widget on a fresh thread (see open's forceNew).
+  const startNewChat = (): void => {
+    threadId = undefined;
+    history.length = 0;
+    saveState();
+    clearRich();
+    log.innerHTML = "";
+    if (opts.greeting) addAssistantMessage(opts.greeting);
+    void renderSuggestions();
+  };
+
+  const open = (prefill?: unknown, forceNew?: boolean): void => {
     panel.style.display = "flex";
     panel.style.transform = ""; // clear any leftover drag offset
     bubble.style.display = "none";
     // Show the latest message + focus the composer (always-ready assistant feel).
     pinned = true;
+    // A caller (e.g. "Regenerate showcase") can demand a FRESH chat so the
+    // starter lands in a clean thread, not tacked onto whatever was open.
+    if (forceNew) startNewChat();
     log.scrollTop = log.scrollHeight;
     // A caller (e.g. the "Build with AI" button) can open PREFILLED with a
-    // starter via a CustomEvent detail — seed the composer if it's empty, so the
-    // user just hits send. Non-string args (a click MouseEvent) are ignored.
-    if (typeof prefill === "string" && prefill.trim() && !input.value.trim()) {
+    // starter via a CustomEvent detail — seed the composer, so the user just
+    // hits send. Non-string args (a click MouseEvent) are ignored. Normally we
+    // only seed an EMPTY composer, but forceNew (fresh thread) always seeds.
+    if (
+      typeof prefill === "string" &&
+      prefill.trim() &&
+      (forceNew || !input.value.trim())
+    ) {
       input.value = prefill;
       saveDraft(input.value);
     }
@@ -1743,16 +1764,9 @@ export function createAiChatWidget(
     historyBtn.addEventListener("click", () => void openHistory());
   }
 
-  // New chat — drop the active thread + transcript (the old one stays in
-  // history) and start fresh with the greeting.
+  // New chat — reset to a fresh thread + greeting, then focus the composer.
   newChatBtn.addEventListener("click", () => {
-    threadId = undefined;
-    history.length = 0;
-    saveState();
-    clearRich();
-    log.innerHTML = "";
-    if (opts.greeting) addAssistantMessage(opts.greeting);
-    void renderSuggestions();
+    startNewChat();
     input.focus();
   });
 
@@ -1937,8 +1951,9 @@ export function createAiChatWidget(
   // Let a nav/sidebar link anywhere in the host app open the panel — optionally
   // PREFILLED via `new CustomEvent(name, { detail: { prompt } })`.
   const onOpenEvent = (e: Event): void => {
-    const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
-    open(prompt);
+    const detail = (e as CustomEvent<{ prompt?: string; newChat?: boolean }>)
+      .detail;
+    open(detail?.prompt, detail?.newChat);
   };
   if (opts.openEventName) {
     window.addEventListener(opts.openEventName, onOpenEvent);
