@@ -127,3 +127,80 @@ export function applyAiChange(
   invalidateAiTouched(qc, accountId, domains);
   broadcastAiChange(accountId, domains);
 }
+
+// --- Cross-user real-time (SSE) ------------------------------------------------
+// Tier 3: a change made by ANOTHER user/device. The server pushes
+// `{accountId, domains}` over SSE (Postgres LISTEN/NOTIFY → see
+// docs/realtime-sync.md); the client refetches. Uses fetch (not EventSource) so
+// it can send the Clerk bearer token, and auto-reconnects with capped backoff.
+
+export interface LiveSyncOptions {
+  /** The SSE endpoint, e.g. `${API_BASE}/accounts/:id/live`. */
+  url: string;
+  /** Fresh auth token per (re)connect. */
+  getToken: () => Promise<string | null>;
+  /** Called for each change event the server pushes. */
+  onChange: (accountId: string, domains?: string[]) => void;
+}
+
+/** Subscribe to the server's live-sync stream. Returns an unsubscribe fn. No-op
+ *  where fetch/streams are unavailable (SSR). */
+export function subscribeLiveSync(opts: LiveSyncOptions): () => void {
+  if (typeof fetch === "undefined") return () => {};
+  let closed = false;
+  let ctrl: AbortController | null = null;
+  let backoff = 1000;
+
+  const connect = async (): Promise<void> => {
+    if (closed) return;
+    ctrl = new AbortController();
+    try {
+      const token = await opts.getToken();
+      const res = await fetch(opts.url, {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`live ${res.status}`);
+      backoff = 1000; // connected — reset backoff
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done || closed) break;
+        buf += dec.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, nl);
+          buf = buf.slice(nl + 2);
+          const line = frame.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue; // heartbeat / comment
+          try {
+            const d = JSON.parse(
+              line.slice(5).trim()
+            ) as Partial<AiChangeEvent>;
+            if (d && typeof d.accountId === "string")
+              opts.onChange(
+                d.accountId,
+                Array.isArray(d.domains) ? d.domains : undefined
+              );
+          } catch {
+            /* non-json frame */
+          }
+        }
+      }
+    } catch {
+      /* network error / abort */
+    }
+    if (closed) return;
+    const wait = backoff;
+    backoff = Math.min(backoff * 2, 30_000);
+    setTimeout(connect, wait);
+  };
+  void connect();
+  return () => {
+    closed = true;
+    ctrl?.abort();
+  };
+}

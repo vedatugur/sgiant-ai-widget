@@ -59,8 +59,10 @@ export {
   broadcastAiChange,
   subscribeAiChange,
   applyAiChange,
+  subscribeLiveSync,
   type QueryInvalidator,
   type AiChangeEvent,
+  type LiveSyncOptions,
 } from "./ai-invalidation";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
