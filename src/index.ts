@@ -324,7 +324,18 @@ export interface AiChatWidgetOptions {
   onApplyProposal?: (
     name: string,
     args: Record<string, unknown>
-  ) => Promise<string | void>;
+  ) => Promise<string | void | { message?: string; jobId?: string }>;
+  /**
+   * Poll one async media render job (video). `generate_video` enqueues a job and
+   * returns immediately; the widget polls this so the "Rendering video…" process
+   * chip resolves on REAL completion (the clip is actually ready) instead of the
+   * chat going silent until it appears in the library. Omit → the chip falls back
+   * to a "queued" state right after Apply.
+   */
+  getMediaJob?: (jobId: string) => Promise<{
+    status: "queued" | "processing" | "done" | "error";
+    error?: string | null;
+  }>;
 }
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
@@ -607,6 +618,9 @@ const ICON_AUTOSAVE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="non
 // Bell — toggle a soft chime when a reply arrives.
 const ICON_BELL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
 const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+// Kebab (vertical dots) — the "More" overflow menu that collects the secondary
+// header controls so they no longer crowd the title bar side-by-side.
+const ICON_MORE = `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -758,26 +772,93 @@ export function createAiChatWidget(
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
   }
+  // ── "More" overflow menu ──────────────────────────────────────────────────
+  // The secondary/toggle controls (download, auto-save, flag, sound, auto-nav)
+  // used to sit side-by-side in the header. As their number grew the title bar
+  // became a cramped, unreadable strip of look-alike icons. They now live in a
+  // labeled dropdown behind a single kebab button, so the header keeps only the
+  // primary actions (new chat, history, expand, close). Each menu row carries a
+  // text label (+ an On/Off pill for toggles) — far clearer than bare icons.
+  const moreWrap = el("div", `${PREFIX}-morewrap`);
+  const moreBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+  moreBtn.setAttribute("aria-label", "More options");
+  moreBtn.setAttribute("aria-haspopup", "menu");
+  moreBtn.setAttribute("aria-expanded", "false");
+  moreBtn.title = "More";
+  moreBtn.innerHTML = ICON_MORE;
+  const moreMenu = el("div", `${PREFIX}-menu`);
+  moreMenu.setAttribute("role", "menu");
+  moreMenu.style.display = "none";
+  moreWrap.append(moreBtn, moreMenu);
+  let menuOpen = false;
+  const setMenu = (open: boolean): void => {
+    menuOpen = open;
+    moreMenu.style.display = open ? "flex" : "none";
+    moreBtn.classList.toggle(`${PREFIX}-icon-on`, open);
+    moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setMenu(!menuOpen);
+  });
+  // Dismiss on any click outside the menu, and on Escape. Both listeners live on
+  // `panel` (removed on destroy) so nothing leaks when the widget is torn down.
+  panel.addEventListener("click", (e) => {
+    if (menuOpen && !moreWrap.contains(e.target as Node)) setMenu(false);
+  });
+  panel.addEventListener("keydown", (e) => {
+    if (menuOpen && e.key === "Escape") {
+      e.stopPropagation();
+      setMenu(false);
+    }
+  });
+  // Build one labeled menu row. Returns handles so toggle syncs can update just
+  // the icon / state pill without clobbering the label text.
+  const menuItem = (
+    label: string
+  ): {
+    btn: HTMLButtonElement;
+    ico: HTMLElement;
+    setState: (on: boolean) => void;
+  } => {
+    const btn = el("button", `${PREFIX}-menu-item`) as HTMLButtonElement;
+    btn.type = "button";
+    btn.setAttribute("role", "menuitem");
+    const ico = el("span", `${PREFIX}-menu-ico`);
+    const lab = el("span", `${PREFIX}-menu-label`);
+    lab.textContent = label;
+    const state = el("span", `${PREFIX}-menu-state`);
+    btn.append(ico, lab, state);
+    return {
+      btn,
+      ico,
+      setState: (on: boolean) => {
+        state.textContent = on ? "On" : "Off";
+        btn.classList.toggle(`${PREFIX}-menu-item-on`, on);
+      },
+    };
+  };
+
   // Download — export the current conversation as a plain-text transcript.
-  const downloadBtn = el("button", `${PREFIX}-icon`);
-  downloadBtn.setAttribute("aria-label", "Download conversation");
-  downloadBtn.title = "Download chat (.txt)";
-  downloadBtn.innerHTML = ICON_DOWNLOAD;
-  downloadBtn.addEventListener("click", () => exportConversation());
-  hActions.appendChild(downloadBtn);
+  const downloadItem = menuItem("Download chat (.txt)");
+  downloadItem.ico.innerHTML = ICON_DOWNLOAD;
+  downloadItem.btn.addEventListener("click", () => {
+    setMenu(false);
+    exportConversation();
+  });
+  moreMenu.appendChild(downloadItem.btn);
   // Auto-save assets toggle — when ON, asset-save proposals apply without a
   // per-card confirm. Available to every role (persisted per account).
-  const autoSaveBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
-  autoSaveBtn.setAttribute("aria-label", "Auto-save assets");
-  autoSaveBtn.innerHTML = ICON_AUTOSAVE;
+  const autoSaveItem = menuItem("Auto-save assets");
+  autoSaveItem.ico.innerHTML = ICON_AUTOSAVE;
   const paintAutoSave = () => {
-    autoSaveBtn.title = autoSaveAssets
-      ? "Auto-save assets: ON — saves apply without asking"
-      : "Auto-save assets: OFF — you confirm each save";
-    autoSaveBtn.classList.toggle(`${PREFIX}-icon-on`, autoSaveAssets);
+    autoSaveItem.btn.title = autoSaveAssets
+      ? "Saves apply without asking each time"
+      : "You confirm each save";
+    autoSaveItem.setState(autoSaveAssets);
   };
   paintAutoSave();
-  autoSaveBtn.addEventListener("click", () => {
+  autoSaveItem.btn.addEventListener("click", () => {
     autoSaveAssets = !autoSaveAssets;
     try {
       if (autoSaveKey)
@@ -793,15 +874,15 @@ export function createAiChatWidget(
       true
     );
   });
-  hActions.appendChild(autoSaveBtn);
+  moreMenu.appendChild(autoSaveItem.btn);
   // Flag — oversight control (agent/admin surfaces). Asks for a reason, then
   // hands it to the host's onFlag with the live thread id. Hidden when unwired.
   if (opts.onFlag) {
-    const flagBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
-    flagBtn.setAttribute("aria-label", "Flag conversation");
-    flagBtn.title = "Flag this conversation";
-    flagBtn.innerHTML = ICON_FLAG;
-    flagBtn.addEventListener("click", () => {
+    const flagItem = menuItem("Flag this conversation");
+    flagItem.ico.innerHTML = ICON_FLAG;
+    flagItem.btn.title = "Flag this conversation for review";
+    flagItem.btn.addEventListener("click", () => {
+      setMenu(false);
       // A flag needs a live conversation (the thread id is created on the first
       // turn). Tell the user plainly instead of silently doing nothing.
       if (!threadId) {
@@ -812,28 +893,24 @@ export function createAiChatWidget(
         "Flag this conversation — why? (reason is logged for review)"
       );
       if (!reason || !reason.trim()) return;
-      flagBtn.disabled = true;
-      flagBtn.classList.add(`${PREFIX}-icon-on`);
+      flagItem.btn.disabled = true;
       Promise.resolve(opts.onFlag!({ reason: reason.trim(), threadId }))
         .then(() => {
-          flagBtn.title = "Flagged ✓";
           // Visible confirmation — a tooltip change alone is invisible, so the
           // user couldn't tell the flag worked.
           flagNote("🚩 Conversation flagged for review ✓", true);
         })
         .catch((err) => {
-          flagBtn.title = "Flag failed — try again";
-          flagBtn.classList.remove(`${PREFIX}-icon-on`);
           flagNote(
             `Couldn't flag: ${(err as Error)?.message || "please try again"}`,
             false
           );
         })
         .finally(() => {
-          flagBtn.disabled = false;
+          flagItem.btn.disabled = false;
         });
     });
-    hActions.appendChild(flagBtn);
+    moreMenu.appendChild(flagItem.btn);
   }
   // Notification sound — a soft chime when a reply arrives (browser-local toggle).
   const SOUND_KEY = "sg_ayca_sound";
@@ -843,16 +920,16 @@ export function createAiChatWidget(
   } catch {
     /* storage blocked */
   }
-  const soundBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+  const soundItem = menuItem("Notification sound");
   const syncSound = (): void => {
-    soundBtn.innerHTML = soundOn ? ICON_BELL : ICON_BELL_OFF;
-    soundBtn.classList.toggle(`${PREFIX}-icon-on`, soundOn);
-    soundBtn.title = soundOn ? "Sound on — click to mute" : "Sound off";
-    soundBtn.setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
-    soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    soundItem.ico.innerHTML = soundOn ? ICON_BELL : ICON_BELL_OFF;
+    soundItem.setState(soundOn);
+    soundItem.btn.title = soundOn
+      ? "Chime when a reply arrives — click to mute"
+      : "Muted — click to enable the reply chime";
   };
   syncSound();
-  soundBtn.addEventListener("click", () => {
+  soundItem.btn.addEventListener("click", () => {
     soundOn = !soundOn;
     try {
       window.localStorage.setItem(SOUND_KEY, soundOn ? "1" : "0");
@@ -862,7 +939,7 @@ export function createAiChatWidget(
     syncSound();
     if (soundOn) maybeDing(true); // preview on enable
   });
-  hActions.appendChild(soundBtn);
+  moreMenu.appendChild(soundItem.btn);
   // Soft two-note chime via WebAudio (no asset). Plays only when enabled.
   function maybeDing(force?: boolean): void {
     if (!soundOn && !force) return;
@@ -902,23 +979,17 @@ export function createAiChatWidget(
   } catch {
     /* storage blocked */
   }
-  let autoNavBtn: HTMLButtonElement | null = null;
   if (opts.autoNavOption) {
-    autoNavBtn = el(`button`, `${PREFIX}-icon`) as HTMLButtonElement;
-    autoNavBtn.innerHTML = ICON_COMPASS;
+    const autoNavItem = menuItem("Auto-navigate");
+    autoNavItem.ico.innerHTML = ICON_COMPASS;
     const syncAutoNav = (): void => {
-      autoNavBtn!.classList.toggle(`${PREFIX}-icon-on`, autoNav);
-      autoNavBtn!.title = autoNav
-        ? "Auto-navigate is ON — Copilot opens pages for you. Click to turn off."
-        : "Auto-navigate is OFF — Copilot asks before opening pages. Click to turn on.";
-      autoNavBtn!.setAttribute(
-        "aria-label",
-        autoNav ? "Auto-navigate on" : "Auto-navigate off"
-      );
-      autoNavBtn!.setAttribute("aria-pressed", autoNav ? "true" : "false");
+      autoNavItem.setState(autoNav);
+      autoNavItem.btn.title = autoNav
+        ? "Copilot opens pages for you — click to turn off"
+        : "Copilot asks before opening pages — click to turn on";
     };
     syncAutoNav();
-    autoNavBtn.addEventListener("click", () => {
+    autoNavItem.btn.addEventListener("click", () => {
       autoNav = !autoNav;
       try {
         window.localStorage.setItem(AUTONAV_KEY, autoNav ? "1" : "0");
@@ -927,8 +998,11 @@ export function createAiChatWidget(
       }
       syncAutoNav();
     });
-    hActions.appendChild(autoNavBtn);
+    moreMenu.appendChild(autoNavItem.btn);
   }
+  // The "More" menu holds the secondary controls; drop it into the header after
+  // the primary actions (new chat / history), before expand + close.
+  hActions.appendChild(moreWrap);
   // Expand / restore — grows the panel for easier reading (default on).
   let expandBtn: HTMLElement | null = null;
   const expandable = opts.expandable !== false;
@@ -1031,6 +1105,75 @@ export function createAiChatWidget(
     const chip = addActivityChip(label, status, agent, model);
     liveActivity.set(callId, chip);
     scrollDown();
+  }
+  // Media generation (image/video) is applied AFTER the turn, so the server never
+  // emits an `activity` frame for it. Drive a live process chip here so the user
+  // watches generation as a step (spinner → ✓/✗), the same as a read tool. For
+  // video (an async render that takes minutes) poll the job so the chip resolves
+  // on REAL completion instead of the chat going silent until the clip appears.
+  const MEDIA_GEN_TOOLS = new Set(["generate_image", "generate_video"]);
+  async function applyMediaGen(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<void> {
+    const isVideo = name === "generate_video";
+    const chip = addActivityChip(
+      isVideo ? "Rendering video…" : "Generating image…",
+      "running"
+    );
+    scrollDown(true);
+    try {
+      const res = await opts.onApplyProposal!(name, args);
+      const jobId = res && typeof res === "object" ? res.jobId : undefined;
+      const message = typeof res === "string" ? res : res?.message;
+      const getJob = opts.getMediaJob;
+      if (isVideo && jobId && getJob) {
+        const started = Date.now();
+        const MAX_MS = 10 * 60 * 1000; // stop babysitting a stuck render after 10m
+        for (;;) {
+          if (Date.now() - started >= MAX_MS) {
+            paintActivity(
+              chip,
+              "Still rendering — it'll appear in your assets shortly",
+              "ok"
+            );
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 4000));
+          let st;
+          try {
+            st = await getJob(jobId);
+          } catch {
+            continue; // transient poll failure — keep the spinner, retry
+          }
+          if (st.status === "done") {
+            paintActivity(chip, "Video ready — added to your assets", "ok");
+            break;
+          }
+          if (st.status === "error") {
+            paintActivity(chip, st.error || "Video render failed", "error");
+            break;
+          }
+        }
+      } else {
+        paintActivity(
+          chip,
+          message ||
+            (isVideo
+              ? "Video queued — rendering in the background"
+              : "Image added to your assets"),
+          "ok"
+        );
+      }
+      scrollDown(true);
+    } catch (err) {
+      paintActivity(
+        chip,
+        (err as Error)?.message || "Generation failed",
+        "error"
+      );
+      scrollDown(true);
+    }
   }
   // Turn a FINAL assistant bubble's text into rich content: the host's real
   // <Markdown> when wired, else the built-in safe markdown→HTML, else plain.
@@ -2141,6 +2284,14 @@ export function createAiChatWidget(
     apply.addEventListener("click", async () => {
       apply.disabled = true;
       apply.textContent = "Applying…";
+      // Media generation gets a live process chip (running → ✓/✗, video polled)
+      // instead of a static "done" line — swap the card for the chip on click.
+      if (MEDIA_GEN_TOOLS.has(name)) {
+        disposePreview?.();
+        wrap.remove();
+        await applyMediaGen(name, args);
+        return;
+      }
       try {
         const msg = await opts.onApplyProposal!(name, args);
         disposePreview?.();
@@ -2168,6 +2319,11 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): Promise<void> {
+    // Media generation shows the same live process chip in the auto-save path.
+    if (MEDIA_GEN_TOOLS.has(name)) {
+      await applyMediaGen(name, args);
+      return;
+    }
     const line = el("div", `${PREFIX}-proposal-ok`);
     line.innerHTML =
       `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
@@ -3142,6 +3298,17 @@ function injectStyles(
 .${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
 .${PREFIX}-icon-on{background:#fff;color:${accent}}
 .${PREFIX}-icon-on:hover{background:#fff}
+.${PREFIX}-morewrap{position:relative;display:inline-flex}
+.${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;flex-direction:column;min-width:212px;padding:6px;background:#fff;color:#222;border:1px solid #e7e7e7;border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);animation:${PREFIX}-rise .14s ease}
+.${PREFIX}-menu::before{content:"";position:absolute;top:-5px;right:14px;width:10px;height:10px;background:#fff;border-left:1px solid #e7e7e7;border-top:1px solid #e7e7e7;transform:rotate(45deg)}
+.${PREFIX}-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;color:#333;border-radius:9px;padding:9px 10px;font-size:13px;font-weight:500;cursor:pointer;line-height:1.2}
+.${PREFIX}-menu-item:hover{background:${accent}12;color:${accent}}
+.${PREFIX}-menu-item:disabled{opacity:.5;cursor:default}
+.${PREFIX}-menu-ico{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:18px;height:18px;color:#666}
+.${PREFIX}-menu-item:hover .${PREFIX}-menu-ico,.${PREFIX}-menu-item-on .${PREFIX}-menu-ico{color:${accent}}
+.${PREFIX}-menu-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.${PREFIX}-menu-state{flex:0 0 auto;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9aa0a6;background:#f1f2f4;border-radius:999px;padding:2px 7px}
+.${PREFIX}-menu-item-on .${PREFIX}-menu-state{color:#fff;background:${accent}}
 .${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid ${accent}33;background:${accent}0f;color:${accent};border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
 .${PREFIX}-expanded .${PREFIX}-msg{max-width:75%}
@@ -3201,7 +3368,7 @@ function injectStyles(
 .${PREFIX}-confirm-q{font-size:13px;color:#333;margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid #ddd;background:#fff;color:#555;border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:${accent}26;color:#fff;border-color:${accent}80}.${PREFIX}-chip:hover{background:${accent}3a}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}.${PREFIX}-chip-other{background:transparent;color:#aaa;border-color:#444}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
+@media (prefers-color-scheme:dark){.${PREFIX}-panel{background:#161616;color:#eee}.${PREFIX}-log{background:#101010}.${PREFIX}-assistant{background:#1d1d1d;color:#eee;border-color:#2a2a2a}.${PREFIX}-form{background:#161616;border-top-color:#262626}.${PREFIX}-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-menu{background:#1d1d1d;color:#eee;border-color:#333}.${PREFIX}-menu::before{background:#1d1d1d;border-color:#333}.${PREFIX}-menu-item{color:#ddd}.${PREFIX}-menu-ico{color:#9b9b9b}.${PREFIX}-menu-state{background:#2c2c2c;color:#aaa}.${PREFIX}-history{background:#161616}.${PREFIX}-history-head{border-bottom-color:#262626}.${PREFIX}-history-back{background:#1d1d1d;border-color:#333;color:#ddd}.${PREFIX}-history-item{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-history-title{color:#eee}.${PREFIX}-widget{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-widget-stat,.${PREFIX}-kpi-v,.${PREFIX}-widget-table td{color:#eee}.${PREFIX}-kpi{background:#161616;border-color:#2a2a2a}.${PREFIX}-confirm-q{color:#ddd}.${PREFIX}-confirm-no{background:#1d1d1d;border-color:#333;color:#ccc}.${PREFIX}-meter{background:#161616}.${PREFIX}-meter-bar{background:#2c2c2c}.${PREFIX}-meter-row{color:#9b9b9b}.${PREFIX}-suggestions{background:#161616}.${PREFIX}-status{background:#161616;border-top-color:#262626}.${PREFIX}-status-credits{color:#bbb}.${PREFIX}-act-label{color:#ddd}.${PREFIX}-usage-pill{border-color:#2a2a2a}.${PREFIX}-proposal-summary{color:#bbb}.${PREFIX}-lead{background:#1d1d1d;border-color:#2a2a2a}.${PREFIX}-form-title{color:#eee}.${PREFIX}-lead-input{background:#101010;color:#eee;border-color:#333}.${PREFIX}-lead-input::placeholder{color:#888}.${PREFIX}-lead-input option{background:#1d1d1d;color:#eee}.${PREFIX}-replay-note{border-color:#333;background:#161616;color:#999}.${PREFIX}-chip{background:${accent}26;color:#fff;border-color:${accent}80}.${PREFIX}-chip:hover{background:${accent}3a}.${PREFIX}-chip-on,.${PREFIX}-chip-send{background:${accent};color:#fff;border-color:transparent}.${PREFIX}-chip-other{background:transparent;color:#aaa;border-color:#444}.${PREFIX}-proposal-media{border-color:#2a2a2a;background:#101010}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:${accent}88}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
