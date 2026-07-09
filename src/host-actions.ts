@@ -227,6 +227,27 @@ export const STANDARD_ACTIONS = [
   },
 ] as const;
 
+/**
+ * Account-relative path each named standard action opens. Single source of truth
+ * shared by `createHostActions` (which navigates the parent app there) and the
+ * widget's advanced view (which navigates the iframe there via `resolveActionPath`),
+ * so the two can't drift.
+ */
+export const STANDARD_ACTION_PATHS: Record<string, string> = {
+  "open-dashboards": "/dashboards",
+  "open-dashboard-builder": "/dashboards/new/edit",
+  "open-studio": "/studio",
+  "open-billing": "/billing",
+};
+
+/** Human confirmation text for each named standard action (post-navigation). */
+const STANDARD_ACTION_DONE: Record<string, string> = {
+  "open-dashboards": "Opened dashboards",
+  "open-dashboard-builder": "Opened the dashboard builder",
+  "open-studio": "Opened Studio",
+  "open-billing": "Opened billing",
+};
+
 export type HostActionHandler = (
   data: Record<string, string>
 ) => Promise<string | void> | string | void;
@@ -255,23 +276,16 @@ export function createHostActions(
         return "Opened";
       }
     },
-    "open-dashboards": () => {
-      cfg.navigate(`${base}/dashboards`);
-      return "Opened dashboards";
-    },
-    "open-dashboard-builder": () => {
-      cfg.navigate(`${base}/dashboards/new/edit`);
-      return "Opened the dashboard builder";
-    },
-    "open-studio": () => {
-      cfg.navigate(`${base}/studio`);
-      return "Opened Studio";
-    },
-    "open-billing": () => {
-      cfg.navigate(`${base}/billing`);
-      return "Opened billing";
-    },
   };
+  // The named "open-*" actions all resolve to a fixed account-relative path (see
+  // STANDARD_ACTION_PATHS) — generate their handlers so the paths live in ONE
+  // place the advanced-view resolver also reads.
+  for (const [name, path] of Object.entries(STANDARD_ACTION_PATHS)) {
+    standard[name] = () => {
+      cfg.navigate(`${base}${path}`);
+      return STANDARD_ACTION_DONE[name] ?? "Opened";
+    };
+  }
   const map: Record<string, HostActionHandler> = {
     ...standard,
     ...(cfg.handlers ?? {}),
