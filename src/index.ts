@@ -480,6 +480,12 @@ export interface AiChatWidgetOptions {
   regenerateLabel?: string;
   saveLabel?: string;
   cancelLabel?: string;
+  /** Translated copy for the widget's OWN chrome — header, More menu, composer,
+   *  status bar, activity chips, proposal cards, history panel, error state. The
+   *  widget is vanilla DOM and can't call i18next, so the host builds this from
+   *  its own t() via `resolveWidgetLabels(t)`. Any omitted key falls back to the
+   *  English default in WIDGET_LABELS — the widget never hardcodes visible copy. */
+  labels?: Partial<WidgetLabels>;
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
   signupUrl?: string;
@@ -530,6 +536,140 @@ export interface AiChatWidgetOptions {
     status: "queued" | "processing" | "done" | "error";
     error?: string | null;
   }>;
+}
+
+/**
+ * SINGLE SOURCE for every user-facing string baked into the vanilla-DOM widget,
+ * with its English default. The widget can't call i18next, so the host passes a
+ * translated `labels` bag (built by `resolveWidgetLabels`); the widget falls back
+ * to these English defaults for any missing key. A `{token}` in a value is filled
+ * at runtime by the widget (single-brace so a host's i18next leaves it intact).
+ */
+export const WIDGET_LABELS = {
+  // Header / bubble
+  openBubble: "Open {name}",
+  panelAria: "{name} chat",
+  newChat: "New chat",
+  pastConversations: "Past conversations",
+  history: "History",
+  moreOptions: "More options",
+  more: "More",
+  expandChat: "Expand chat",
+  expand: "Expand",
+  restore: "Restore",
+  closeChat: "Close chat",
+  conversation: "Conversation",
+  // "More" overflow menu
+  on: "On",
+  off: "Off",
+  downloadChat: "Download chat (.txt)",
+  autoSaveAssets: "Auto-save assets",
+  autoSaveOnHint: "Saves apply without asking each time",
+  autoSaveOffHint: "You confirm each save",
+  autoSaveOnMsg:
+    "Auto-save assets ON — I'll save into your library without asking each time.",
+  autoSaveOffMsg: "Auto-save assets OFF — I'll ask before each save.",
+  flagConversation: "Flag this conversation",
+  flagConversationHint: "Flag this conversation for review",
+  flagSendFirst: "Send a message first — then you can flag this chat.",
+  flagPrompt: "Flag this conversation — why? (reason is logged for review)",
+  flagged: "🚩 Conversation flagged for review ✓",
+  flagFailed: "Couldn't flag: {msg}",
+  flagFailedGeneric: "please try again",
+  notificationSound: "Notification sound",
+  soundOnHint: "Chime when a reply arrives — click to mute",
+  soundOffHint: "Muted — click to enable the reply chime",
+  autoNavigate: "Auto-navigate",
+  autoNavOnHint: "Copilot opens pages for you — click to turn off",
+  autoNavOffHint: "Copilot asks before opening pages — click to turn on",
+  // Status bar (Copilot role + credits)
+  roleTalk: "Talk",
+  roleAnalytics: "Analytics",
+  roleCreation: "Creation",
+  roleAutomation: "Automation",
+  creditsSuffix: " credits",
+  // Composer
+  askAnything: "Ask {name} anything…",
+  messageAria: "Message {name}",
+  send: "Send",
+  removeAttachment: "Remove {file}",
+  attachFile: "Attach a file",
+  attachFileHint: "Attach images, PDFs or documents",
+  // Media-generation activity chips
+  renderingVideo: "Rendering video…",
+  generatingImage: "Generating image…",
+  stillRendering: "Still rendering — it'll appear in your assets shortly",
+  videoReady: "Video ready — added to your assets",
+  videoFailed: "Video render failed",
+  videoQueued: "Video queued — rendering in the background",
+  imageAdded: "Image added to your assets",
+  generationFailed: "Generation failed",
+  // Proposal confirm cards
+  proposalUpdateCreation: "Apply this update to the creation?",
+  proposalAddCreation: "Add this creation to your studio?",
+  proposalAddStock: "Add this stock media to your assets?",
+  proposalAddImage: "Add this image to your assets?",
+  proposalGenImage: "Generate this image? (uses credits)",
+  proposalGenVideo: "Generate this video? (renders in the background)",
+  proposalEditAsset: "Apply this change to your assets?",
+  proposalSaveFile: "Save these changes to the file?",
+  proposalCreateFile: "Create this file in your library?",
+  proposalUpdateBrandProfile: "Update your brand profile?",
+  proposalEditBrand: "Update your brand?",
+  videoBadge: "▶ video",
+  apply: "Apply",
+  dismiss: "Dismiss",
+  applying: "Applying…",
+  applied: "Applied",
+  tryAgain: "Try again",
+  // History panel
+  close: "Close",
+  loading: "Loading…",
+  noConversations: "No past conversations yet.",
+  untitledConversation: "Untitled conversation",
+  star: "Star this conversation",
+  unstar: "Unstar",
+  historyLoadFailed: "Couldn't load history — try again.",
+  bucketToday: "Today",
+  bucketYesterday: "Yesterday",
+  bucketWeek: "Earlier this week",
+  bucketMonth: "This month",
+  bucketOlder: "Older",
+  // Lead form / preview / action chips
+  submit: "Submit",
+  sending: "Sending…",
+  done: "Done ✓",
+  preview: "Preview",
+  otherOption: "+ Other…",
+  confirm: "Confirm",
+  cancel: "Cancel",
+  // Error state
+  errorSnag: "{name} hit a snag and couldn't answer. Please try again.",
+  reportIssue: "Report issue",
+  reporting: "Reporting…",
+  reported: "Reported ✓ — our team will look into it",
+  reportFailed: "Couldn't report — try later",
+  // Signup CTA (anonymous surfaces)
+  signupCta: "Sign up — it's free to start",
+} as const;
+
+/** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */
+export type WidgetLabels = Record<keyof typeof WIDGET_LABELS, string>;
+
+/**
+ * Build the widget's `labels` bag from a host translator (react-i18next's `t`).
+ * Each label resolves the `chatWidget.<key>` locale key, defaulting to the
+ * English string in WIDGET_LABELS. Call once per (re-)mount so the widget picks
+ * up the active language.
+ */
+export function resolveWidgetLabels(
+  t: (key: string, defaultValue: string) => string
+): WidgetLabels {
+  const out = {} as WidgetLabels;
+  for (const k of Object.keys(WIDGET_LABELS) as (keyof WidgetLabels)[]) {
+    out[k] = t(`chatWidget.${k}`, WIDGET_LABELS[k]);
+  }
+  return out;
 }
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
@@ -837,6 +977,19 @@ export function createAiChatWidget(
   const side = opts.position === "bottom-left" ? "left" : "right";
   const root = opts.container ?? document.body;
   const name = opts.title ?? "Copilot";
+  // Resolve a widget-chrome label: host-provided translation (opts.labels) →
+  // English default (WIDGET_LABELS). `{token}` placeholders are filled from
+  // params so runtime values (name, filename, error) interpolate in any language.
+  const L = (
+    key: keyof WidgetLabels,
+    params?: Record<string, string | number>
+  ): string => {
+    let s: string = opts.labels?.[key] ?? WIDGET_LABELS[key];
+    if (params)
+      for (const p of Object.keys(params))
+        s = s.split(`{${p}}`).join(String(params[p]));
+    return s;
+  };
   // Avatar markup: the brand logo mark (img) when given, else a crescent glyph.
   const avatarInner = opts.avatarUrl
     ? `<img src="${opts.avatarUrl}" alt="${name}" class="${PREFIX}-av-img"/>`
@@ -945,12 +1098,12 @@ export function createAiChatWidget(
   injectStyles(accent, side, gradient);
 
   const bubble = el("button", `${PREFIX}-bubble`);
-  bubble.setAttribute("aria-label", `Open ${name}`);
+  bubble.setAttribute("aria-label", L("openBubble", { name }));
   bubble.innerHTML = `<span class="${PREFIX}-bubble-av">${avatarInner}</span>`;
   const panel = el("div", `${PREFIX}-panel`);
   panel.style.display = "none";
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", `${name} chat`);
+  panel.setAttribute("aria-label", L("panelAria", { name }));
 
   const header = el("div", `${PREFIX}-header`);
   const avatar = el("div", `${PREFIX}-avatar`);
@@ -964,8 +1117,8 @@ export function createAiChatWidget(
   const hActions = el("div", `${PREFIX}-hactions`);
   // New chat — start a fresh conversation (keeps the prior one in history).
   const newChatBtn = el("button", `${PREFIX}-icon`);
-  newChatBtn.setAttribute("aria-label", "New chat");
-  newChatBtn.title = "New chat";
+  newChatBtn.setAttribute("aria-label", L("newChat"));
+  newChatBtn.title = L("newChat");
   newChatBtn.innerHTML =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   hActions.appendChild(newChatBtn);
@@ -973,8 +1126,8 @@ export function createAiChatWidget(
   let historyBtn: HTMLElement | null = null;
   if (opts.listThreads) {
     historyBtn = el("button", `${PREFIX}-icon`);
-    historyBtn.setAttribute("aria-label", "Past conversations");
-    historyBtn.title = "History";
+    historyBtn.setAttribute("aria-label", L("pastConversations"));
+    historyBtn.title = L("history");
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
   }
@@ -987,10 +1140,10 @@ export function createAiChatWidget(
   // text label (+ an On/Off pill for toggles) — far clearer than bare icons.
   const moreWrap = el("div", `${PREFIX}-morewrap`);
   const moreBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
-  moreBtn.setAttribute("aria-label", "More options");
+  moreBtn.setAttribute("aria-label", L("moreOptions"));
   moreBtn.setAttribute("aria-haspopup", "menu");
   moreBtn.setAttribute("aria-expanded", "false");
-  moreBtn.title = "More";
+  moreBtn.title = L("more");
   moreBtn.innerHTML = ICON_MORE;
   const moreMenu = el("div", `${PREFIX}-menu`);
   moreMenu.setAttribute("role", "menu");
@@ -1039,14 +1192,14 @@ export function createAiChatWidget(
       btn,
       ico,
       setState: (on: boolean) => {
-        state.textContent = on ? "On" : "Off";
+        state.textContent = on ? L("on") : L("off");
         btn.classList.toggle(`${PREFIX}-menu-item-on`, on);
       },
     };
   };
 
   // Download — export the current conversation as a plain-text transcript.
-  const downloadItem = menuItem("Download chat (.txt)");
+  const downloadItem = menuItem(L("downloadChat"));
   downloadItem.ico.innerHTML = ICON_DOWNLOAD;
   downloadItem.btn.addEventListener("click", () => {
     setMenu(false);
@@ -1055,12 +1208,12 @@ export function createAiChatWidget(
   moreMenu.appendChild(downloadItem.btn);
   // Auto-save assets toggle — when ON, asset-save proposals apply without a
   // per-card confirm. Available to every role (persisted per account).
-  const autoSaveItem = menuItem("Auto-save assets");
+  const autoSaveItem = menuItem(L("autoSaveAssets"));
   autoSaveItem.ico.innerHTML = ICON_AUTOSAVE;
   const paintAutoSave = () => {
     autoSaveItem.btn.title = autoSaveAssets
-      ? "Saves apply without asking each time"
-      : "You confirm each save";
+      ? L("autoSaveOnHint")
+      : L("autoSaveOffHint");
     autoSaveItem.setState(autoSaveAssets);
   };
   paintAutoSave();
@@ -1073,42 +1226,37 @@ export function createAiChatWidget(
       /* storage blocked — session-only */
     }
     paintAutoSave();
-    flagNote(
-      autoSaveAssets
-        ? "Auto-save assets ON — I'll save into your library without asking each time."
-        : "Auto-save assets OFF — I'll ask before each save.",
-      true
-    );
+    flagNote(autoSaveAssets ? L("autoSaveOnMsg") : L("autoSaveOffMsg"), true);
   });
   moreMenu.appendChild(autoSaveItem.btn);
   // Flag — oversight control (agent/admin surfaces). Asks for a reason, then
   // hands it to the host's onFlag with the live thread id. Hidden when unwired.
   if (opts.onFlag) {
-    const flagItem = menuItem("Flag this conversation");
+    const flagItem = menuItem(L("flagConversation"));
     flagItem.ico.innerHTML = ICON_FLAG;
-    flagItem.btn.title = "Flag this conversation for review";
+    flagItem.btn.title = L("flagConversationHint");
     flagItem.btn.addEventListener("click", () => {
       setMenu(false);
       // A flag needs a live conversation (the thread id is created on the first
       // turn). Tell the user plainly instead of silently doing nothing.
       if (!threadId) {
-        flagNote("Send a message first — then you can flag this chat.", false);
+        flagNote(L("flagSendFirst"), false);
         return;
       }
-      const reason = window.prompt(
-        "Flag this conversation — why? (reason is logged for review)"
-      );
+      const reason = window.prompt(L("flagPrompt"));
       if (!reason || !reason.trim()) return;
       flagItem.btn.disabled = true;
       Promise.resolve(opts.onFlag!({ reason: reason.trim(), threadId }))
         .then(() => {
           // Visible confirmation — a tooltip change alone is invisible, so the
           // user couldn't tell the flag worked.
-          flagNote("🚩 Conversation flagged for review ✓", true);
+          flagNote(L("flagged"), true);
         })
         .catch((err) => {
           flagNote(
-            `Couldn't flag: ${(err as Error)?.message || "please try again"}`,
+            L("flagFailed", {
+              msg: (err as Error)?.message || L("flagFailedGeneric"),
+            }),
             false
           );
         })
@@ -1126,13 +1274,11 @@ export function createAiChatWidget(
   } catch {
     /* storage blocked */
   }
-  const soundItem = menuItem("Notification sound");
+  const soundItem = menuItem(L("notificationSound"));
   const syncSound = (): void => {
     soundItem.ico.innerHTML = soundOn ? ICON_BELL : ICON_BELL_OFF;
     soundItem.setState(soundOn);
-    soundItem.btn.title = soundOn
-      ? "Chime when a reply arrives — click to mute"
-      : "Muted — click to enable the reply chime";
+    soundItem.btn.title = soundOn ? L("soundOnHint") : L("soundOffHint");
   };
   syncSound();
   soundItem.btn.addEventListener("click", () => {
@@ -1186,13 +1332,13 @@ export function createAiChatWidget(
     /* storage blocked */
   }
   if (opts.autoNavOption) {
-    const autoNavItem = menuItem("Auto-navigate");
+    const autoNavItem = menuItem(L("autoNavigate"));
     autoNavItem.ico.innerHTML = ICON_COMPASS;
     const syncAutoNav = (): void => {
       autoNavItem.setState(autoNav);
       autoNavItem.btn.title = autoNav
-        ? "Copilot opens pages for you — click to turn off"
-        : "Copilot asks before opening pages — click to turn on";
+        ? L("autoNavOnHint")
+        : L("autoNavOffHint");
     };
     syncAutoNav();
     autoNavItem.btn.addEventListener("click", () => {
@@ -1214,8 +1360,8 @@ export function createAiChatWidget(
   const expandable = opts.expandable !== false;
   if (expandable) {
     expandBtn = el("button", `${PREFIX}-icon ${PREFIX}-expand`);
-    expandBtn.setAttribute("aria-label", "Expand chat");
-    expandBtn.title = "Expand";
+    expandBtn.setAttribute("aria-label", L("expandChat"));
+    expandBtn.title = L("expand");
     expandBtn.innerHTML = ICON_EXPAND;
     hActions.appendChild(expandBtn);
   }
@@ -1234,7 +1380,7 @@ export function createAiChatWidget(
   }
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
-  closeBtn.setAttribute("aria-label", "Close chat");
+  closeBtn.setAttribute("aria-label", L("closeChat"));
   hActions.appendChild(closeBtn);
   header.append(avatar, hName, hActions);
 
@@ -1243,7 +1389,7 @@ export function createAiChatWidget(
   // streamed replies to screen readers; tabindex makes it keyboard-scrollable.
   log.setAttribute("role", "log");
   log.setAttribute("aria-live", "polite");
-  log.setAttribute("aria-label", "Conversation");
+  log.setAttribute("aria-label", L("conversation"));
   log.setAttribute("tabindex", "0");
   // Rich-content lifecycle. Host-mounted React roots (markdown / data widgets)
   // hand back a disposer; we keep them so they can be unmounted when the log is
@@ -1337,7 +1483,7 @@ export function createAiChatWidget(
   ): Promise<void> {
     const isVideo = name === "generate_video";
     const chip = addActivityChip(
-      isVideo ? "Rendering video…" : "Generating image…",
+      isVideo ? L("renderingVideo") : L("generatingImage"),
       "running"
     );
     scrollDown(true);
@@ -1354,11 +1500,7 @@ export function createAiChatWidget(
         const MAX_MS = 10 * 60 * 1000; // stop babysitting a stuck render after 10m
         for (;;) {
           if (Date.now() - started >= MAX_MS) {
-            paintActivity(
-              chip,
-              "Still rendering — it'll appear in your assets shortly",
-              "ok"
-            );
+            paintActivity(chip, L("stillRendering"), "ok");
             break;
           }
           await new Promise((r) => setTimeout(r, 4000));
@@ -1369,21 +1511,18 @@ export function createAiChatWidget(
             continue; // transient poll failure — keep the spinner, retry
           }
           if (st.status === "done") {
-            paintActivity(chip, "Video ready — added to your assets", "ok");
+            paintActivity(chip, L("videoReady"), "ok");
             break;
           }
           if (st.status === "error") {
-            paintActivity(chip, st.error || "Video render failed", "error");
+            paintActivity(chip, st.error || L("videoFailed"), "error");
             break;
           }
         }
       } else {
         paintActivity(
           chip,
-          message ||
-            (isVideo
-              ? "Video queued — rendering in the background"
-              : "Image added to your assets"),
+          message || (isVideo ? L("videoQueued") : L("imageAdded")),
           "ok"
         );
       }
@@ -1391,7 +1530,7 @@ export function createAiChatWidget(
     } catch (err) {
       paintActivity(
         chip,
-        (err as Error)?.message || "Generation failed",
+        (err as Error)?.message || L("generationFailed"),
         "error"
       );
       scrollDown(true);
@@ -1741,10 +1880,10 @@ export function createAiChatWidget(
   // when a balance provider is wired (org + admin), independent of the visitor
   // token meter above.
   const ROLE_NAMES: Record<string, string> = {
-    talk: "Talk",
-    analytics: "Analytics",
-    creation: "Creation",
-    automation: "Automation",
+    talk: L("roleTalk"),
+    analytics: L("roleAnalytics"),
+    creation: L("roleCreation"),
+    automation: L("roleAutomation"),
   };
   // Which role an in-app ACTION belongs to, so the badge reflects the live task.
   const ACTION_ROLE: Record<string, string> = {
@@ -1776,7 +1915,7 @@ export function createAiChatWidget(
   statusCreditsEl.append(
     document.createTextNode("★ "),
     statusCreditsVal,
-    document.createTextNode(" credits")
+    document.createTextNode(L("creditsSuffix"))
   );
   statusEl.append(statusRoleEl, statusCreditsEl);
   let activeRole = "talk";
@@ -1867,15 +2006,15 @@ export function createAiChatWidget(
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
   const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
-  input.placeholder = `Ask ${name} anything…`;
-  input.setAttribute("aria-label", `Message ${name}`);
+  input.placeholder = L("askAnything", { name });
+  input.setAttribute("aria-label", L("messageAria", { name }));
   input.autocomplete = "off";
   // Restore an unsent draft from a prior session; keep it in sync as they type.
   input.value = loadDraft();
   input.addEventListener("input", () => saveDraft(input.value));
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
-  sendBtn.textContent = "Send";
+  sendBtn.textContent = L("send");
 
   // Attachments (authed surfaces only): a paperclip that opens a file picker,
   // uploads into the media library, and stages refs for the next turn.
@@ -1895,7 +2034,7 @@ export function createAiChatWidget(
       const x = el("button", `${PREFIX}-att-x`) as HTMLButtonElement;
       x.type = "button";
       x.textContent = "×";
-      x.setAttribute("aria-label", `Remove ${a.filename}`);
+      x.setAttribute("aria-label", L("removeAttachment", { file: a.filename }));
       x.addEventListener("click", () => {
         stagedAtts.splice(i, 1);
         renderStaged();
@@ -1974,8 +2113,8 @@ export function createAiChatWidget(
     attachBtn = el("button", `${PREFIX}-attach`) as HTMLButtonElement;
     attachBtn.type = "button";
     attachBtn.innerHTML = ICON_ATTACH;
-    attachBtn.setAttribute("aria-label", "Attach a file");
-    attachBtn.title = "Attach images, PDFs or documents";
+    attachBtn.setAttribute("aria-label", L("attachFile"));
+    attachBtn.title = L("attachFileHint");
     attachBtn.addEventListener("click", () => fileInput!.click());
     form.append(attachBtn, input, sendBtn, fileInput);
   } else {
@@ -2135,9 +2274,9 @@ export function createAiChatWidget(
       expandBtn!.innerHTML = expanded ? ICON_COLLAPSE : ICON_EXPAND;
       expandBtn!.setAttribute(
         "aria-label",
-        expanded ? "Restore chat size" : "Expand chat"
+        expanded ? "Restore chat size" : L("expandChat")
       );
-      expandBtn!.title = expanded ? "Restore" : "Expand";
+      expandBtn!.title = expanded ? L("restore") : L("expand");
       scrollDown(true);
     });
   }
@@ -2148,9 +2287,11 @@ export function createAiChatWidget(
   // actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
   // hit the app the user is watching — not the parent shell behind the overlay.
   let advanced = false;
+  let paneCollapsed = false;
   let transport: FrameTransport | null = null;
   let advFrame: HTMLIFrameElement | null = null;
   let frameUrlLabel: HTMLElement | null = null;
+  let collapseBtnEl: HTMLButtonElement | null = null;
   const advKey = opts.persistKey ? `ayca:adv:${opts.persistKey}` : "";
   const rememberAdvanced = (): void => {
     if (!advKey) return;
@@ -2181,8 +2322,18 @@ export function createAiChatWidget(
     setFrameUrlLabel(url);
   };
 
+  // Collapse the app pane to a thin strip (not display:none — the strip keeps the
+  // toggle visible so it can be re-expanded). Also refreshes the toggle's label.
   const setPaneCollapsed = (v: boolean): void => {
+    paneCollapsed = v;
     panel.classList.toggle(`${PREFIX}-pane-collapsed`, v);
+    if (collapseBtnEl) {
+      const label = v
+        ? opts.expandPaneLabel || "Show page"
+        : opts.collapsePaneLabel || "Hide page";
+      collapseBtnEl.setAttribute("aria-label", label);
+      collapseBtnEl.title = label;
+    }
   };
 
   const buildFrame = (): void => {
@@ -2199,7 +2350,10 @@ export function createAiChatWidget(
     );
     collapseBtn.title = opts.collapsePaneLabel || "Hide page";
     collapseBtn.innerHTML = ICON_CHEVRON_R;
-    collapseBtn.addEventListener("click", () => setPaneCollapsed(true));
+    collapseBtn.addEventListener("click", () =>
+      setPaneCollapsed(!paneCollapsed)
+    );
+    collapseBtnEl = collapseBtn;
     frameUrlLabel = el("div", `${PREFIX}-pane-url`);
     bar.append(collapseBtn, frameUrlLabel);
     const frame = el("iframe", `${PREFIX}-pane-frame`) as HTMLIFrameElement;
@@ -2219,6 +2373,7 @@ export function createAiChatWidget(
     transport = null;
     advFrame = null;
     frameUrlLabel = null;
+    collapseBtnEl = null;
     pane.innerHTML = "";
   };
 
@@ -2360,7 +2515,7 @@ export function createAiChatWidget(
     const a = document.createElement("a");
     a.className = `${PREFIX}-cta-btn`;
     a.href = opts.signupUrl;
-    a.textContent = "Sign up — it's free to start";
+    a.textContent = L("signupCta");
     wrap.appendChild(a);
     log.appendChild(wrap);
     scrollDown(true);
@@ -2391,13 +2546,13 @@ export function createAiChatWidget(
     if (!opts.listThreads) return;
     const overlay = el("div", `${PREFIX}-history`);
     const head = el("div", `${PREFIX}-history-head`);
-    head.textContent = "Past conversations";
+    head.textContent = L("pastConversations");
     const back = el("button", `${PREFIX}-history-back`);
-    back.textContent = "Close";
+    back.textContent = L("close");
     back.addEventListener("click", () => overlay.remove());
     head.appendChild(back);
     const listEl = el("div", `${PREFIX}-history-list`);
-    listEl.textContent = "Loading…";
+    listEl.textContent = L("loading");
     // Same defensive wheel handling as the log, so the past-conversations list
     // scrolls even on hosts that globally intercept wheel events.
     attachWheelScroll(listEl);
@@ -2407,7 +2562,7 @@ export function createAiChatWidget(
       const threads = await opts.listThreads();
       listEl.innerHTML = "";
       if (!threads.length) {
-        listEl.textContent = "No past conversations yet.";
+        listEl.textContent = L("noConversations");
         return;
       }
       let lastBucket = "";
@@ -2418,13 +2573,13 @@ export function createAiChatWidget(
           if (bucket !== lastBucket) {
             lastBucket = bucket;
             const sep = el("div", `${PREFIX}-history-sep`);
-            sep.textContent = bucket;
+            sep.textContent = L(bucket);
             listEl.appendChild(sep);
           }
         }
         const item = el("button", `${PREFIX}-history-item`);
         const ti = el("span", `${PREFIX}-history-title`);
-        ti.textContent = th.title || "Untitled conversation";
+        ti.textContent = th.title || L("untitledConversation");
         item.appendChild(ti);
         if (th.updatedAt) {
           const dt = el("span", `${PREFIX}-history-date`);
@@ -2438,7 +2593,7 @@ export function createAiChatWidget(
           const paint = () => {
             star.textContent = on ? "★" : "☆";
             star.style.color = on ? "#f59e0b" : "";
-            star.title = on ? "Unstar" : "Star this conversation";
+            star.title = on ? L("unstar") : L("star");
           };
           paint();
           star.addEventListener("click", (e) => {
@@ -2466,7 +2621,7 @@ export function createAiChatWidget(
         listEl.appendChild(item);
       }
     } catch {
-      listEl.textContent = "Couldn't load history — try again.";
+      listEl.textContent = L("historyLoadFailed");
     }
   }
   async function loadPastThread(
@@ -2581,7 +2736,7 @@ export function createAiChatWidget(
             required: true,
           },
         ],
-        submit: "Send",
+        submit: L("send"),
       });
     }
     return t;
@@ -2589,17 +2744,17 @@ export function createAiChatWidget(
 
   // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
   const PROPOSAL_LABELS: Record<string, string> = {
-    update_creation: "Apply this update to the creation?",
-    render_creation: "Add this creation to your studio?",
-    add_stock_to_assets: "Add this stock media to your assets?",
-    add_scraped_media: "Add this image to your assets?",
-    generate_image: "Generate this image? (uses credits)",
-    generate_video: "Generate this video? (renders in the background)",
-    organize_assets: "Apply this change to your assets?",
-    edit_asset: "Save these changes to the file?",
-    create_asset: "Create this file in your library?",
-    update_brand_profile: "Update your brand profile?",
-    edit_brand: "Update your brand?",
+    update_creation: L("proposalUpdateCreation"),
+    render_creation: L("proposalAddCreation"),
+    add_stock_to_assets: L("proposalAddStock"),
+    add_scraped_media: L("proposalAddImage"),
+    generate_image: L("proposalGenImage"),
+    generate_video: L("proposalGenVideo"),
+    organize_assets: L("proposalEditAsset"),
+    edit_asset: L("proposalSaveFile"),
+    create_asset: L("proposalCreateFile"),
+    update_brand_profile: L("proposalUpdateBrandProfile"),
+    edit_brand: L("proposalEditBrand"),
   };
   function proposalSummary(
     name: string,
@@ -2797,7 +2952,7 @@ export function createAiChatWidget(
             : "Stock preview";
         if (args.type === "video") {
           const badge = el("span", `${PREFIX}-proposal-media-badge`);
-          badge.textContent = "▶ video";
+          badge.textContent = L("videoBadge");
           const holder = el("div", `${PREFIX}-proposal-media-holder`);
           holder.append(img, badge);
           wrap.appendChild(holder);
@@ -2842,17 +2997,17 @@ export function createAiChatWidget(
     const row = el("div", `${PREFIX}-confirm-row`);
     const apply = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     apply.type = "button";
-    apply.textContent = "Apply";
+    apply.textContent = L("apply");
     const cancel = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
     cancel.type = "button";
-    cancel.textContent = "Dismiss";
+    cancel.textContent = L("dismiss");
     cancel.addEventListener("click", () => {
       disposePreview?.();
       wrap.remove();
     });
     apply.addEventListener("click", async () => {
       apply.disabled = true;
-      apply.textContent = "Applying…";
+      apply.textContent = L("applying");
       // Media generation gets a live process chip (running → ✓/✗, video polled)
       // instead of a static "done" line — swap the card for the chip on click.
       if (MEDIA_GEN_TOOLS.has(name)) {
@@ -2868,11 +3023,11 @@ export function createAiChatWidget(
         const ok = el("div", `${PREFIX}-proposal-ok`);
         ok.innerHTML =
           `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
-          `<span>${escapeHtml((typeof msg === "string" && msg) || "Applied")}</span>`;
+          `<span>${escapeHtml((typeof msg === "string" && msg) || L("applied"))}</span>`;
         wrap.appendChild(ok);
       } catch {
         apply.disabled = false;
-        apply.textContent = "Try again";
+        apply.textContent = L("tryAgain");
       }
     });
     row.append(apply, cancel);
@@ -3205,7 +3360,7 @@ export function createAiChatWidget(
     }
     const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
     submit.type = "submit";
-    submit.textContent = spec.submit ?? "Submit";
+    submit.textContent = spec.submit ?? L("submit");
     f.appendChild(submit);
     wrap.appendChild(f);
     log.appendChild(wrap);
@@ -3220,7 +3375,7 @@ export function createAiChatWidget(
       )
         return;
       submit.disabled = true;
-      submit.textContent = "Sending…";
+      submit.textContent = L("sending");
       try {
         let msg: string | void = undefined;
         if (opts.onWidgetAction) {
@@ -3233,11 +3388,11 @@ export function createAiChatWidget(
         }
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-lead-ok`);
-        ok.textContent = (typeof msg === "string" && msg) || "Done ✓";
+        ok.textContent = (typeof msg === "string" && msg) || L("done");
         wrap.appendChild(ok);
       } catch {
         submit.disabled = false;
-        submit.textContent = "Try again";
+        submit.textContent = L("tryAgain");
       }
     });
   }
@@ -3459,7 +3614,7 @@ export function createAiChatWidget(
         `${PREFIX}-chip ${PREFIX}-chip-other`
       ) as HTMLButtonElement;
       other.type = "button";
-      other.textContent = "+ Other…";
+      other.textContent = L("otherOption");
       other.addEventListener("click", () => input.focus());
       wrap.appendChild(other);
     }
@@ -3470,7 +3625,7 @@ export function createAiChatWidget(
         `${PREFIX}-chip ${PREFIX}-chip-send`
       ) as HTMLButtonElement;
       go.type = "button";
-      go.textContent = "Send";
+      go.textContent = L("send");
       go.addEventListener("click", () => {
         const picks = options.filter((o) => chosen.has(o));
         if (picks.length) answer(picks.join(", "));
@@ -3490,11 +3645,11 @@ export function createAiChatWidget(
     const dots = el("span", `${PREFIX}-preview-dots`);
     dots.innerHTML = `<i></i><i></i><i></i>`;
     const title = el("span", `${PREFIX}-preview-title`);
-    title.textContent = spec.title || "Preview";
+    title.textContent = spec.title || L("preview");
     bar.append(dots, title);
     const frame = el("iframe", `${PREFIX}-preview-frame`) as HTMLIFrameElement;
     frame.setAttribute("sandbox", "");
-    frame.setAttribute("title", spec.title || "Preview");
+    frame.setAttribute("title", spec.title || L("preview"));
     frame.srcdoc = wrapPreviewHtml(spec.html);
     wrap.append(bar, frame);
     log.appendChild(wrap);
@@ -3572,10 +3727,10 @@ export function createAiChatWidget(
         const row = el("div", `${PREFIX}-confirm-row`);
         const yes = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
         yes.type = "button";
-        yes.textContent = "Confirm";
+        yes.textContent = L("confirm");
         const no = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
         no.type = "button";
-        no.textContent = "Cancel";
+        no.textContent = L("cancel");
         yes.addEventListener("click", () => {
           wrap.innerHTML = "";
           wrap.appendChild(btn);
@@ -3599,14 +3754,14 @@ export function createAiChatWidget(
   function showError(raw: string): void {
     const wrap = el("div", `${PREFIX}-error`);
     const txt = el("div", `${PREFIX}-error-text`);
-    txt.textContent = `${name} hit a snag and couldn't answer. Please try again.`;
+    txt.textContent = L("errorSnag", { name });
     const detail = el("div", `${PREFIX}-error-detail`);
     detail.textContent = raw;
     const actions = el("div", `${PREFIX}-error-actions`);
 
     const retry = el("button", `${PREFIX}-error-btn ${PREFIX}-error-retry`);
     retry.setAttribute("type", "button");
-    retry.textContent = "Try again";
+    retry.textContent = L("tryAgain");
     retry.addEventListener("click", () => {
       wrap.remove();
       if (lastUserContent) void send(lastUserContent);
@@ -3616,19 +3771,19 @@ export function createAiChatWidget(
     if (opts.onReportIssue) {
       const report = el("button", `${PREFIX}-error-btn`);
       report.setAttribute("type", "button");
-      report.textContent = "Report issue";
+      report.textContent = L("reportIssue");
       report.addEventListener("click", async () => {
         (report as HTMLButtonElement).disabled = true;
-        report.textContent = "Reporting…";
+        report.textContent = L("reporting");
         try {
           await opts.onReportIssue!({
             error: raw,
             lastUserMessage: lastUserContent,
             threadId,
           });
-          report.textContent = "Reported ✓ — our team will look into it";
+          report.textContent = L("reported");
         } catch {
-          report.textContent = "Couldn't report — try later";
+          report.textContent = L("reportFailed");
           (report as HTMLButtonElement).disabled = false;
         }
       });
@@ -3677,9 +3832,18 @@ function el(tag: string, cls: string): HTMLElement {
 }
 
 /** Coarse "when" bucket for grouping past conversations (Today / Yesterday / …). */
-function relBucket(iso: string): string {
+/** Relative-time group for a timestamp — returns a WIDGET_LABELS key so the
+ *  caller resolves the localized separator text via L(). */
+function relBucket(
+  iso: string
+):
+  | "bucketToday"
+  | "bucketYesterday"
+  | "bucketWeek"
+  | "bucketMonth"
+  | "bucketOlder" {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "Older";
+  if (isNaN(d.getTime())) return "bucketOlder";
   const now = new Date();
   const startToday = new Date(
     now.getFullYear(),
@@ -3688,11 +3852,11 @@ function relBucket(iso: string): string {
   ).getTime();
   const day = 86_400_000;
   const t = d.getTime();
-  if (t >= startToday) return "Today";
-  if (t >= startToday - day) return "Yesterday";
-  if (t >= startToday - 6 * day) return "Earlier this week";
-  if (t >= startToday - 29 * day) return "This month";
-  return "Older";
+  if (t >= startToday) return "bucketToday";
+  if (t >= startToday - day) return "bucketYesterday";
+  if (t >= startToday - 6 * day) return "bucketWeek";
+  if (t >= startToday - 29 * day) return "bucketMonth";
+  return "bucketOlder";
 }
 
 /** Short relative label, e.g. "3h ago", "2w ago" — falls back to a date. */
@@ -3941,9 +4105,14 @@ function injectStyles(
 .${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 384px;max-width:52%;border-right:1px solid #ececec}
 .${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
 .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;max-width:none;border-right:0}
-.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{display:none}
+/* Collapsed: the pane shrinks to a thin strip that still shows the toggle (so it
+   can be re-opened), and its url + iframe hide. */
+.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{flex:0 0 40px;min-height:0}
+.${PREFIX}-pane-collapsed .${PREFIX}-pane-frame{display:none}
+.${PREFIX}-pane-collapsed .${PREFIX}-pane-url{display:none}
+.${PREFIX}-pane-collapsed .${PREFIX}-pane-bar{padding:6px 5px}
+.${PREFIX}-pane-collapsed .${PREFIX}-pane-collapse{transform:rotate(180deg)}
 .${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #eee;background:#f7f7f8;flex:0 0 auto}
-.${PREFIX}-pane-collapse{transform:rotate(180deg)}
 .${PREFIX}-pane-url{font-size:11.5px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:0;background:#fff;min-height:0}
 /* Narrow: stack the app pane on top and the chat (with composer) below. */
