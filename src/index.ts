@@ -458,6 +458,9 @@ export interface AiChatWidgetOptions {
   exitAdvancedLabel?: string;
   collapsePaneLabel?: string;
   expandPaneLabel?: string;
+  /** Labels for the advanced-view fullscreen toggle (edge-to-edge on/off). */
+  fullscreenLabel?: string;
+  exitFullscreenLabel?: string;
   /**
    * Past-conversation history. When provided, a history control appears in the
    * header; opening it lists the user's prior threads. Picking one calls
@@ -960,6 +963,10 @@ const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none
 // Advanced view: a panel split into a sidebar + main area (Copilot ⇆ live app).
 const ICON_ADVANCED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="4" x2="10" y2="20"/></svg>`;
 const ICON_CHEVRON_R = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
+// Fullscreen — corners pushing OUT (enter) / pulling IN (exit). Toggles the
+// advanced view between its inset floating window and true edge-to-edge.
+const ICON_FULLSCREEN = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+const ICON_FULLSCREEN_EXIT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
 // Download — export the current conversation as a .txt transcript.
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 // Flag — agent/admin oversight: flag the current conversation with a reason.
@@ -1391,6 +1398,23 @@ export function createAiChatWidget(
     advancedBtn.title = opts.advancedLabel || "Advanced view";
     advancedBtn.innerHTML = ICON_ADVANCED;
     hActions.appendChild(advancedBtn);
+  }
+  // Fullscreen toggle — only meaningful inside advanced view, so it's created
+  // alongside the advanced button and hidden by CSS until advanced is active.
+  let fullscreenBtn: HTMLButtonElement | null = null;
+  if (opts.getAdvancedUrl) {
+    fullscreenBtn = el(
+      "button",
+      `${PREFIX}-icon ${PREFIX}-fullbtn`
+    ) as HTMLButtonElement;
+    fullscreenBtn.type = "button";
+    fullscreenBtn.setAttribute(
+      "aria-label",
+      opts.fullscreenLabel || "Fullscreen"
+    );
+    fullscreenBtn.title = opts.fullscreenLabel || "Fullscreen";
+    fullscreenBtn.innerHTML = ICON_FULLSCREEN;
+    hActions.appendChild(fullscreenBtn);
   }
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
@@ -2309,6 +2333,7 @@ export function createAiChatWidget(
   // actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
   // hit the app the user is watching — not the parent shell behind the overlay.
   let advanced = false;
+  let advancedFull = false;
   let paneCollapsed = false;
   let transport: FrameTransport | null = null;
   let advFrame: HTMLIFrameElement | null = null;
@@ -2413,6 +2438,28 @@ export function createAiChatWidget(
     advancedBtn.title = label;
   };
 
+  // Fullscreen — grow advanced view from its inset floating window to true
+  // edge-to-edge (the `-advanced-full` class drops the max-width + margins +
+  // radius). Only reachable while advanced; resets when advanced closes.
+  const setAdvancedFull = (v: boolean): void => {
+    advancedFull = v;
+    panel.classList.toggle(`${PREFIX}-advanced-full`, v);
+    if (fullscreenBtn) {
+      const label = v
+        ? opts.exitFullscreenLabel || "Exit fullscreen"
+        : opts.fullscreenLabel || "Fullscreen";
+      fullscreenBtn.innerHTML = v ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN;
+      fullscreenBtn.classList.toggle(`${PREFIX}-icon-on`, v);
+      fullscreenBtn.setAttribute("aria-label", label);
+      fullscreenBtn.title = label;
+    }
+  };
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", () =>
+      setAdvancedFull(!advancedFull)
+    );
+  }
+
   const openAdvanced = (): void => {
     if (advanced || !opts.getAdvancedUrl) return;
     advanced = true;
@@ -2432,6 +2479,7 @@ export function createAiChatWidget(
   const closeAdvanced = (): void => {
     if (!advanced) return;
     advanced = false;
+    if (advancedFull) setAdvancedFull(false);
     panel.classList.remove(`${PREFIX}-advanced`, `${PREFIX}-pane-collapsed`);
     teardownFrame();
     updateAdvancedBtn();
@@ -4129,7 +4177,13 @@ function injectStyles(
 /* Advanced view IS the wide view (owns the screen), so the plain "wide" toggle
    is redundant here — hide it and leave advanced/exit + close. */
 .${PREFIX}-advanced .${PREFIX}-expand{display:none}
+/* Fullscreen toggle only makes sense in advanced view — hidden otherwise. */
+.${PREFIX}-fullbtn{display:none}
+.${PREFIX}-advanced .${PREFIX}-fullbtn{display:flex}
 .${PREFIX}-advanced{width:calc(100vw - 40px);max-width:1240px;height:calc(100vh - 40px);flex-direction:row;align-items:stretch}
+/* Fullscreen: drop the inset margins, width cap and radius so advanced view
+   fills the whole viewport edge-to-edge. Two classes → wins over .advanced. */
+.${PREFIX}-advanced.${PREFIX}-advanced-full{inset:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;border-radius:0}
 .${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 400px;min-width:320px;max-width:52%;border-right:1px solid #ececec}
 .${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
 .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0}
