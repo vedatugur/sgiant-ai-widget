@@ -632,6 +632,7 @@ export const WIDGET_LABELS = {
   proposalSaveFile: "Save these changes to the file?",
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
+  proposalSaveArtifact: "Save this to your asset library?",
   proposalUpdateBrandProfile: "Update your brand profile?",
   proposalEditBrand: "Update your brand?",
   videoBadge: "▶ video",
@@ -1054,6 +1055,9 @@ export function createAiChatWidget(
     "create_asset",
     "generate_image",
     "generate_video",
+    // Promoting a session artifact into the library is exactly the additive
+    // asset-save class this toggle covers.
+    "save_artifact_to_assets",
   ]);
   let autoSaveAssets = false;
   try {
@@ -2828,6 +2832,7 @@ export function createAiChatWidget(
     edit_asset: L("proposalSaveFile"),
     create_asset: L("proposalCreateFile"),
     share_asset: L("proposalShareAsset"),
+    save_artifact_to_assets: L("proposalSaveArtifact"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
     edit_brand: L("proposalEditBrand"),
   };
@@ -2909,6 +2914,13 @@ export function createAiChatWidget(
       return `Replace the file contents (${lines} line${
         lines === 1 ? "" : "s"
       }):\n${preview}${content.length > 220 ? "…" : ""}`;
+    }
+    if (name === "save_artifact_to_assets") {
+      const dest =
+        (typeof args.folderName === "string" && args.folderName) ||
+        (typeof args.folderId === "string" && "the selected folder") ||
+        "";
+      return dest ? `Save to library → ${dest}` : "Save to library";
     }
     if (name === "share_asset") {
       if (String(args.action ?? "create") === "revoke")
@@ -3104,7 +3116,14 @@ export function createAiChatWidget(
         return;
       }
       try {
-        const msg = await opts.onApplyProposal!(name, args);
+        // Carry the originating thread on EVERY apply — session-scoped asset
+        // writes (scraped imports, generations) use it to keep chat debris
+        // out of the library until explicitly saved. Tools that don't care
+        // simply ignore the extra key.
+        const msg = await opts.onApplyProposal!(
+          name,
+          threadId ? { ...args, threadId } : args
+        );
         disposePreview?.();
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-proposal-ok`);
@@ -3142,7 +3161,10 @@ export function createAiChatWidget(
     log.appendChild(line);
     scrollDown(true);
     try {
-      const msg = await opts.onApplyProposal!(name, args);
+      const msg = await opts.onApplyProposal!(
+        name,
+        threadId ? { ...args, threadId } : args
+      );
       line.innerHTML =
         `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
         `<span>${escapeHtml((typeof msg === "string" && msg) || "Saved")}</span>`;
