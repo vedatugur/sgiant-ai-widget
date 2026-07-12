@@ -631,6 +631,7 @@ export const WIDGET_LABELS = {
   proposalEditAsset: "Apply this change to your assets?",
   proposalSaveFile: "Save these changes to the file?",
   proposalCreateFile: "Create this file in your library?",
+  proposalShareAsset: "Create a public share link?",
   proposalUpdateBrandProfile: "Update your brand profile?",
   proposalEditBrand: "Update your brand?",
   videoBadge: "▶ video",
@@ -2826,6 +2827,7 @@ export function createAiChatWidget(
     organize_assets: L("proposalEditAsset"),
     edit_asset: L("proposalSaveFile"),
     create_asset: L("proposalCreateFile"),
+    share_asset: L("proposalShareAsset"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
     edit_brand: L("proposalEditBrand"),
   };
@@ -2907,6 +2909,18 @@ export function createAiChatWidget(
       return `Replace the file contents (${lines} line${
         lines === 1 ? "" : "s"
       }):\n${preview}${content.length > 220 ? "…" : ""}`;
+    }
+    if (name === "share_asset") {
+      if (String(args.action ?? "create") === "revoke")
+        return "Revoke the share link";
+      const what =
+        args.targetKind === "folder" ? "the folder" : "the selected file";
+      const parts = [`Share ${what} publicly`];
+      if (typeof args.password === "string" && args.password)
+        parts.push("password-protected");
+      if (typeof args.expiresInDays === "number" && args.expiresInDays > 0)
+        parts.push(`expires in ${args.expiresInDays}d`);
+      return parts.join(" · ");
     }
     if (name === "create_asset") {
       const filename =

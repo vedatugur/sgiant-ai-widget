@@ -30,6 +30,7 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   organize_assets: ["assets"],
   edit_asset: ["assets"],
   create_asset: ["assets"],
+  share_asset: ["assets"],
   update_brand_profile: ["brand", "creations"],
   edit_brand: ["brand", "creations"],
 };
