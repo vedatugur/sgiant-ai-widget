@@ -3245,6 +3245,9 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): Promise<void> {
+    // Auto-save means what it says: the result lands in the LIBRARY
+    // (origin=user), not as a session artifact — the api honors this flag.
+    args = { ...args, saveToLibrary: true };
     // Media generation shows the same live process chip in the auto-save path.
     if (MEDIA_GEN_TOOLS.has(name)) {
       await applyMediaGen(name, args);
