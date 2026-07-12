@@ -552,6 +552,17 @@ export interface AiChatWidgetOptions {
     status: "queued" | "processing" | "done" | "error";
     error?: string | null;
   }>;
+  /** This thread's UNSAVED session artifacts (media generated/scraped in the
+   *  conversation, hidden from the library until saved) — drives the artifact
+   *  strip above the composer. Omit on hosts without asset storage. */
+  listSessionArtifacts?: (threadId: string) => Promise<
+    {
+      id: string;
+      filename: string;
+      contentType: string;
+      label?: string | null;
+    }[]
+  >;
 }
 
 /**
@@ -633,6 +644,9 @@ export const WIDGET_LABELS = {
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
   proposalSaveArtifact: "Save this to your asset library?",
+  artifactsTitle: "This chat's files:",
+  artifactSave: "Save",
+  artifactSaving: "Saving…",
   proposalUpdateBrandProfile: "Update your brand profile?",
   proposalEditBrand: "Update your brand?",
   videoBadge: "▶ video",
@@ -2059,6 +2073,77 @@ export function createAiChatWidget(
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
 
+  // Session artifacts — media generated/scraped in THIS conversation, hidden
+  // from the library until saved. A slim chip strip above the composer with a
+  // per-item Save action (promotes via save_artifact_to_assets). Best-effort:
+  // hosts without the lister never see it.
+  const artifactsEl = el("div", `${PREFIX}-artifacts`);
+  artifactsEl.style.display = "none";
+  let savingArtifact = false;
+  async function refreshArtifacts(): Promise<void> {
+    if (!opts.listSessionArtifacts || !threadId) {
+      artifactsEl.style.display = "none";
+      artifactsEl.innerHTML = "";
+      return;
+    }
+    let items: {
+      id: string;
+      filename: string;
+      contentType: string;
+      label?: string | null;
+    }[] = [];
+    try {
+      items = await opts.listSessionArtifacts(threadId);
+    } catch {
+      return; // strip is best-effort
+    }
+    artifactsEl.innerHTML = "";
+    if (!items.length) {
+      artifactsEl.style.display = "none";
+      return;
+    }
+    artifactsEl.style.display = "flex";
+    const title = el("span", `${PREFIX}-artifacts-title`);
+    title.textContent = L("artifactsTitle");
+    artifactsEl.appendChild(title);
+    for (const a of items) {
+      const chip = el("span", `${PREFIX}-artifact`);
+      const label = el("span", `${PREFIX}-artifact-name`);
+      label.textContent = a.label || a.filename;
+      label.title = a.filename;
+      chip.appendChild(label);
+      if (opts.onApplyProposal) {
+        const save = el(
+          "button",
+          `${PREFIX}-artifact-save`
+        ) as HTMLButtonElement;
+        save.type = "button";
+        save.textContent = L("artifactSave");
+        save.addEventListener("click", async () => {
+          if (savingArtifact) return;
+          savingArtifact = true;
+          save.textContent = L("artifactSaving");
+          save.disabled = true;
+          try {
+            await opts.onApplyProposal!("save_artifact_to_assets", {
+              mediaId: a.id,
+            });
+            chip.remove();
+            if (!artifactsEl.querySelector(`.${PREFIX}-artifact`))
+              artifactsEl.style.display = "none";
+          } catch {
+            save.textContent = L("tryAgain");
+            save.disabled = false;
+          } finally {
+            savingArtifact = false;
+          }
+        });
+        chip.appendChild(save);
+      }
+      artifactsEl.appendChild(chip);
+    }
+  }
+
   // Attachments (authed surfaces only): a paperclip that opens a file picker,
   // uploads into the media library, and stages refs for the next turn.
   const stagedAtts: WidgetAtt[] = [];
@@ -2167,7 +2252,16 @@ export function createAiChatWidget(
   // The chat lives in its own column so advanced view can lay a drivable app
   // pane beside it. In normal mode `chatCol` fills the panel; `pane` is hidden.
   const chatCol = el("div", `${PREFIX}-chatcol`);
-  chatCol.append(header, log, meterEl, statusEl, suggestionsEl, attBar, form);
+  chatCol.append(
+    header,
+    log,
+    meterEl,
+    statusEl,
+    suggestionsEl,
+    artifactsEl,
+    attBar,
+    form
+  );
   const pane = el("div", `${PREFIX}-pane`);
   panel.append(chatCol, pane);
   renderStatus();
@@ -2191,6 +2285,7 @@ export function createAiChatWidget(
     log.innerHTML = "";
     if (opts.greeting) addAssistantMessage(opts.greeting);
     void renderSuggestions();
+    void refreshArtifacts();
   };
 
   const open = (prefill?: unknown, forceNew?: boolean): void => {
@@ -2714,6 +2809,7 @@ export function createAiChatWidget(
       renderThreadItems(items);
       threadId = id;
       saveState();
+      void refreshArtifacts();
       overlay.remove();
     } catch {
       overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
@@ -3386,6 +3482,8 @@ export function createAiChatWidget(
       input.focus();
       // A turn just consumed credits — refresh the remaining-credits readout.
       void refreshBalance();
+      // A generation/import may have just landed — refresh the artifact strip.
+      void refreshArtifacts();
     }
 
     // Clear the typing indicator + render the FINAL text segment (with
@@ -4159,6 +4257,12 @@ function injectStyles(
 .${PREFIX}-attach:hover{border-color:${accent};color:${accent}}
 .${PREFIX}-attach:disabled{opacity:.5;cursor:default}
 .${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:#fff}
+.${PREFIX}-artifacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 10px 0;background:#fff}
+.${PREFIX}-artifacts-title{font-size:11px;font-weight:600;color:#888}
+.${PREFIX}-artifact{display:inline-flex;align-items:center;gap:6px;max-width:200px;border:1px solid #e2e2e2;background:#f7f7f8;border-radius:9px;padding:3px 8px;font-size:11px;color:#333;white-space:nowrap}
+.${PREFIX}-artifact-name{overflow:hidden;text-overflow:ellipsis;max-width:130px}
+.${PREFIX}-artifact-save{border:none;background:transparent;color:#0b6cff;font-size:11px;font-weight:600;cursor:pointer;padding:0}
+.${PREFIX}-artifact-save:disabled{color:#999;cursor:default}
 .${PREFIX}-att{display:inline-flex;align-items:center;gap:5px;max-width:180px;border:1px solid #e2e2e2;background:#f7f7f8;border-radius:9px;padding:3px 8px;font-size:12px;color:#333;white-space:nowrap}
 .${PREFIX}-att>span{overflow:hidden;text-overflow:ellipsis}
 .${PREFIX}-atts{display:flex;flex-wrap:wrap;gap:6px;max-width:92%}
