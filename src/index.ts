@@ -980,6 +980,9 @@ interface StreamFrame {
   used?: number;
   remaining?: number;
   exhausted?: boolean;
+  /** meta frame — staff-only "model" chip: which model/agent runs the turn. */
+  isStaff?: boolean;
+  modelLabel?: string;
 }
 
 const PREFIX = "sgiant-aiw";
@@ -1218,7 +1221,12 @@ export function createAiChatWidget(
   titleEl.textContent = name;
   const subEl = el("span", `${PREFIX}-sub`);
   subEl.textContent = opts.subtitle ?? "Growth assistant";
-  hName.append(titleEl, subEl);
+  // Staff-only "model" chip — set from the server `meta` frame (which model/agent
+  // runs the turn). Hidden until a staff turn reports it, so customers never see
+  // a model id (isStaff is server-authoritative).
+  const metaChip = el("span", `${PREFIX}-metachip`);
+  metaChip.hidden = true;
+  hName.append(titleEl, subEl, metaChip);
   const hActions = el("div", `${PREFIX}-hactions`);
   // New chat — start a fresh conversation (keeps the prior one in history).
   const newChatBtn = el("button", `${PREFIX}-icon`);
@@ -3646,6 +3654,10 @@ export function createAiChatWidget(
                 quotaRemaining = Math.max(0, quotaRemaining - turn);
               renderMeter();
             }
+            if (frame.type === "meta" && frame.isStaff && frame.modelLabel) {
+              metaChip.textContent = frame.modelLabel;
+              metaChip.hidden = false;
+            }
             if (frame.type === "error" && frame.message)
               failure = frame.message;
           }
@@ -4391,6 +4403,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
 .${PREFIX}-sub{font-size:11px;opacity:.85}
+.${PREFIX}-metachip{align-self:flex-start;margin-top:3px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.22);color:var(--aiw-accent-contrast);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .${PREFIX}-close{background:rgba(255,255,255,.15);border:none;color:var(--aiw-accent-contrast);font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
 .${PREFIX}-log{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--aiw-bg);scrollbar-width:thin}
 .${PREFIX}-log:focus-visible{outline:none}
