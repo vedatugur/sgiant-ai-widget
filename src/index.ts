@@ -648,7 +648,6 @@ export const WIDGET_LABELS = {
   roleTalk: "Talk",
   roleAnalytics: "Analytics",
   roleCreation: "Creation",
-  roleAutomation: "Automation",
   creditsSuffix: " credits",
   // Composer
   askAnything: "Ask {name} anything…",
@@ -2024,7 +2023,6 @@ export function createAiChatWidget(
     talk: L("roleTalk"),
     analytics: L("roleAnalytics"),
     creation: L("roleCreation"),
-    automation: L("roleAutomation"),
   };
   // Which role an in-app ACTION belongs to, so the badge reflects the live task.
   const ACTION_ROLE: Record<string, string> = {
