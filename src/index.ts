@@ -495,6 +495,9 @@ export interface AiChatWidgetOptions {
   /** Labels for the advanced-view fullscreen toggle (edge-to-edge on/off). */
   fullscreenLabel?: string;
   exitFullscreenLabel?: string;
+  /** Label for the draggable chat⇆app divider (advanced view; drag to resize,
+   *  double-click to reset). Width persists to localStorage per host. */
+  resizeLabel?: string;
   /**
    * Past-conversation history. When provided, a history control appears in the
    * header; opening it lists the user's prior threads. Picking one calls
@@ -1862,7 +1865,7 @@ export function createAiChatWidget(
       btn.type = "button";
       const label = opts.editLabel ?? "Edit";
       btn.setAttribute("aria-label", label);
-      btn.innerHTML = ICON_EDIT;
+      btn.innerHTML = `${ICON_EDIT}<span>${escapeHtml(label)}</span>`;
       btn.addEventListener("click", () => {
         const nodes: HTMLElement[] = [];
         for (let n: ChildNode | null = anchor; n; n = n.nextSibling) {
@@ -2642,11 +2645,81 @@ export function createAiChatWidget(
     );
   }
 
+  // Draggable divider between the chat column and the app pane (advanced view).
+  // Drag to resize; the width persists per host so it survives reloads; a
+  // double-click resets to the default. Only active in advanced, non-collapsed.
+  const advWidthKey = opts.persistKey ? `ayca:advw:${opts.persistKey}` : "";
+  const resizer = el("div", `${PREFIX}-resizer`);
+  resizer.setAttribute("role", "separator");
+  resizer.setAttribute("aria-orientation", "vertical");
+  const resizeLabel = opts.resizeLabel || "Resize panels";
+  resizer.setAttribute("aria-label", resizeLabel);
+  resizer.title = resizeLabel;
+  panel.insertBefore(resizer, pane);
+
+  const clampChatWidth = (px: number): number => {
+    const total = panel.getBoundingClientRect().width || 900;
+    const max = Math.max(360, total - 360); // keep the app pane usable
+    return Math.round(Math.min(Math.max(px, 320), max));
+  };
+  const setChatWidth = (px: number, persist: boolean): void => {
+    const w = clampChatWidth(px);
+    panel.style.setProperty("--aiw-chatw", `${w}px`);
+    if (persist && advWidthKey) {
+      try {
+        localStorage.setItem(advWidthKey, String(w));
+      } catch {
+        /* storage blocked */
+      }
+    }
+  };
+  const restoreChatWidth = (): void => {
+    if (!advWidthKey) return;
+    try {
+      const raw = localStorage.getItem(advWidthKey);
+      if (raw) setChatWidth(parseInt(raw, 10), false);
+    } catch {
+      /* storage blocked */
+    }
+  };
+  let resizing = false;
+  const onResizeMove = (e: PointerEvent): void => {
+    if (!resizing) return;
+    setChatWidth(e.clientX - panel.getBoundingClientRect().left, true);
+  };
+  const stopResize = (): void => {
+    if (!resizing) return;
+    resizing = false;
+    panel.classList.remove(`${PREFIX}-resizing`);
+    window.removeEventListener("pointermove", onResizeMove);
+    window.removeEventListener("pointerup", stopResize);
+  };
+  resizer.addEventListener("pointerdown", (e) => {
+    if (!advanced || paneCollapsed) return;
+    e.preventDefault();
+    resizing = true;
+    panel.classList.add(`${PREFIX}-resizing`);
+    window.addEventListener("pointermove", onResizeMove);
+    window.addEventListener("pointerup", stopResize);
+  });
+  // Double-click the divider → reset to the default width.
+  resizer.addEventListener("dblclick", () => {
+    panel.style.removeProperty("--aiw-chatw");
+    if (advWidthKey) {
+      try {
+        localStorage.removeItem(advWidthKey);
+      } catch {
+        /* storage blocked */
+      }
+    }
+  });
+
   const openAdvanced = (): void => {
     if (advanced || !opts.getAdvancedUrl) return;
     advanced = true;
     setPaneCollapsed(false);
     panel.classList.add(`${PREFIX}-advanced`);
+    restoreChatWidth();
     // Advanced owns the full screen and IS the wide view, so the "wide" button
     // is redundant here (hidden via CSS). Drop the plain expanded size + reset
     // the button so it shows the right icon/label when advanced is exited.
@@ -3618,10 +3691,13 @@ export function createAiChatWidget(
       scrollDown();
     }
     saveState();
-    // A fork turn (edit / regenerate) rewrote the tree — reload so the canonical
-    // ids + ‹n/m› switchers land (mirrors the panel's runTurn finally). The
-    // normal linear send path never reloads.
-    if (fork && threadId && opts.loadThread) {
+    // Reload the canonical thread after the turn so every message (incl. the one
+    // just sent) carries its persisted id + ‹n/m› switcher — that's what makes
+    // the edit / regenerate / branch controls appear WITHOUT a manual reopen. A
+    // fork turn (edit / regenerate) also needs this to land the rewritten tree.
+    // Only when branching is wired (setActiveLeaf) — otherwise the streamed view
+    // is already canonical and reloading would just cause a needless re-render.
+    if (threadId && opts.loadThread && opts.setActiveLeaf) {
       try {
         const reloaded = await opts.loadThread(threadId);
         renderThreadItems(reloaded);
@@ -4395,7 +4471,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-att-x{border:none;background:transparent;color:var(--aiw-muted);font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
 .${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
-.${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:-2px;color:var(--aiw-muted);opacity:.55;transition:opacity .15s ease}
+.${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:1px;color:var(--aiw-muted);opacity:.75;transition:opacity .15s ease}
 .${PREFIX}-msgactions:hover{opacity:1}
 .${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end}
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
@@ -4449,9 +4525,20 @@ function injectStyles(side: "left" | "right"): void {
 /* Fullscreen: drop the inset margins, width cap and radius so advanced view
    fills the whole viewport edge-to-edge. Two classes → wins over .advanced. */
 .${PREFIX}-advanced.${PREFIX}-advanced-full{inset:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;border-radius:0}
-.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 400px;min-width:320px;max-width:52%;border-right:1px solid var(--aiw-border)}
+.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 var(--aiw-chatw,400px);min-width:320px;border-right:1px solid var(--aiw-border)}
 .${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
 .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0}
+/* Draggable divider between chat + app pane. Hidden unless advanced & expanded.
+   A thin bar with a wider invisible hit-area; brightens on hover/drag. */
+.${PREFIX}-resizer{display:none}
+.${PREFIX}-advanced .${PREFIX}-resizer{display:block;flex:0 0 6px;align-self:stretch;cursor:col-resize;background:var(--aiw-border);touch-action:none;position:relative;transition:background .15s}
+.${PREFIX}-advanced .${PREFIX}-resizer::after{content:"";position:absolute;top:0;bottom:0;left:-4px;right:-4px}
+.${PREFIX}-advanced .${PREFIX}-resizer:hover,.${PREFIX}-resizing .${PREFIX}-resizer{background:var(--aiw-accent,#6366f1)}
+.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-resizer{display:none}
+/* While dragging: kill text selection + let pointer events pass over the iframe
+   (an iframe would otherwise swallow the drag and drop the pointer). */
+.${PREFIX}-resizing{user-select:none}
+.${PREFIX}-resizing .${PREFIX}-pane-frame{pointer-events:none}
 /* Collapsed: the pane shrinks to a thin strip that still shows the toggle (so it
    can be re-opened), and its url + framed body hide. */
 .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{flex:0 0 40px;min-height:0}
@@ -4469,6 +4556,8 @@ function injectStyles(side: "left" | "right"): void {
   .${PREFIX}-advanced{flex-direction:column-reverse}
   .${PREFIX}-advanced .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0;border-top:1px solid var(--aiw-border)}
   .${PREFIX}-advanced .${PREFIX}-pane{flex:1 1 auto;min-height:38%}
+  /* Stacked layout: the horizontal divider doesn't apply. */
+  .${PREFIX}-advanced .${PREFIX}-resizer{display:none}
   .${PREFIX}-pane-body{padding:8px}
 }
 @media (prefers-color-scheme:dark){
