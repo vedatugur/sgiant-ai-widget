@@ -1869,11 +1869,15 @@ export function createAiChatWidget(
     if (item.branch) rowEl.appendChild(buildBranchNav(item.branch));
     if (isUser) {
       // The message's DOM rows (attachment chips + bubble) to hide while editing.
-      const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
+      const btn = el(
+        "button",
+        `${PREFIX}-msgact ${PREFIX}-msgact-icon`
+      ) as HTMLButtonElement;
       btn.type = "button";
       const label = opts.editLabel ?? "Edit";
       btn.setAttribute("aria-label", label);
-      btn.innerHTML = `${ICON_EDIT}<span>${escapeHtml(label)}</span>`;
+      btn.title = label;
+      btn.innerHTML = ICON_EDIT;
       btn.addEventListener("click", () => {
         const nodes: HTMLElement[] = [];
         for (let n: ChildNode | null = anchor; n; n = n.nextSibling) {
@@ -4490,6 +4494,11 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
 .${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
+/* Icon-only variant (edit) — a clean round button that lights up in the accent
+   colour on hover instead of the clunky icon+label. */
+.${PREFIX}-msgact-icon{padding:4px;border-radius:8px;color:var(--aiw-muted);transition:color .15s ease,background .15s ease,transform .15s ease}
+.${PREFIX}-msgact-icon:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);transform:translateY(-1px)}
+.${PREFIX}-msgact-icon svg{width:15px;height:15px}
 .${PREFIX}-branchnav{display:inline-flex;align-items:center;gap:2px;color:inherit;font-variant-numeric:tabular-nums}
 .${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px;cursor:pointer;line-height:1}
 .${PREFIX}-branch-btn:hover:not(:disabled){color:var(--aiw-accent)}
@@ -4497,7 +4506,8 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-branch-count{font-size:11px;padding:0 2px}
 .${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:85%;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-edit.${PREFIX}-user{align-self:flex-end}
-.${PREFIX}-edit-input{width:100%;background:var(--aiw-surface);color:var(--aiw-text);box-sizing:border-box;border:1px solid var(--aiw-accent);border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none}
+.${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 5%,var(--aiw-surface));color:var(--aiw-text);box-sizing:border-box;border:1.5px solid color-mix(in srgb,var(--aiw-accent) 45%,transparent);border-radius:16px;padding:10px 13px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-edit-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 18%,transparent)}
 .${PREFIX}-edit-input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
 .${PREFIX}-edit-actions{display:flex;justify-content:flex-end;gap:6px}
 .${PREFIX}-edit-cancel{border:none;background:transparent;color:var(--aiw-muted);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
