@@ -533,6 +533,19 @@ export interface AiChatWidgetOptions {
   regenerateLabel?: string;
   saveLabel?: string;
   cancelLabel?: string;
+  /** Record a thumbs up/down on an assistant reply (the chat quality signal).
+   *  value: 1 = up, -1 = down, 0 = clear. When provided, vote buttons appear on
+   *  replayed assistant turns; omit on hosts without the vote endpoint → buttons
+   *  hidden. Wire to POST /ai/vote (reuses the AiMessageVote backend), mirroring
+   *  the React panel's `vote`. */
+  vote?: (input: {
+    threadId: string;
+    messageId: string;
+    value: 1 | -1 | 0;
+    model?: string;
+  }) => Promise<void>;
+  voteUpLabel?: string;
+  voteDownLabel?: string;
   /** Translated copy for the widget's OWN chrome — header, More menu, composer,
    *  status bar, activity chips, proposal cards, history panel, error state. The
    *  widget is vanilla DOM and can't call i18next, so the host builds this from
@@ -1058,6 +1071,9 @@ const ICON_EDIT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" s
 const ICON_REGEN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L3 8"/></svg>`;
 const ICON_CHEV_L = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>`;
 const ICON_CHEV_R = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
+// Per-message quality vote (thumbs up/down) — mirrors the React panel's VoteButtons.
+const ICON_THUMB_UP = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>`;
+const ICON_THUMB_DOWN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>`;
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
@@ -1750,8 +1766,9 @@ export function createAiChatWidget(
         if (it.role === "assistant") addAssistantMessage(it.content);
         else addMsg(log, it.role, it.content);
         history.push({ role: it.role, content: it.content });
-        // Branch controls (edit / regenerate / ‹n/m›) — only on branching hosts.
-        if (opts.setActiveLeaf) {
+        // Branch controls (edit / regenerate / ‹n/m›) on branching hosts, and/or
+        // the per-message vote when a vote endpoint is wired.
+        if (opts.setActiveLeaf || opts.vote) {
           const anchor = before ? before.nextSibling : log.firstChild;
           addMessageActions(it, anchor);
         }
@@ -1853,20 +1870,71 @@ export function createAiChatWidget(
     });
   }
 
-  // Hover action row under a replayed message: EDIT (user) / REGENERATE
-  // (assistant) + the ‹n/m› switcher. Rendered only on branching hosts (those
-  // that wired `setActiveLeaf`); appended right after the message's bubble.
+  /** Thumbs up/down for one assistant message (mirrors the panel's VoteButtons).
+   *  Clicking the active vote clears it; the chosen vote stays lit. Optimistic —
+   *  reverts on failure. Wrapped so both buttons share the toggle state. */
+  function buildVoteButtons(messageId: string): HTMLElement {
+    const wrap = el("div", `${PREFIX}-votes`);
+    let cur: 1 | -1 | 0 = 0;
+    const up = el(
+      "button",
+      `${PREFIX}-msgact ${PREFIX}-vote`
+    ) as HTMLButtonElement;
+    const down = el(
+      "button",
+      `${PREFIX}-msgact ${PREFIX}-vote`
+    ) as HTMLButtonElement;
+    up.type = "button";
+    down.type = "button";
+    up.setAttribute("aria-label", opts.voteUpLabel ?? "Helpful");
+    down.setAttribute("aria-label", opts.voteDownLabel ?? "Not helpful");
+    up.title = opts.voteUpLabel ?? "Helpful";
+    down.title = opts.voteDownLabel ?? "Not helpful";
+    up.innerHTML = ICON_THUMB_UP;
+    down.innerHTML = ICON_THUMB_DOWN;
+    const paint = (): void => {
+      up.classList.toggle(`${PREFIX}-vote-on`, cur === 1);
+      down.classList.toggle(`${PREFIX}-vote-on`, cur === -1);
+    };
+    const cast = (next: 1 | -1): void => {
+      if (!opts.vote) return;
+      const value = (cur === next ? 0 : next) as 1 | -1 | 0;
+      const prev = cur;
+      cur = value;
+      paint();
+      // messageId is globally unique; the current threadId scopes the vote.
+      void opts
+        .vote({ threadId: threadId ?? "", messageId, value })
+        .catch(() => {
+          cur = prev;
+          paint();
+        });
+    };
+    up.addEventListener("click", () => cast(1));
+    down.addEventListener("click", () => cast(-1));
+    wrap.appendChild(up);
+    wrap.appendChild(down);
+    return wrap;
+  }
+
+  // Hover action row under a replayed message: EDIT (user) / REGENERATE + VOTE
+  // (assistant) + the ‹n/m› switcher. Rendered on hosts that wired `setActiveLeaf`
+  // and/or `vote`; appended right after the message's bubble.
   function addMessageActions(
     item: ReplayMessageItem,
     anchor: ChildNode | null
   ): void {
-    if (!opts.setActiveLeaf) return;
+    if (!opts.setActiveLeaf && !opts.vote) return;
     const isUser = item.role === "user";
     // A regenerate needs the user turn it answered (an assistant's parentId).
-    const canRegen = !isUser && typeof item.parentId === "string";
-    if (!item.branch && !isUser && !canRegen) return;
+    const canRegen =
+      !!opts.setActiveLeaf && !isUser && typeof item.parentId === "string";
+    // A vote needs a stable message id + a wired endpoint (assistant turns only).
+    const canVote = !isUser && !!opts.vote && typeof item.id === "string";
+    if (!item.branch && !isUser && !canRegen && !canVote) return;
     const rowEl = el("div", `${PREFIX}-msgactions ${PREFIX}-${item.role}`);
-    if (item.branch) rowEl.appendChild(buildBranchNav(item.branch));
+    if (item.branch && opts.setActiveLeaf)
+      rowEl.appendChild(buildBranchNav(item.branch));
     if (isUser) {
       // The message's DOM rows (attachment chips + bubble) to hide while editing.
       const btn = el(
@@ -1887,21 +1955,24 @@ export function createAiChatWidget(
         beginEdit(item, anchor, nodes);
       });
       rowEl.appendChild(btn);
-    } else if (canRegen) {
-      const parentId = item.parentId;
-      const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
-      btn.type = "button";
-      const label = opts.regenerateLabel ?? "Regenerate";
-      btn.setAttribute("aria-label", label);
-      btn.innerHTML = `${ICON_REGEN}<span>${escapeHtml(label)}</span>`;
-      btn.addEventListener("click", () => {
-        if (busy || typeof parentId !== "string") return;
-        // Drop the current assistant turn's DOM, then stream a fresh sibling
-        // answer to the same user turn (empty content + regenerate flag).
-        removeFrom(anchor);
-        void send("", { regenerate: true, parentId });
-      });
-      rowEl.appendChild(btn);
+    } else {
+      if (canRegen) {
+        const parentId = item.parentId;
+        const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
+        btn.type = "button";
+        const label = opts.regenerateLabel ?? "Regenerate";
+        btn.setAttribute("aria-label", label);
+        btn.innerHTML = `${ICON_REGEN}<span>${escapeHtml(label)}</span>`;
+        btn.addEventListener("click", () => {
+          if (busy || typeof parentId !== "string") return;
+          // Drop the current assistant turn's DOM, then stream a fresh sibling
+          // answer to the same user turn (empty content + regenerate flag).
+          removeFrom(anchor);
+          void send("", { regenerate: true, parentId });
+        });
+        rowEl.appendChild(btn);
+      }
+      if (canVote) rowEl.appendChild(buildVoteButtons(item.id as string));
     }
     log.appendChild(rowEl);
   }
@@ -4501,6 +4572,12 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-msgact-icon{padding:4px;border-radius:8px;color:var(--aiw-muted);background:var(--aiw-surface);border:1px solid var(--aiw-border);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:color .15s ease,background .15s ease,border-color .15s ease,transform .15s ease}
 .${PREFIX}-msgact-icon:hover{color:#fff;background:var(--aiw-accent);border-color:var(--aiw-accent);transform:translateY(-1px)}
 .${PREFIX}-msgact-icon svg{width:15px;height:15px}
+/* Per-message vote (thumbs) — light icon buttons; the chosen vote stays lit. */
+.${PREFIX}-votes{display:inline-flex;align-items:center;gap:2px}
+.${PREFIX}-vote{padding:3px;border-radius:6px;color:var(--aiw-muted);background:transparent}
+.${PREFIX}-vote:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
+.${PREFIX}-vote-on{color:var(--aiw-accent)}
+.${PREFIX}-vote svg{width:14px;height:14px;display:block}
 .${PREFIX}-branchnav{display:inline-flex;align-items:center;gap:2px;color:inherit;font-variant-numeric:tabular-nums}
 .${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px;cursor:pointer;line-height:1}
 .${PREFIX}-branch-btn:hover:not(:disabled){color:var(--aiw-accent)}
