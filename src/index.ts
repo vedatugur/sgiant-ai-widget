@@ -4488,16 +4488,18 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-att-x{border:none;background:transparent;color:var(--aiw-muted);font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
 .${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
-.${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:1px;color:var(--aiw-muted);opacity:.75;transition:opacity .15s ease}
-.${PREFIX}-msgactions:hover{opacity:1}
-.${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end}
+.${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:3px;color:var(--aiw-muted);opacity:.55;transition:opacity .15s ease}
+.${PREFIX}-msgactions:hover,.${PREFIX}-msgactions:focus-within{opacity:1}
+/* User edit sits at the message's bottom-RIGHT, hugging the bubble edge. */
+.${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end;justify-content:flex-end;padding-right:2px}
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
 .${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
-/* Icon-only variant (edit) — a clean round button that lights up in the accent
-   colour on hover instead of the clunky icon+label. */
-.${PREFIX}-msgact-icon{padding:4px;border-radius:8px;color:var(--aiw-muted);transition:color .15s ease,background .15s ease,transform .15s ease}
-.${PREFIX}-msgact-icon:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);transform:translateY(-1px)}
+/* Icon-only variant (edit) — a small, ALWAYS-legible chip (own border + surface
+   fill) so it reads against any bubble colour, then fills accent on hover. The
+   previous transparent/low-opacity treatment vanished against the user bubble. */
+.${PREFIX}-msgact-icon{padding:4px;border-radius:8px;color:var(--aiw-muted);background:var(--aiw-surface);border:1px solid var(--aiw-border);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:color .15s ease,background .15s ease,border-color .15s ease,transform .15s ease}
+.${PREFIX}-msgact-icon:hover{color:#fff;background:var(--aiw-accent);border-color:var(--aiw-accent);transform:translateY(-1px)}
 .${PREFIX}-msgact-icon svg{width:15px;height:15px}
 .${PREFIX}-branchnav{display:inline-flex;align-items:center;gap:2px;color:inherit;font-variant-numeric:tabular-nums}
 .${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px;cursor:pointer;line-height:1}
