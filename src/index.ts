@@ -1229,7 +1229,130 @@ export function createAiChatWidget(
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", L("panelAria", { name }));
 
+  // ── Drag-to-reposition (floating mode only) ────────────────────────────
+  //
+  // The panel is anchored to a fixed corner, where it covers whatever the user
+  // is trying to read. Let them drag it by the header, double-click to reset,
+  // and remember where they put it.
+  //
+  // Pointer Events (not mouse events) so it works with touch and pen as well as
+  // a mouse; the header sets `touch-action:none` so a drag doesn't scroll the
+  // page underneath on a touchscreen.
+  const posKey = opts.persistKey ? `ayca:pos:${opts.persistKey}` : null;
+
+  /**
+   * Keep the panel fully on screen.
+   *
+   * Runs on drop AND on window resize — without the resize pass, a position
+   * saved on a large screen leaves the panel off-canvas when the same user
+   * opens a smaller window later, with no way back except clearing storage.
+   */
+  const clampPos = (x: number, y: number): { x: number; y: number } => {
+    const w = panel.offsetWidth || 368;
+    const h = panel.offsetHeight || 540;
+    const maxX = Math.max(0, window.innerWidth - w);
+    const maxY = Math.max(0, window.innerHeight - h);
+    return {
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
+    };
+  };
+
+  const applyPos = (p: { x: number; y: number } | null): void => {
+    if (!p) {
+      // Back to the CSS-anchored corner: clear the inline overrides rather than
+      // hard-coding the default, so the corner stays whatever CSS says.
+      panel.style.left = panel.style.top = "";
+      panel.style.right = panel.style.bottom = "";
+      return;
+    }
+    const { x, y } = clampPos(p.x, p.y);
+    panel.style.left = `${x}px`;
+    panel.style.top = `${y}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+  };
+
+  const readPos = (): { x: number; y: number } | null => {
+    if (!posKey) return null;
+    try {
+      const raw = localStorage.getItem(posKey);
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { x?: number; y?: number };
+      if (typeof p?.x !== "number" || typeof p?.y !== "number") return null;
+      return { x: p.x, y: p.y };
+    } catch {
+      return null;
+    }
+  };
+
+  const savePos = (p: { x: number; y: number } | null): void => {
+    if (!posKey) return;
+    try {
+      if (p) localStorage.setItem(posKey, JSON.stringify(p));
+      else localStorage.removeItem(posKey);
+    } catch {
+      /* storage full or blocked — position just won't persist */
+    }
+  };
+
   const header = el("div", `${PREFIX}-header`);
+  header.classList.add(`${PREFIX}-draggable`);
+
+  let panelDrag: { dx: number; dy: number; id: number } | null = null;
+
+  header.addEventListener("pointerdown", (ev) => {
+    // Never start a drag from a control in the header (menu, close, model chip)
+    // — the buttons must keep working.
+    if ((ev.target as HTMLElement)?.closest("button,a,input,select")) return;
+    // Advanced/full-screen mode owns its own layout; only the floating panel moves.
+    if (panel.classList.contains(`${PREFIX}-advanced`)) return;
+    const r = panel.getBoundingClientRect();
+    panelDrag = {
+      dx: ev.clientX - r.left,
+      dy: ev.clientY - r.top,
+      id: ev.pointerId,
+    };
+    header.setPointerCapture(ev.pointerId);
+    panel.style.transition = "none"; // no easing while it follows the finger
+  });
+
+  header.addEventListener("pointermove", (ev) => {
+    if (!panelDrag || ev.pointerId !== panelDrag.id) return;
+    ev.preventDefault();
+    applyPos({ x: ev.clientX - panelDrag.dx, y: ev.clientY - panelDrag.dy });
+  });
+
+  const endPanelDrag = (ev: PointerEvent): void => {
+    if (!panelDrag || ev.pointerId !== panelDrag.id) return;
+    panelDrag = null;
+    panel.style.transition = "";
+    const r = panel.getBoundingClientRect();
+    const p = clampPos(r.left, r.top);
+    applyPos(p);
+    savePos(p);
+  };
+  header.addEventListener("pointerup", endPanelDrag);
+  header.addEventListener("pointercancel", endPanelDrag);
+
+  // Double-click the header to snap back to the default corner — the same
+  // gesture the advanced view's resize divider already uses, so there is one
+  // thing to learn rather than two.
+  header.addEventListener("dblclick", (ev) => {
+    if ((ev.target as HTMLElement)?.closest("button,a,input,select")) return;
+    savePos(null);
+    applyPos(null);
+  });
+
+  // Re-clamp when the viewport changes so a saved position can never strand the
+  // panel off-screen on a smaller window.
+  window.addEventListener("resize", () => {
+    const p = readPos();
+    if (p) applyPos(p);
+  });
+
+  applyPos(readPos());
+
   const avatar = el("div", `${PREFIX}-avatar`);
   avatar.innerHTML = avatarInner;
   const hName = el("div", `${PREFIX}-hname`);
@@ -4473,6 +4596,14 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1)}
 .${PREFIX}-header{background:var(--aiw-gradient);color:var(--aiw-accent-contrast);padding:12px 14px;display:flex;align-items:center;gap:10px}
+/* Drag-to-reposition. touch-action:none is what makes this work on a
+   touchscreen — without it the browser claims the gesture as a scroll and the
+   panel never moves. user-select:none stops the title being selected mid-drag. */
+.${PREFIX}-draggable{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.${PREFIX}-draggable:active{cursor:grabbing}
+/* Controls inside the header keep normal behaviour — the drag handler ignores
+   them, and this keeps the cursor honest about that. */
+.${PREFIX}-draggable button,.${PREFIX}-draggable a{cursor:pointer;touch-action:auto}
 .${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,17,30,.55)}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
