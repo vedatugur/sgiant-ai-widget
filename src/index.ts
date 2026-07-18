@@ -592,6 +592,19 @@ export interface AiChatWidgetOptions {
     args: Record<string, unknown>
   ) => Promise<string | void | { message?: string; jobId?: string }>;
   /**
+   * Send the human's answer to a `question` frame back to the server.
+   *
+   * Separate from onApplyProposal on purpose: a proposal is "may I do this
+   * action", a question is "what should I do". The host wires this to the same
+   * answer endpoint every transport uses, so an answer given here and one given
+   * from Telegram resolve the same question identically.
+   */
+  onAnswer?: (answer: {
+    questionId: string;
+    optionIds?: string[];
+    text?: string;
+  }) => void;
+  /**
    * Poll one async media render job (video). `generate_video` enqueues a job and
    * returns immediately; the widget polls this so the "Rendering video…" process
    * chip resolves on REAL completion (the clip is actually ready) instead of the
@@ -623,6 +636,9 @@ export interface AiChatWidgetOptions {
  * at runtime by the widget (single-brace so a host's i18next leaves it intact).
  */
 export const WIDGET_LABELS = {
+  // Question cards — the assistant asking the human to decide.
+  questionConfirm: "Send",
+  questionPlaceholder: "Type your answer…",
   // Header / bubble
   openBubble: "Open {name}",
   panelAria: "{name} chat",
@@ -978,6 +994,13 @@ interface StreamFrame {
   rows?: unknown;
   /** Optional prior-period rows for the same chart (comparison overlay). */
   comparisonRows?: unknown;
+  /** question frame — the assistant asking the human to DECIDE (see WsQuestion). */
+  questionId?: string;
+  prompt?: string;
+  context?: string;
+  options?: Array<{ id: string; label: string; description?: string }>;
+  multi?: boolean;
+  critical?: boolean;
   /** activity frame — a live agent process step (running → ok/error). */
   callId?: string;
   name?: string;
@@ -3475,6 +3498,122 @@ export function createAiChatWidget(
       .map(([k, v]) => `${k}: ${String(v)}`)
       .join("\n");
   }
+  /**
+   * Render a `question` frame — the assistant asking the human to DECIDE.
+   *
+   * Distinct from a proposal card: a proposal asks permission for an action the
+   * model already chose, a question asks for something the model cannot decide
+   * itself. Answering resolves it; the card then collapses to the chosen answer
+   * so the transcript reads as a conversation rather than a dead form.
+   *
+   * Options render as buttons and free-text as an input, because the SAME
+   * question may also be answered from Telegram, where buttons work and prose
+   * does not. Keeping both shapes here means one question definition serves
+   * every surface.
+   */
+  function renderQuestion(q: {
+    questionId: string;
+    prompt: string;
+    context?: string;
+    options?: Array<{ id: string; label: string; description?: string }>;
+    multi?: boolean;
+    critical?: boolean;
+  }): void {
+    const wrap = el("div", `${PREFIX}-question`);
+    if (q.critical) wrap.classList.add(`${PREFIX}-question-critical`);
+
+    const title = el("div", `${PREFIX}-question-title`);
+    title.textContent = q.prompt;
+    wrap.appendChild(title);
+
+    if (q.context) {
+      const ctx = el("div", `${PREFIX}-question-ctx`);
+      ctx.textContent = q.context;
+      wrap.appendChild(ctx);
+    }
+
+    const answered = (summary: string): void => {
+      // Collapse to what was decided. Leaving live controls after an answer
+      // invites a second, conflicting reply to a question already resolved.
+      wrap.innerHTML = "";
+      wrap.classList.add(`${PREFIX}-question-done`);
+      const done = el("div", `${PREFIX}-question-answer`);
+      done.textContent = summary;
+      wrap.appendChild(done);
+    };
+
+    const send = (optionIds: string[], text?: string): void => {
+      opts.onAnswer?.({ questionId: q.questionId, optionIds, text });
+      const chosen = optionIds
+        .map((id) => q.options?.find((o) => o.id === id)?.label ?? id)
+        .filter(Boolean);
+      answered(chosen.length ? chosen.join(", ") : (text ?? ""));
+    };
+
+    if (q.options?.length) {
+      const list = el("div", `${PREFIX}-question-opts`);
+      const picked = new Set<string>();
+      for (const o of q.options) {
+        const b = el("button", `${PREFIX}-question-opt`) as HTMLButtonElement;
+        b.type = "button";
+        const lab = el("span", `${PREFIX}-question-opt-label`);
+        lab.textContent = o.label;
+        b.appendChild(lab);
+        if (o.description) {
+          const d = el("span", `${PREFIX}-question-opt-desc`);
+          d.textContent = o.description;
+          b.appendChild(d);
+        }
+        b.addEventListener("click", () => {
+          if (!q.multi) {
+            send([o.id]);
+            return;
+          }
+          // Multi-select: toggle, and confirm explicitly — otherwise the first
+          // click would submit and the user could never pick a second option.
+          if (picked.has(o.id)) picked.delete(o.id);
+          else picked.add(o.id);
+          b.classList.toggle(`${PREFIX}-question-opt-on`, picked.has(o.id));
+        });
+        list.appendChild(b);
+      }
+      wrap.appendChild(list);
+      if (q.multi) {
+        const confirm = el(
+          "button",
+          `${PREFIX}-question-send`
+        ) as HTMLButtonElement;
+        confirm.type = "button";
+        confirm.textContent = L("questionConfirm");
+        confirm.addEventListener("click", () => send([...picked]));
+        wrap.appendChild(confirm);
+      }
+    } else {
+      // Free text.
+      const row = el("div", `${PREFIX}-question-free`);
+      const input = el("input", `${PREFIX}-question-input`) as HTMLInputElement;
+      input.type = "text";
+      input.placeholder = L("questionPlaceholder");
+      const go = el("button", `${PREFIX}-question-send`) as HTMLButtonElement;
+      go.type = "button";
+      go.textContent = L("questionConfirm");
+      const submit = (): void => {
+        const v = input.value.trim();
+        if (v) send([], v);
+      };
+      go.addEventListener("click", submit);
+      input.addEventListener("keydown", (ev) => {
+        if ((ev as KeyboardEvent).key === "Enter") submit();
+      });
+      row.appendChild(input);
+      row.appendChild(go);
+      wrap.appendChild(row);
+    }
+
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
   function renderProposal(
     name: string,
     args: Record<string, unknown>,
@@ -3807,6 +3946,15 @@ export function createAiChatWidget(
                 frame.status,
                 (frame as { agent?: string }).agent,
                 (frame as { model?: string }).model
+              );
+              producedAny = true;
+            }
+            // The assistant is ASKING the human to decide something.
+            if (frame.type === "question" && frame.questionId && frame.prompt) {
+              typing.remove();
+              flushSegment(false);
+              renderQuestion(
+                frame as unknown as Parameters<typeof renderQuestion>[0]
               );
               producedAny = true;
             }
@@ -4599,6 +4747,27 @@ function injectStyles(side: "left" | "right"): void {
 /* Drag-to-reposition. touch-action:none is what makes this work on a
    touchscreen — without it the browser claims the gesture as a scroll and the
    panel never moves. user-select:none stops the title being selected mid-drag. */
+/* Question card — the assistant asking the human to decide. Visually distinct
+   from a proposal card: this one BLOCKS progress until answered, so it should
+   read as something needing you, not as another message. */
+.${PREFIX}-question{margin:8px 0;padding:12px;border-radius:12px;background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise .18s ease}
+.${PREFIX}-question-critical{border-color:#d93f0b;box-shadow:0 0 0 1px rgba(217,63,11,.25)}
+.${PREFIX}-question-title{font-size:14px;font-weight:600;margin-bottom:4px;color:var(--aiw-text)}
+.${PREFIX}-question-ctx{font-size:12px;color:var(--aiw-muted);margin-bottom:8px;line-height:1.45}
+.${PREFIX}-question-opts{display:flex;flex-direction:column;gap:6px}
+.${PREFIX}-question-opt{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);cursor:pointer;font:inherit;transition:border-color .14s ease,background .14s ease}
+.${PREFIX}-question-opt:hover{border-color:var(--aiw-accent);background:var(--aiw-surface-raised)}
+.${PREFIX}-question-opt-on{border-color:var(--aiw-accent);background:var(--aiw-surface-raised)}
+.${PREFIX}-question-opt-label{font-size:13px;font-weight:600}
+.${PREFIX}-question-opt-desc{font-size:12px;color:var(--aiw-muted);line-height:1.4}
+.${PREFIX}-question-free{display:flex;gap:6px;margin-top:2px}
+.${PREFIX}-question-input{flex:1 1 auto;min-width:0;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);font:inherit;font-size:13px}
+.${PREFIX}-question-send{padding:9px 14px;border-radius:9px;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+/* Answered: collapsed to the decision, so the transcript reads as a
+   conversation rather than a dead form. */
+.${PREFIX}-question-done{border-style:dashed;opacity:.75}
+.${PREFIX}-question-answer{font-size:13px;color:var(--aiw-text-2)}
+.${PREFIX}-question-answer::before{content:"✓ ";color:var(--aiw-accent)}
 .${PREFIX}-draggable{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .${PREFIX}-draggable:active{cursor:grabbing}
 /* Controls inside the header keep normal behaviour — the drag handler ignores
