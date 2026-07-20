@@ -714,6 +714,7 @@ export const WIDGET_LABELS = {
   artifactSaving: "Saving…",
   proposalUpdateBrandProfile: "Update your brand profile?",
   proposalEditBrand: "Update your brand?",
+  proposalApiRequest: "Apply this platform action?",
   videoBadge: "▶ video",
   apply: "Apply",
   dismiss: "Dismiss",
@@ -3334,11 +3335,25 @@ export function createAiChatWidget(
     save_artifact_to_assets: L("proposalSaveArtifact"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
     edit_brand: L("proposalEditBrand"),
+    mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
     name: string,
     args: Record<string, unknown>
   ): string {
+    // Generic staff platform write (#72): show WHAT will be sent WHERE so the
+    // admin approves the real action, not a vague "apply". For a write that
+    // carries a text body (e.g. an issue comment) surface that text in full —
+    // the whole point of the confirm gate is that they see it before it posts.
+    if (name === "mcp__sgiant__api_request") {
+      const method = String(args.method ?? "").toUpperCase();
+      const path = typeof args.path === "string" ? args.path : "";
+      const head = [method, path].filter(Boolean).join(" ");
+      const body = args.body as { body?: unknown } | undefined;
+      const text =
+        body && typeof body.body === "string" ? body.body.trim() : "";
+      return text ? `${head}\n\n${text}` : head;
+    }
     if (name === "add_stock_to_assets") {
       const parts: string[] = [];
       if (typeof args.type === "string") parts.push(String(args.type));
