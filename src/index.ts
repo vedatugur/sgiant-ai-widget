@@ -3349,10 +3349,33 @@ export function createAiChatWidget(
       const method = String(args.method ?? "").toUpperCase();
       const path = typeof args.path === "string" ? args.path : "";
       const head = [method, path].filter(Boolean).join(" ");
-      const body = args.body as { body?: unknown } | undefined;
-      const text =
-        body && typeof body.body === "string" ? body.body.trim() : "";
-      return text ? `${head}\n\n${text}` : head;
+      if (args.body === undefined || args.body === null) return head;
+      // Show the WHOLE body, whatever its shape — never just the paths that
+      // happen to look like a comment.
+      //
+      // The host applies this by sending `JSON.stringify(args.body)` verbatim,
+      // so anything not rendered here is a write the admin approved WITHOUT
+      // SEEING. That is not hypothetical: the issue text feeding this
+      // conversation is written by agents and by anyone with board access, so a
+      // poisoned comment could steer a proposal toward, say,
+      // `POST /admin/accounts/:id/entitlements` with a hostile payload — and a
+      // card that printed only the method and path would look unremarkable
+      // beside the issue being discussed.
+      //
+      // A confirm gate that hides what it is confirming is theatre. The
+      // plain-text shortcut below stays for the common comment case (raw JSON
+      // for a paragraph of prose is worse to read), but it is now the SPECIAL
+      // case, not the only case that renders anything.
+      const body = args.body as { body?: unknown };
+      const onlyText =
+        typeof body === "object" &&
+        body !== null &&
+        typeof body.body === "string" &&
+        Object.keys(body).length === 1;
+      const rendered = onlyText
+        ? String(body.body).trim()
+        : JSON.stringify(args.body, null, 2);
+      return rendered ? `${head}\n\n${rendered}` : head;
     }
     if (name === "add_stock_to_assets") {
       const parts: string[] = [];
