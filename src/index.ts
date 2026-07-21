@@ -411,6 +411,16 @@ export interface AiChatWidgetOptions {
    */
   persistKey?: string;
   /**
+   * Scope for LAYOUT preferences — the panel's dragged position and its
+   * open/closed state. Distinct from `persistKey` (which scopes the CONVERSATION)
+   * on purpose: a host that changes persistKey per account (so each account keeps
+   * its own thread) would otherwise reset the panel's position and re-close it on
+   * every account switch — the user drags it once and it "jumps" as they navigate.
+   * Pass a stable app-level value (e.g. "backoffice" / "org") so position + open
+   * state follow the user across accounts and pages. Falls back to `persistKey`.
+   */
+  layoutKey?: string;
+  /**
    * Called when the user clicks "Report issue" on an error state — wire it to
    * your Backoffice/contact endpoint so the admin team gets the failed turn.
    */
@@ -1145,7 +1155,10 @@ export function createAiChatWidget(
   const storeKey = opts.persistKey ? `ayca:v1:${opts.persistKey}` : null;
   // Remember whether the panel was left open, so a page refresh restores it
   // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
-  const openStateKey = opts.persistKey ? `ayca:open:${opts.persistKey}` : null;
+  // Layout prefs (open state + position) use layoutKey so they follow the user
+  // across accounts, not persistKey which re-scopes per account (see layoutKey).
+  const layoutScope = opts.layoutKey ?? opts.persistKey;
+  const openStateKey = layoutScope ? `ayca:open:${layoutScope}` : null;
   // Keep the UNSENT composer draft across refreshes so typing isn't lost.
   const draftKey = opts.persistKey ? `ayca:draft:${opts.persistKey}` : null;
   // "Auto-save assets" preference (per account via persistKey) — when ON, the AI's
@@ -1262,7 +1275,7 @@ export function createAiChatWidget(
   // Pointer Events (not mouse events) so it works with touch and pen as well as
   // a mouse; the header sets `touch-action:none` so a drag doesn't scroll the
   // page underneath on a touchscreen.
-  const posKey = opts.persistKey ? `ayca:pos:${opts.persistKey}` : null;
+  const posKey = layoutScope ? `ayca:pos:${layoutScope}` : null;
 
   /**
    * Keep the panel fully on screen.
