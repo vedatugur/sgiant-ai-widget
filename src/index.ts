@@ -2606,6 +2606,26 @@ export function createAiChatWidget(
   const open = (prefill?: unknown, forceNew?: boolean): void => {
     panel.style.display = "flex";
     panel.style.transform = ""; // clear any leftover drag offset
+    // Re-apply the saved position NOW that the panel is visible and laid out, so
+    // clampPos measures its REAL size and can never strand it off-screen. A saved
+    // {0,0} / stale position combined with leftover inline anchors used to render
+    // the panel below the fold — the "invisible widget" bug. No saved position →
+    // applyPos(null) restores the default CSS corner.
+    applyPos(readPos());
+    // Belt AND braces: whatever happened above, if the panel is not actually
+    // on-screen now, discard the saved position and snap to the default corner.
+    // A visible assistant on open is non-negotiable — a stranded panel reads as
+    // "the assistant is gone", which is exactly the bug this closes.
+    const pr = panel.getBoundingClientRect();
+    if (
+      pr.right < 40 ||
+      pr.bottom < 40 ||
+      pr.left > window.innerWidth - 40 ||
+      pr.top > window.innerHeight - 40
+    ) {
+      savePos(null);
+      applyPos(null);
+    }
     bubble.style.display = "none";
     // Show the latest message + focus the composer (always-ready assistant feel).
     pinned = true;
@@ -2638,7 +2658,11 @@ export function createAiChatWidget(
     panel.style.transform = "";
     panel.style.transition = "";
     panel.style.height = "";
-    panel.style.top = "";
+    // Clear ALL position overrides (not just top) so the next open re-applies the
+    // saved position from a clean slate. A lone leftover left/right/bottom used to
+    // combine with a re-applied axis into an off-screen anchor.
+    panel.style.left = panel.style.top = "";
+    panel.style.right = panel.style.bottom = "";
     bubble.style.display = "flex";
     rememberOpen(false);
   };
