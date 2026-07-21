@@ -4774,8 +4774,13 @@ function injectStyles(side: "left" | "right"): void {
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
 .${PREFIX}-ayca{display:block;width:100%;height:100%;overflow:visible;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:66px;height:66px;border:none;background:transparent;color:var(--aiw-accent-contrast);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .2s ease}
-.${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06)}
+/* The collapsed launcher is a real, recognisable FAB: a circular surface chip
+   with a soft shadow and a hairline ring, the animated mascot centred inside.
+   Without the chip the mascot floated as a formless gradient blob that did not
+   read as "a chat" at all — the reported "I can't see any chatbox" (#88): the
+   widget was mounted and working, just invisible as an affordance. */
+.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:64px;height:64px;border:2px solid transparent;border-radius:50%;background:linear-gradient(var(--aiw-surface-raised),var(--aiw-surface-raised)) padding-box,var(--aiw-gradient) border-box;color:var(--aiw-accent-contrast);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 10px 26px rgba(0,0,0,.32),0 2px 8px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
+.${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06);box-shadow:0 14px 32px rgba(0,0,0,.4),0 3px 10px rgba(0,0,0,.2)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
