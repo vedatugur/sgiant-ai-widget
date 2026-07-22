@@ -4941,8 +4941,16 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
 .${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:3px;color:var(--aiw-muted);opacity:.55;transition:opacity .15s ease}
 .${PREFIX}-msgactions:hover,.${PREFIX}-msgactions:focus-within{opacity:1}
-/* User edit sits at the message's bottom-RIGHT, hugging the bubble edge. */
-.${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end;justify-content:flex-end;padding-right:2px}
+/* User edit sits at the message's bottom-RIGHT, hugging the bubble edge, and is
+   HIDDEN until the user hovers their message (or the row/button itself) — an
+   always-visible bordered pencil floating under every user turn read as a stray
+   box. Its row is the immediate next sibling of the user bubble, so a hover-plus
+   sibling selector reveals it; the row's own :hover/:focus-within keeps it up
+   while you reach the
+   button across the small gap. Higher specificity than the base .msgactions:hover
+   rule so it wins the cascade. */
+.${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end;justify-content:flex-end;padding-right:2px;opacity:0}
+.${PREFIX}-msg.${PREFIX}-user:hover + .${PREFIX}-msgactions.${PREFIX}-user,.${PREFIX}-msgactions.${PREFIX}-user:hover,.${PREFIX}-msgactions.${PREFIX}-user:focus-within{opacity:1}
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
 .${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
