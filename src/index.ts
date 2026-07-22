@@ -1138,6 +1138,14 @@ export function createAiChatWidget(
   let threadId: string | undefined;
   let busy = false;
   let lastUserContent = "";
+  // The navigable pages from the most recent turn's pageContext, cached so the
+  // #111 prose-nav fallback (linkifyProseNav) can match a model's "Open <page>"
+  // prose against a real path even after the turn's getContext() has gone.
+  let knownNavTargets: Array<{
+    path?: string;
+    title?: string;
+    action?: string;
+  }> = [];
 
   // Conversation memory across page reloads (opt-in via persistKey). Kept in
   // localStorage so a refresh restores the thread + messages.
@@ -3354,7 +3362,65 @@ export function createAiChatWidget(
         submit: L("send"),
       });
     }
+    t = linkifyProseNav(t);
     return t;
+  }
+
+  /**
+   * #111 fallback — turn a model's PROSE navigation into a real chip.
+   *
+   * The prompt tells the model to emit [[navigate:{…}]] for in-app destinations,
+   * but some lanes (notably the codebase-agent, whose coding framing deprioritises
+   * the directive syntax) still narrate "↗ Open Products & apps" as a plain bullet
+   * — which renders as dead text the user can't click. This is the deterministic
+   * safety net: after the real directives are parsed, if a SHORT standalone line
+   * names a page from THIS turn's "Pages you can open" catalog, drop the prose and
+   * render the same nav chip renderNavigate would have. Lane- and model-agnostic:
+   * it fixes the symptom no matter which model produced the prose.
+   *
+   * Deliberately conservative to avoid a wrong chip: only navigable targets (a
+   * path, no named action), only lines ≤ 60 chars whose text — after stripping a
+   * leading bullet/arrow and an open-verb — EQUALS a known page title, at most 2
+   * per reply.
+   */
+  function linkifyProseNav(text: string): string {
+    if (!opts.onWidgetAction || !knownNavTargets.length) return text;
+    const targets = knownNavTargets.filter(
+      (n): n is { path: string; title: string } =>
+        typeof n.path === "string" &&
+        !!n.path &&
+        typeof n.title === "string" &&
+        !!n.title &&
+        !n.action
+    );
+    if (!targets.length) return text;
+    // Leading bullet/arrow glyphs + an optional open-verb (en + tr).
+    const lead =
+      /^[\s>*+\-•·–—↗→▶►]*\s*(?:open|go to|goto|visit|view|see|aç|git|görüntüle)?\s+/i;
+    const kept: string[] = [];
+    let chips = 0;
+    for (const line of text.split("\n")) {
+      const raw = line.trim();
+      if (chips < 2 && raw && raw.length <= 60) {
+        const bare = raw
+          .replace(lead, "")
+          .replace(/\s+(?:page|sayfası|sayfasına)$/i, "")
+          .replace(/[.:；;→↗\s]+$/u, "")
+          .trim()
+          .toLowerCase();
+        const hit = targets.find((n) => {
+          const title = n.title.toLowerCase();
+          return bare === title || bare === `the ${title}`;
+        });
+        if (hit) {
+          renderNavigate({ path: hit.path, label: hit.title });
+          chips += 1;
+          continue; // drop the now-redundant prose line
+        }
+      }
+      kept.push(line);
+    }
+    return kept.join("\n");
   }
 
   // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
@@ -3942,6 +4008,10 @@ export function createAiChatWidget(
               uiTargets: transport.getTargets(),
             }
           : baseCtx;
+      // Cache this turn's navigable pages for the #111 prose-nav fallback below.
+      const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
+        ?.navTargets;
+      if (Array.isArray(ctxTargets)) knownNavTargets = ctxTargets;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -4954,11 +5024,11 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
 .${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
-/* Icon-only variant (edit) — a small, ALWAYS-legible chip (own border + surface
-   fill) so it reads against any bubble colour, then fills accent on hover. The
-   previous transparent/low-opacity treatment vanished against the user bubble. */
-.${PREFIX}-msgact-icon{padding:4px;border-radius:8px;color:var(--aiw-muted);background:var(--aiw-surface);border:1px solid var(--aiw-border);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:color .15s ease,background .15s ease,border-color .15s ease,transform .15s ease}
-.${PREFIX}-msgact-icon:hover{color:#fff;background:var(--aiw-accent);border-color:var(--aiw-accent);transform:translateY(-1px)}
+/* Icon-only variant (edit) — a small, quiet chip (subtle surface + border) that
+   is revealed on message hover, then tints ACCENT (not a hard white-on-accent
+   fill) on its own hover so it reads as an affordance, not a loud button. */
+.${PREFIX}-msgact-icon{padding:5px;border-radius:8px;color:var(--aiw-muted);background:color-mix(in srgb,var(--aiw-surface) 92%,transparent);border:1px solid var(--aiw-border);transition:color .15s ease,background .15s ease,border-color .15s ease}
+.${PREFIX}-msgact-icon:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 45%,transparent)}
 .${PREFIX}-msgact-icon svg{width:15px;height:15px}
 /* Per-message vote (thumbs) — light icon buttons; the chosen vote stays lit. */
 .${PREFIX}-votes{display:inline-flex;align-items:center;gap:2px}
@@ -4971,8 +5041,8 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-branch-btn:hover:not(:disabled){color:var(--aiw-accent)}
 .${PREFIX}-branch-btn:disabled{opacity:.35;cursor:default}
 .${PREFIX}-branch-count{font-size:11px;padding:0 2px}
-.${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:85%;animation:${PREFIX}-rise .2s ease}
-.${PREFIX}-edit.${PREFIX}-user{align-self:flex-end}
+.${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:94%;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-edit.${PREFIX}-user{align-self:stretch}
 .${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 5%,var(--aiw-surface));color:var(--aiw-text);box-sizing:border-box;border:1.5px solid color-mix(in srgb,var(--aiw-accent) 45%,transparent);border-radius:16px;padding:10px 13px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
 .${PREFIX}-edit-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 18%,transparent)}
 .${PREFIX}-edit-input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
