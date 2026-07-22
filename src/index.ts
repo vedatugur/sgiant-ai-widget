@@ -876,14 +876,23 @@ function parseFormDirective(
 function stripDirectivesForReplay(text: string): {
   clean: string;
   notes: string[];
+  navs: NavigateSpec[];
 } {
   let t = text;
   const notes: string[] = [];
+  // Navigation is idempotent and side-effect-free, so on replay we hand it back
+  // to be re-rendered as a REAL clickable chip rather than flattened to an inert
+  // note — otherwise every "Open <page>" the assistant offered goes dead the
+  // moment the thread reloads (which send() does after each turn for canonical
+  // ids). This is the true cause of #111: the model DID emit [[navigate]], the
+  // restore path is what killed it.
+  const navs: NavigateSpec[] = [];
   for (let i = 0; i < 8; i++) {
     const w = parseJsonDirective<NavigateSpec>(t, "navigate");
     if (!w) break;
     t = w.stripped;
-    notes.push(`↗ ${w.spec.label || w.spec.path || "Open page"}`);
+    if (w.spec.path) navs.push(w.spec);
+    else notes.push(`↗ ${w.spec.label || "Open page"}`);
   }
   for (let i = 0; i < 8; i++) {
     const w = parseJsonDirective<ActionSpec>(t, "action");
@@ -918,7 +927,7 @@ function stripDirectivesForReplay(text: string): {
     t = t.replace(LEAD_TOKEN, "").trim();
     notes.push("📝 Form — submitted");
   }
-  return { clean: t, notes };
+  return { clean: t, notes, navs };
 }
 
 /**
@@ -1899,7 +1908,7 @@ export function createAiChatWidget(
   function addAssistantMessage(text: string): HTMLElement {
     // Replay: render clean prose (directives the live turn already handled are
     // stripped) + an inert note per directive — never raw [[…]] code.
-    const { clean, notes } = stripDirectivesForReplay(text);
+    const { clean, notes, navs } = stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
     applyAssistantRich(bubble, clean);
     for (const n of notes) {
@@ -1907,6 +1916,9 @@ export function createAiChatWidget(
       note.textContent = n;
       log.appendChild(note);
     }
+    // Re-render navigation as a REAL chip so "Open <page>" stays clickable after
+    // a reload/restore (#111) — in replay mode so it never auto-navigates on open.
+    if (opts.onWidgetAction) for (const nav of navs) renderNavigate(nav, true);
     return bubble;
   }
   // Re-render a full thread (messages + inline DATA WIDGETS) into the log,
@@ -4443,10 +4455,12 @@ export function createAiChatWidget(
 
   /** Render a navigation suggestion. With auto-navigate ON it follows the link
    *  immediately (showing a "Opening …" chip); OFF it offers a confirm button. */
-  function renderNavigate(spec: NavigateSpec): void {
+  function renderNavigate(spec: NavigateSpec, replay = false): void {
     const wrap = el("div", `${PREFIX}-nav`);
     const label = spec.label || "Open page";
-    if (autoNav) {
+    // On replay (history / post-turn thread restore) always render the button,
+    // never auto-follow — re-opening a conversation must not navigate the app.
+    if (autoNav && !replay) {
       const chip = el("div", `${PREFIX}-autonav`);
       chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
       wrap.appendChild(chip);
