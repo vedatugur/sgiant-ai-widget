@@ -1312,15 +1312,22 @@ export function createAiChatWidget(
     };
   };
 
+  const toCorner = (): void => {
+    // Back to the CSS-anchored corner: clear the inline overrides rather than
+    // hard-coding the default, so the corner stays whatever CSS says.
+    panel.style.left = panel.style.top = "";
+    panel.style.right = panel.style.bottom = "";
+  };
+
   const applyPos = (p: { x: number; y: number } | null): void => {
-    if (!p) {
-      // Back to the CSS-anchored corner: clear the inline overrides rather than
-      // hard-coding the default, so the corner stays whatever CSS says.
-      panel.style.left = panel.style.top = "";
-      panel.style.right = panel.style.bottom = "";
-      return;
-    }
+    if (!p) return toCorner();
     const { x, y } = clampPos(p.x, p.y);
+    // Atomic: a non-finite result (a NaN slipping in from a drag/resize edge
+    // case) must NEVER leave the panel half-positioned — `left` set but `top`
+    // empty makes `top` resolve to `auto`, which drops the panel to its static
+    // flow position off-screen, and a refresh restores it there (stranded). Fall
+    // back to the visible corner instead.
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return toCorner();
     panel.style.left = `${x}px`;
     panel.style.top = `${y}px`;
     panel.style.right = "auto";
@@ -2721,7 +2728,11 @@ export function createAiChatWidget(
     const apply = (): void => {
       if (!isSheet() || panel.style.display === "none") {
         panel.style.height = "";
-        panel.style.top = "";
+        // Desktop / non-sheet: the panel's `top` is owned by the drag-to-
+        // reposition logic, NOT the keyboard handler. Clearing it here dropped a
+        // dragged panel to `top:auto` → off-screen, and a refresh re-stranded it.
+        // Restore the saved position (or the CSS corner) instead of clobbering it.
+        applyPos(readPos());
         return;
       }
       panel.style.height = `${vv.height}px`;
