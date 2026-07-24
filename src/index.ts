@@ -1089,10 +1089,6 @@ const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none
 // Advanced view: a panel split into a sidebar + main area (Copilot ⇆ live app).
 const ICON_ADVANCED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="4" x2="10" y2="20"/></svg>`;
 const ICON_CHEVRON_R = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
-// Fullscreen — corners pushing OUT (enter) / pulling IN (exit). Toggles the
-// advanced view between its inset floating window and true edge-to-edge.
-const ICON_FULLSCREEN = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
-const ICON_FULLSCREEN_EXIT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
 // Download — export the current conversation as a .txt transcript.
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 // Flag — agent/admin oversight: flag the current conversation with a reason.
@@ -1691,23 +1687,8 @@ export function createAiChatWidget(
     advancedBtn.innerHTML = ICON_ADVANCED;
     hActions.appendChild(advancedBtn);
   }
-  // Fullscreen toggle — only meaningful inside advanced view, so it's created
-  // alongside the advanced button and hidden by CSS until advanced is active.
-  let fullscreenBtn: HTMLButtonElement | null = null;
-  if (opts.getAdvancedUrl) {
-    fullscreenBtn = el(
-      "button",
-      `${PREFIX}-icon ${PREFIX}-fullbtn`
-    ) as HTMLButtonElement;
-    fullscreenBtn.type = "button";
-    fullscreenBtn.setAttribute(
-      "aria-label",
-      opts.fullscreenLabel || "Fullscreen"
-    );
-    fullscreenBtn.title = opts.fullscreenLabel || "Fullscreen";
-    fullscreenBtn.innerHTML = ICON_FULLSCREEN;
-    hActions.appendChild(fullscreenBtn);
-  }
+  // Advanced view always opens edge-to-edge — no separate fullscreen toggle
+  // button; the exit-advanced control (advancedBtn) is the way back out.
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
   closeBtn.setAttribute("aria-label", L("closeChat"));
@@ -1721,6 +1702,23 @@ export function createAiChatWidget(
   log.setAttribute("aria-live", "polite");
   log.setAttribute("aria-label", L("conversation"));
   log.setAttribute("tabindex", "0");
+  // Scroll state + scrollDown MUST be defined here, BEFORE the history restore
+  // below: restoring a persisted assistant message runs addAssistantMessage →
+  // renderNavigate (for a `[[navigate]]` directive), which calls scrollDown.
+  // Defining these later put them in the temporal dead zone during restore —
+  // "Cannot access 'scrollDown' (minified: 'He') before initialization" — which
+  // crashed the widget on load for any thread whose history contained a nav.
+  let pinned = true;
+  let scrollQueued = false;
+  const scrollDown = (force?: boolean): void => {
+    if (force) pinned = true;
+    if (!pinned || scrollQueued) return;
+    scrollQueued = true;
+    requestAnimationFrame(() => {
+      scrollQueued = false;
+      log.scrollTop = log.scrollHeight;
+    });
+  };
   // Rich-content lifecycle. Host-mounted React roots (markdown / data widgets)
   // hand back a disposer; we keep them so they can be unmounted when the log is
   // cleared (new chat / history switch / destroy), avoiding leaked roots.
@@ -2207,8 +2205,6 @@ export function createAiChatWidget(
   // already near the bottom — so streaming text doesn't yank the view when they
   // scrolled up to read. rAF-batched to avoid per-token layout thrash (the
   // "glitch"). Pinning resets whenever they scroll back down.
-  let pinned = true;
-  let scrollQueued = false;
   log.addEventListener("scroll", () => {
     pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 90;
   });
@@ -2241,15 +2237,6 @@ export function createAiChatWidget(
     );
   };
   attachWheelScroll(log);
-  const scrollDown = (force?: boolean): void => {
-    if (force) pinned = true;
-    if (!pinned || scrollQueued) return;
-    scrollQueued = true;
-    requestAnimationFrame(() => {
-      scrollQueued = false;
-      log.scrollTop = log.scrollHeight;
-    });
-  };
 
   /** Show a brief, VISIBLE system line in the transcript (flag result, guidance)
    *  — a tooltip/title change alone is invisible, so users can't tell it worked. */
@@ -2921,27 +2908,13 @@ export function createAiChatWidget(
     advancedBtn.title = label;
   };
 
-  // Fullscreen — grow advanced view from its inset floating window to true
-  // edge-to-edge (the `-advanced-full` class drops the max-width + margins +
-  // radius). Only reachable while advanced; resets when advanced closes.
+  // Fullscreen — advanced view is edge-to-edge by default (the `-advanced-full`
+  // class drops the max-width + margins + radius). openAdvanced sets it on;
+  // closeAdvanced resets it. There is no user-facing toggle button.
   const setAdvancedFull = (v: boolean): void => {
     advancedFull = v;
     panel.classList.toggle(`${PREFIX}-advanced-full`, v);
-    if (fullscreenBtn) {
-      const label = v
-        ? opts.exitFullscreenLabel || "Exit fullscreen"
-        : opts.fullscreenLabel || "Fullscreen";
-      fullscreenBtn.innerHTML = v ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN;
-      fullscreenBtn.classList.toggle(`${PREFIX}-icon-on`, v);
-      fullscreenBtn.setAttribute("aria-label", label);
-      fullscreenBtn.title = label;
-    }
   };
-  if (fullscreenBtn) {
-    fullscreenBtn.addEventListener("click", () =>
-      setAdvancedFull(!advancedFull)
-    );
-  }
 
   // Draggable divider between the chat column and the app pane (advanced view).
   // Drag to resize; the width persists per host so it survives reloads; a
@@ -3017,6 +2990,12 @@ export function createAiChatWidget(
     advanced = true;
     setPaneCollapsed(false);
     panel.classList.add(`${PREFIX}-advanced`);
+    // Advanced view is a CSS-driven layout. A leftover inline drag position
+    // (left/top/right:auto) would OVERRIDE that CSS, so drop the floating
+    // position here; closeAdvanced restores it. Advanced always opens
+    // edge-to-edge (there is no separate fullscreen toggle anymore).
+    toCorner();
+    setAdvancedFull(true);
     restoreChatWidth();
     // Advanced owns the full screen and IS the wide view, so the "wide" button
     // is redundant here (hidden via CSS). Drop the plain expanded size + reset
@@ -3034,6 +3013,8 @@ export function createAiChatWidget(
     advanced = false;
     if (advancedFull) setAdvancedFull(false);
     panel.classList.remove(`${PREFIX}-advanced`, `${PREFIX}-pane-collapsed`);
+    // Restore the floating drag position cleared on enter.
+    applyPos(readPos());
     teardownFrame();
     updateAdvancedBtn();
     rememberAdvanced();
@@ -4948,6 +4929,9 @@ function injectStyles(side: "left" | "right"): void {
 /* Controls inside the header keep normal behaviour — the drag handler ignores
    them, and this keeps the cursor honest about that. */
 .${PREFIX}-draggable button,.${PREFIX}-draggable a{cursor:pointer;touch-action:auto}
+/* Advanced view is a fixed edge-to-edge layout — dragging is disabled there
+   (the pointerdown handler bails), so drop the grab affordance too. */
+.${PREFIX}-advanced .${PREFIX}-draggable{cursor:default}
 .${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,17,30,.55)}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
@@ -4962,7 +4946,7 @@ function injectStyles(side: "left" | "right"): void {
 @keyframes ${PREFIX}-caret{0%,55%{opacity:.85}55.01%,100%{opacity:0}}
 .${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:1px;background:var(--aiw-accent);vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
 .${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise .2s ease}
-.${PREFIX}-user{align-self:flex-end;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-bottom-right-radius:4px}
+.${PREFIX}-msg.${PREFIX}-user{align-self:flex-end;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-bottom-left-radius:4px}
 .${PREFIX}-assistant p{margin:0 0 8px}.${PREFIX}-assistant>:last-child{margin-bottom:0}
 .${PREFIX}-assistant h1,.${PREFIX}-assistant h2,.${PREFIX}-assistant h3,.${PREFIX}-assistant h4{margin:10px 0 6px;font-weight:700;line-height:1.25}
@@ -5068,9 +5052,12 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-branch-count{font-size:11px;padding:0 2px}
 .${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:94%;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-edit.${PREFIX}-user{align-self:stretch}
-.${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 5%,var(--aiw-surface));color:var(--aiw-text);box-sizing:border-box;border:1.5px solid color-mix(in srgb,var(--aiw-accent) 45%,transparent);border-radius:16px;padding:10px 13px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
-.${PREFIX}-edit-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 18%,transparent)}
-.${PREFIX}-edit-input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
+/* Edit mode keeps the USER BUBBLE look (same fill + radius), so clicking edit
+   doesn't swap the message for a different-looking box — just a subtle focus
+   ring, matching the inline-edit request. */
+.${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;caret-color:#fff;box-sizing:border-box;border:1.5px solid transparent;border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-edit-input::placeholder{color:rgba(255,255,255,.6)}
+.${PREFIX}-edit-input:focus{border-color:rgba(255,255,255,.55);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 28%,transparent)}
 .${PREFIX}-edit-actions{display:flex;justify-content:flex-end;gap:6px}
 .${PREFIX}-edit-cancel{border:none;background:transparent;color:var(--aiw-muted);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
 .${PREFIX}-edit-cancel:hover{background:var(--aiw-surface-2)}
