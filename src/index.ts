@@ -931,6 +931,39 @@ function stripDirectivesForReplay(text: string): {
 }
 
 /**
+ * Is this an AI-supplied in-app path we're willing to navigate to? Model output
+ * is untrusted (it can carry text scraped from third-party sites), so a path is
+ * only ever a SITE-ROOT-RELATIVE route: it must start with a single `/` and
+ * must not start with `//` or `/\` (both read as protocol-relative, i.e. another
+ * origin) — which also rules out `javascript:`/`data:` payloads.
+ */
+function isSafeRelPath(path: unknown): path is string {
+  return (
+    typeof path === "string" &&
+    path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !path.startsWith("/\\")
+  );
+}
+
+/**
+ * Final gate in front of the advanced-view iframe's `src`. That frame is
+ * deliberately un-sandboxed (it hosts our own app with the live session), so
+ * only a same-origin http(s) URL may ever be loaded into it.
+ */
+function isSafeFrameUrl(url: string): boolean {
+  try {
+    const u = new URL(url, location.origin);
+    return (
+      u.origin === location.origin &&
+      (u.protocol === "http:" || u.protocol === "https:")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Generic `[[tag:{json}]]` directive extractor (first occurrence). Robust to the
  * model mis-counting brackets: it brace-matches the JSON object (string-aware,
  * so a `]]` or `}` inside a quoted value doesn't fool it), then consumes 0–2
@@ -1923,7 +1956,9 @@ export function createAiChatWidget(
     }
     // Re-render navigation as a REAL chip so "Open <page>" stays clickable after
     // a reload/restore (#111) — in replay mode so it never auto-navigates on open.
-    if (opts.onWidgetAction) for (const nav of navs) renderNavigate(nav, true);
+    if (opts.onWidgetAction)
+      for (const nav of navs)
+        if (isSafeRelPath(nav.path)) renderNavigate(nav, true);
     return bubble;
   }
   // Re-render a full thread (messages + inline DATA WIDGETS) into the log,
@@ -2835,6 +2870,9 @@ export function createAiChatWidget(
    *  at that route and re-mounts its agent). */
   const navigateFrame = (url: string): void => {
     if (!advFrame) return;
+    // Untrusted target (cross-origin, protocol-relative or a `javascript:`
+    // payload smuggled through a model-authored path) — refuse silently.
+    if (!isSafeFrameUrl(url)) return;
     advFrame.src = url;
     setFrameUrlLabel(url);
   };
@@ -3037,6 +3075,9 @@ export function createAiChatWidget(
     name: string,
     data: Record<string, string>
   ): Promise<string | void> => {
+    // AI-supplied navigation targets are untrusted: only a root-relative in-app
+    // route is ever followed — in the advanced-view frame OR by the host router.
+    if (name === "navigate" && !isSafeRelPath(data.path)) return;
     if (advanced && transport) {
       if (isUiControlAction(name) || isOperateAction(name)) {
         const r = await transport.act(name as BridgeAction, {
@@ -3047,10 +3088,12 @@ export function createAiChatWidget(
           ? "Shown on the page"
           : r.message || "Couldn't do that on the page";
       }
-      const relPath =
+      const candidate =
         name === "navigate"
           ? (data.path ?? null)
           : (opts.resolveActionPath?.(name, data) ?? null);
+      // Only root-relative in-app routes may be handed to `getAdvancedUrl`.
+      const relPath = isSafeRelPath(candidate) ? candidate : null;
       if (relPath != null && opts.getAdvancedUrl) {
         navigateFrame(opts.getAdvancedUrl(relPath));
         return "Opened";
@@ -3333,7 +3376,9 @@ export function createAiChatWidget(
     const nav = parseJsonDirective<NavigateSpec>(t, "navigate");
     if (nav && opts.onWidgetAction && nav.spec.path) {
       t = nav.stripped;
-      renderNavigate(nav.spec);
+      // Strip the directive either way, but only offer/auto-follow a target
+      // that is a plain root-relative in-app route.
+      if (isSafeRelPath(nav.spec.path)) renderNavigate(nav.spec);
     }
     for (let i = 0; i < 4; i++) {
       const act = parseJsonDirective<ActionSpec>(t, "action");
