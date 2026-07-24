@@ -4204,7 +4204,17 @@ export function createAiChatWidget(
     // fork turn (edit / regenerate) also needs this to land the rewritten tree.
     // Only when branching is wired (setActiveLeaf) — otherwise the streamed view
     // is already canonical and reloading would just cause a needless re-render.
-    if (threadId && opts.loadThread && opts.setActiveLeaf) {
+    // A live, un-applied WRITE PROPOSAL card is ephemeral — it is NOT persisted
+    // as a thread artifact (unlike a creation), so a full renderThreadItems()
+    // reload (which does `log.innerHTML = ""`) would silently WIPE it: the
+    // agent proposes, the card flashes in, the end-of-turn reload deletes it,
+    // and the admin never gets to click Apply. When a proposal card is on
+    // screen, keep the streamed view instead. The only thing the reload adds is
+    // the ‹n/m› branch switcher + persisted ids on this turn's messages, which
+    // self-heal on the next send or when the thread is reopened — a fair trade
+    // to avoid destroying a pending Apply card.
+    const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal`);
+    if (threadId && opts.loadThread && opts.setActiveLeaf && !hasLiveProposal) {
       try {
         const reloaded = await opts.loadThread(threadId);
         renderThreadItems(reloaded);
