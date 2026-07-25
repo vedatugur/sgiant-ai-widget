@@ -86,6 +86,19 @@ export interface AiChangeEvent {
 /** Tell other tabs an AI change landed so they invalidate too. No-op where
  *  BroadcastChannel is unavailable (old browsers / SSR). */
 export function broadcastAiChange(accountId: string, domains?: string[]): void {
+  // SAME-TAB listeners (e.g. the brand info bar's live "updated by AI" status)
+  // get a synchronous window event — BroadcastChannel is meant for OTHER tabs and
+  // is the less reliable path within one document, so this is the primary signal
+  // for anything on the current page; BroadcastChannel below still covers tabs.
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(
+        new CustomEvent(AI_LIVE_CHANNEL, { detail: { accountId, domains } })
+      );
+    } catch {
+      /* CustomEvent unavailable */
+    }
+  }
   if (typeof BroadcastChannel === "undefined") return;
   try {
     const ch = new BroadcastChannel(AI_LIVE_CHANNEL);
