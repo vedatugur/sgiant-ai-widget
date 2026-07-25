@@ -3619,6 +3619,11 @@ export function createAiChatWidget(
         typeof args.fontSans === "string" ? String(args.fontSans) : "",
       ].filter(Boolean);
       if (fonts.length) lines.push(`Fonts: ${fonts.join(" / ")}`);
+      if (
+        (typeof args.logoMediaId === "string" && args.logoMediaId) ||
+        (typeof args.logoSymbolMediaId === "string" && args.logoSymbolMediaId)
+      )
+        lines.push("+ brand logo");
       if (Array.isArray(args.keyPhrases) && args.keyPhrases.length)
         lines.push(`Phrases: ${(args.keyPhrases as unknown[]).join(", ")}`);
       if (typeof args.showcaseHtml === "string" && args.showcaseHtml.trim())
