@@ -3638,6 +3638,24 @@ export function createAiChatWidget(
         lines.push("+ a visual showcase preview");
       return lines.join("\n");
     }
+    // A whole-site import is ONE argument with enormous consequences. Dumping
+    // "url: example.com" tells the user nothing about what they are approving —
+    // how many pages, where it lands, that it runs in the background. Spell it
+    // out; this is the card people hesitate on.
+    if (name === "ingest_site") {
+      const site = String(args.url ?? "").replace(/^https?:\/\//, "");
+      const pages = Number(args.maxPages);
+      const cap = Number.isFinite(pages) && pages > 0 ? pages : 20;
+      return [
+        `Import the whole of ${site} into assets.`,
+        `Up to ${cap} pages — the server picks the real content pages (rooms,` +
+          ` gallery, about) and skips carts and policies.`,
+        `Each page gets its own subfolder under "${String(
+          args.folderName ?? site
+        )}"${args.withReadme === false ? "" : ", with a README per page"}.`,
+        "Runs in the background — a notification arrives when it lands.",
+      ].join("\n");
+    }
     return Object.entries(args)
       .filter(([k]) => k !== "id")
       .map(([k, v]) => `${k}: ${String(v)}`)
