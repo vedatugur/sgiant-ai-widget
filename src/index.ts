@@ -3936,6 +3936,21 @@ export function createAiChatWidget(
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
     let producedAny = false;
+    /**
+     * Write proposals seen this turn, rendered only AFTER the reply text.
+     *
+     * The model almost always emits a tool call BEFORE it writes the sentence
+     * explaining it, so rendering each card where it arrives put "Apply this
+     * change?" above the reasoning for it — the user was asked to approve
+     * something before being told what it was. Buffering and flushing at the
+     * end of the turn makes the order match how a person reads: the
+     * explanation, then the decision.
+     */
+    const deferredProposals: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      agent?: string;
+    }> = [];
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
@@ -4075,17 +4090,17 @@ export function createAiChatWidget(
               frame.name &&
               opts.onApplyProposal
             ) {
-              typing.remove();
-              flushSegment(false);
-              const pArgs = (frame.args ?? {}) as Record<string, unknown>;
               // Every write proposal shows a confirm card — the human applies it.
               // (Saving a generated image/video/PDF into the library is just this:
               // the AI proposes the save, the user clicks Apply, or asks for it.)
-              renderProposal(
-                frame.name,
-                pArgs,
-                (frame as { agent?: string }).agent
-              );
+              // HELD until the turn's text has been rendered — see
+              // deferredProposals. Do NOT flush the segment here: splitting the
+              // bubble at the tool call is what let the card jump the queue.
+              deferredProposals.push({
+                name: frame.name,
+                args: (frame.args ?? {}) as Record<string, unknown>,
+                agent: (frame as { agent?: string }).agent,
+              });
               producedAny = true;
             }
             // Free-allowance meter (visitor preview). `quota` is the server's
@@ -4132,6 +4147,10 @@ export function createAiChatWidget(
     // directives). Earlier segments were already flushed around widgets/chips.
     typing.remove();
     const lastBubble = flushSegment(true);
+    // The reply is on screen; NOW ask for the decisions, in the order the model
+    // proposed them.
+    for (const p of deferredProposals) renderProposal(p.name, p.args, p.agent);
+    if (deferredProposals.length) scrollDown();
     if (!producedAny) {
       if (failure) showError(failure);
       else {
