@@ -259,6 +259,21 @@ const STANDARD_ACTION_DONE: Record<string, string> = {
   "open-assets": "Opened assets",
 };
 
+/**
+ * Is this action PURE NAVIGATION — moving the user to a page and nothing else?
+ *
+ * The auto-navigate option promises exactly this and nothing more. It used to
+ * decide by asking whether the model had attached a `confirm` to its own action,
+ * which put the safety decision in the model's hands: an action it emitted
+ * without one ran instantly and unattended. `research-brand` is confirm-less in
+ * that sense and spends metered web-search credit, so "auto-navigate" could buy
+ * things. Navigation is a closed set — enumerate it, and let everything else
+ * wait for the user to press the button.
+ */
+export function isNavigationAction(name: string): boolean {
+  return name === "navigate" || name in STANDARD_ACTION_PATHS;
+}
+
 /** Said instead of "Opened …" when the user is ALREADY on that page. */
 const STANDARD_ACTION_ALREADY: Record<string, string> = {
   "open-dashboards": "Already on dashboards",
@@ -334,13 +349,21 @@ export function createHostActions(
     // surface via the pure-DOM twin — no per-app wiring, no confirm (reversible).
     if (isUiControlAction(action)) {
       const ok = runUiControl(action, data.target ?? "");
-      return ok ? "Shown on the page" : undefined;
+      // A target that isn't on this page is a FAILURE. Returning undefined
+      // resolved the widget's promise and rendered a tick, so "show me where"
+      // ticked green while nothing was highlighted.
+      if (!ok) throw new Error(`no such control on this page: ${data.target}`);
+      return "Shown on the page";
     }
     // State-changing UI control (fill / click). The widget has already forced a
     // Confirm step before we get here (renderAction), so this runs post-approval.
     if (isOperateAction(action)) {
       const ok = runOperateAction(action, data.target ?? "", data.value);
-      return ok ? "Done on the page" : undefined;
+      // Same as above, and worse here: the user APPROVED this one. Telling them
+      // a fill or a click succeeded when the control was never found means they
+      // walk away believing a value was entered.
+      if (!ok) throw new Error(`no such control on this page: ${data.target}`);
+      return "Done on the page";
     }
     const fn = map[action];
     // THROW, don't shrug. Returning undefined here resolved the widget's

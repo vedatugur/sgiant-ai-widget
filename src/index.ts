@@ -24,6 +24,7 @@ export {
   createHostActions,
   STANDARD_ACTIONS,
   STANDARD_ACTION_PATHS,
+  isNavigationAction,
   type PageContext,
   type PageManifestEntry,
   type NavTarget,
@@ -31,6 +32,12 @@ export {
   type HostActionsConfig,
   type HostActionHandler,
 } from "./host-actions";
+// Used locally too (the block above only RE-exports for consumers): the
+// auto-navigate gate needs to know what counts as navigation.
+import { isNavigationAction } from "./host-actions";
+// Same reason: the block below re-exports these for consumers, but the widget
+// itself subscribes so a finished background job can refresh the transcript.
+import { subscribeAiChange } from "./ai-invalidation";
 // Read-only UI control — point the Copilot at on-page controls by their stable
 // `data-ai-target` id. `scanAiTargets` feeds the current page's controls into
 // the turn context so the model knows what it may highlight/scroll-to/focus.
@@ -1169,6 +1176,9 @@ export function createAiChatWidget(
   const avatarInner = opts.avatarUrl
     ? `<img src="${opts.avatarUrl}" alt="${name}" class="${PREFIX}-av-img"/>`
     : AVATAR_SVG;
+  /** Aborted by `destroy()`. Every in-flight turn is tied to it, so a widget
+   *  that has been torn down stops writing to its own dead DOM and storage. */
+  const alive = new AbortController();
   let threadId: string | undefined;
   let busy = false;
   let lastUserContent = "";
@@ -1404,11 +1414,15 @@ export function createAiChatWidget(
   });
 
   // Re-clamp when the viewport changes so a saved position can never strand the
-  // panel off-screen on a smaller window.
-  window.addEventListener("resize", () => {
+  // panel off-screen on a smaller window. Named so `destroy()` can remove it —
+  // an anonymous listener here leaked the entire widget graph (panel, log,
+  // history, disposers) on every mount/unmount cycle, and admin remounts on
+  // account and language change.
+  const onResize = (): void => {
     const p = readPos();
     if (p) applyPos(p);
-  });
+  };
+  window.addEventListener("resize", onResize);
 
   applyPos(readPos());
 
@@ -3023,7 +3037,10 @@ export function createAiChatWidget(
   ): Promise<string | void> => {
     // AI-supplied navigation targets are untrusted: only a root-relative in-app
     // route is ever followed — in the advanced-view frame OR by the host router.
-    if (name === "navigate" && !isSafeRelPath(data.path)) return;
+    // Refusing is right; refusing SILENTLY was not: an undefined return resolves
+    // as success, so the chip ticked green over a path we had just declined.
+    if (name === "navigate" && !isSafeRelPath(data.path))
+      throw new Error("that navigation target is not an in-app page");
     if (advanced && transport) {
       if (isUiControlAction(name) || isOperateAction(name)) {
         const r = await transport.act(name as BridgeAction, {
@@ -3782,7 +3799,13 @@ export function createAiChatWidget(
     args: Record<string, unknown>,
     agent?: string
   ): void {
-    const wrap = el("div", `${PREFIX}-proposal`);
+    // `-pending` marks a card that is still AWAITING the user, and it is what
+    // the end-of-turn reload checks. The reload used to look for `-proposal`,
+    // which also matches a replayed creation card and an already-applied card
+    // (the success path empties the node but keeps the class) — so one Apply,
+    // or any creation in the thread, disabled the reload for the whole session
+    // and with it every edit/regenerate/branch control.
+    const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
     const title = el("div", `${PREFIX}-proposal-title`);
     // Show the acting agent (e.g. Nova) so the user sees WHO proposed this.
     if (agent) {
@@ -3903,6 +3926,8 @@ export function createAiChatWidget(
           threadId ? { ...args, threadId } : args
         );
         disposePreview?.();
+        // Resolved: it no longer blocks the end-of-turn reload.
+        wrap.classList.remove(`${PREFIX}-proposal-pending`);
         wrap.innerHTML = "";
         const ok = el("div", `${PREFIX}-proposal-ok`);
         ok.innerHTML =
@@ -4017,6 +4042,13 @@ export function createAiChatWidget(
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         credentials: opts.withCredentials ? "include" : "same-origin",
+        // Tied to the widget's lifetime. Without this the reader loop outlived
+        // `destroy()`: it kept appending to a detached log, kept fetching, and
+        // kept calling saveState() — into the SAME storage key the replacement
+        // widget was already writing. Admin re-keys the widget on account and
+        // language change, so a mid-stream account switch could clobber the new
+        // account's transcript with the old one's.
+        signal: alive.signal,
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
           ...(pageContext ? { pageContext } : {}),
@@ -4208,7 +4240,7 @@ export function createAiChatWidget(
     // the ‹n/m› branch switcher + persisted ids on this turn's messages, which
     // self-heal on the next send or when the thread is reopened — a fair trade
     // to avoid destroying a pending Apply card.
-    const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal`);
+    const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal-pending`);
     if (threadId && opts.loadThread && opts.setActiveLeaf && !hasLiveProposal) {
       try {
         const reloaded = await opts.loadThread(threadId);
@@ -4604,7 +4636,7 @@ export function createAiChatWidget(
     // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
     // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
     // state / costs credits) ALWAYS asks, even in auto mode.
-    if (autoNav && !spec.confirm) {
+    if (autoNav && isNavigationAction(spec.name) && !spec.confirm) {
       const label = spec.label || "Opening…";
       const chip = el("div", `${PREFIX}-autonav`);
       chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
@@ -4715,15 +4747,45 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  /**
+   * A background job this conversation started has finished.
+   *
+   * `ingest_site` and friends return immediately and run for minutes, then
+   * report back onto the THREAD — which the chat only ever saw on a reload, so
+   * "I'll notify you when the folder is ready" was followed, in the chat, by
+   * nothing at all. The api announces the change (`publishLiveChange`) and the
+   * host forwards it here.
+   *
+   * Guarded: never reload mid-turn (it would wipe the streaming view), never
+   * over a card still awaiting the user, and only for the `ai` domain.
+   */
+  const offAiChange = subscribeAiChange((e) => {
+    if (opts.accountId && e.accountId && e.accountId !== opts.accountId) return;
+    if (!e.domains?.includes("ai")) return;
+    if (busy || !threadId || !opts.loadThread) return;
+    if (log.querySelector(`.${PREFIX}-proposal-pending`)) return;
+    void opts
+      .loadThread(threadId)
+      .then((t) => renderThreadItems(t))
+      .catch(() => {
+        /* a missed refresh just means the old manual reload */
+      });
+  });
+
   return {
     open,
     close,
     toggle,
     registerRenderer,
     destroy() {
+      // FIRST: cut the in-flight turn loose. Everything below tears down the
+      // DOM it would otherwise keep writing to.
+      alive.abort();
+      offAiChange();
       if (opts.openEventName) {
         window.removeEventListener(opts.openEventName, onOpenEvent);
       }
+      window.removeEventListener("resize", onResize);
       unbindKeyboard();
       clearRich();
       teardownFrame();
