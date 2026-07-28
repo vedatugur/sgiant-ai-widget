@@ -314,6 +314,37 @@ export function buildThreadReplay(payload: {
   return items.map((s) => s.item);
 }
 
+/**
+ * A background job as the CHAT needs to draw it.
+ *
+ * Deliberately the GENERIC job shape (`JobSummary`'s status + done-of-total
+ * progress) rather than anything a site import or a video render owns: the
+ * platform is heading toward AI-defined job types, and a card that switched on
+ * the type would have to be rewritten for each of them. The host maps the API's
+ * `JobRecord` onto this — which is a structural widening, not a translation.
+ *
+ * Every field but `status` is optional so a job type that has no answer for one
+ * simply omits it, and the card draws what it was given.
+ */
+export interface WidgetJobView {
+  /** The generic job type, used ONLY to pick nicer copy for the types we happen
+   *  to know. An unrecognised type renders with the neutral fallback title —
+   *  which is the test that this stays type-agnostic. */
+  type?: string;
+  /** The coarse, type-agnostic lifecycle — `JobStatus` on the wire. */
+  status: "queued" | "running" | "done" | "failed";
+  /** Done-of-total, with a short label for what is happening right now (the page
+   *  being crawled). `total` is null while it is not yet known. */
+  progress?: { done?: number; total?: number | null; label?: string | null };
+  /** Overrides the type-derived title when the host knows better. */
+  title?: string | null;
+  /** Why it failed / what went wrong inside it. Shown verbatim. */
+  error?: string | null;
+  /** Where the finished work landed — an in-app, root-relative path the card
+   *  links to (e.g. "/assets"). Omit when the job produced nothing to open. */
+  resultPath?: string | null;
+}
+
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
   endpoint: string;
@@ -631,6 +662,18 @@ export interface AiChatWidgetOptions {
     status: "queued" | "processing" | "done" | "error";
     error?: string | null;
   }>;
+  /**
+   * Read ONE background job, GENERICALLY. Wire it to the type-agnostic job read
+   * (`GET /accounts/:id/jobs/:jobId`) — never to a per-type endpoint, because
+   * the whole point of the generic row is that a fourth job type must not need a
+   * new poller here. Whenever `onApplyProposal` answers with a `jobId`, the
+   * widget draws a live card in the conversation and polls this until the job
+   * reaches a terminal state.
+   *
+   * Omit it and nothing changes: an apply that returns a job id is reported
+   * exactly as it is today (a one-line "started ✓" and no card).
+   */
+  getJob?: (jobId: string) => Promise<WidgetJobView | null>;
   /** This thread's UNSAVED session artifacts (media generated/scraped in the
    *  conversation, hidden from the library until saved) — drives the artifact
    *  strip above the composer. Omit on hosts without asset storage. */
@@ -709,6 +752,22 @@ export const WIDGET_LABELS = {
   videoQueued: "Video queued — rendering in the background",
   imageAdded: "Image added to your assets",
   generationFailed: "Generation failed",
+  // Live background-job card — a job the chat started and now watches. The
+  // titles are per known TYPE, with a neutral fallback for a type this build
+  // has never heard of (an AI-defined job type must still render).
+  jobTitleSiteIngest: "Importing the website",
+  jobTitleMedia: "Rendering media",
+  jobTitleCoder: "Working on a code task",
+  jobTitleFallback: "Background job",
+  jobQueued: "Queued",
+  jobRunning: "Running",
+  jobDone: "Finished",
+  jobFailed: "Failed",
+  jobProgress: "{done} of {total}",
+  /** Used while the total is still unknown — a crawl learns it after page one. */
+  jobProgressOpen: "{done} so far",
+  jobOpenResult: "Open the result",
+  jobUnreachable: "Still running in the background — check back shortly",
   // Proposal confirm cards
   proposalUpdateCreation: "Apply this update to the creation?",
   proposalAddCreation: "Add this creation to your studio?",
@@ -1897,6 +1956,29 @@ export function createAiChatWidget(
   // video (an async render that takes minutes) poll the job so the chip resolves
   // on REAL completion instead of the chat going silent until the clip appears.
   const MEDIA_GEN_TOOLS = new Set(["generate_image", "generate_video"]);
+  /**
+   * Sleep, but tied to the widget's lifetime: resolves `true` after `ms`, or
+   * `false` the moment `destroy()` aborts. Every polling loop waits through this
+   * so a torn-down widget leaves no pending timer behind and no loop that wakes
+   * up to paint into DOM that is no longer on the page.
+   */
+  function waitAlive(ms: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      if (alive.signal.aborted) {
+        resolve(false);
+        return;
+      }
+      const timer = setTimeout(() => {
+        alive.signal.removeEventListener("abort", onAbort);
+        resolve(true);
+      }, ms);
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        resolve(false);
+      };
+      alive.signal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
   async function applyMediaGen(
     name: string,
     args: Record<string, unknown>
@@ -1923,7 +2005,7 @@ export function createAiChatWidget(
             paintActivity(chip, L("stillRendering"), "ok");
             break;
           }
-          await new Promise((r) => setTimeout(r, 4000));
+          if (!(await waitAlive(4000))) return;
           let st;
           try {
             st = await getJob(jobId);
@@ -1956,6 +2038,261 @@ export function createAiChatWidget(
       scrollDown(true);
     }
   }
+  // ── Live background jobs ────────────────────────────────────────────────────
+  //
+  // An apply that ENQUEUES (a whole-site import, a render) answers in a second
+  // and then works for minutes. The chat used to say "I'll notify you when it's
+  // ready ✓" and then show nothing at all until the completion artifact appeared
+  // on a reload — the one place the user was watching was the one place the work
+  // was invisible. So the apply's job id is kept, a card is drawn in the log, and
+  // the GENERIC job read is polled until the job is terminal.
+  //
+  // Nothing here knows what a site import is. It renders a status, a
+  // done-of-total, a label and a terminal outcome — which is all `JobSummary`
+  // promises for a job of ANY type, including one this build has never seen.
+
+  /** How often a live job is re-read. Slow enough not to be a poll storm, fast
+   *  enough that "3 of 12" visibly moves on a crawl. */
+  const JOB_POLL_MS = 3000;
+  /** Stop babysitting a job that never lands — the card says so rather than
+   *  spinning forever. */
+  const JOB_POLL_MAX_MS = 30 * 60 * 1000;
+
+  /** One job this conversation is watching, as remembered across a refresh. */
+  interface TrackedJob {
+    jobId: string;
+    /** The thread the job was started FROM — a job only re-attaches to its own
+     *  conversation, never to whichever thread happens to be open. */
+    threadId: string;
+    /** When we started watching (ms). Old entries are pruned, so a job whose
+     *  completion we never saw cannot haunt the chat forever. */
+    at: number;
+  }
+  /** Tracked jobs outlive the page, so they live beside the conversation in
+   *  localStorage (same opt-in: no persistKey → in-memory for this session only,
+   *  which is exactly today's behaviour minus the refresh). */
+  const jobsKey = opts.persistKey ? `ayca:jobs:${opts.persistKey}` : null;
+  const TRACKED_JOB_TTL_MS = 24 * 60 * 60 * 1000;
+  /** The card currently drawn for a job id. Re-pointed (not re-created) whenever
+   *  the transcript is re-rendered, so a poll always paints the LIVE node. */
+  const jobCards = new Map<string, HTMLElement>();
+  /** Job ids with a poll loop already running — a re-attach must never start a
+   *  second one. */
+  const jobPolling = new Set<string>();
+
+  function loadTrackedJobs(): TrackedJob[] {
+    if (!jobsKey) return [];
+    try {
+      const raw = localStorage.getItem(jobsKey);
+      if (!raw) return [];
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const cutoff = Date.now() - TRACKED_JOB_TTL_MS;
+      return parsed.filter(
+        (j): j is TrackedJob =>
+          Boolean(j) &&
+          typeof j === "object" &&
+          typeof (j as TrackedJob).jobId === "string" &&
+          typeof (j as TrackedJob).threadId === "string" &&
+          typeof (j as TrackedJob).at === "number" &&
+          (j as TrackedJob).at > cutoff
+      );
+    } catch {
+      return []; // corrupt/unavailable storage — nothing to re-attach
+    }
+  }
+  function saveTrackedJobs(jobs: TrackedJob[]): void {
+    if (!jobsKey) return;
+    try {
+      if (jobs.length) localStorage.setItem(jobsKey, JSON.stringify(jobs));
+      else localStorage.removeItem(jobsKey);
+    } catch {
+      /* storage blocked — the card still works for this session */
+    }
+  }
+  function rememberJob(jobId: string, tid: string): void {
+    const jobs = loadTrackedJobs().filter((j) => j.jobId !== jobId);
+    jobs.push({ jobId, threadId: tid, at: Date.now() });
+    saveTrackedJobs(jobs);
+  }
+  /** A finished job is not a live job: forgetting it here is what stops the card
+   *  from being redrawn on the next refresh (the transcript's own completion
+   *  artifact is the lasting record). */
+  function forgetJob(jobId: string): void {
+    saveTrackedJobs(loadTrackedJobs().filter((j) => j.jobId !== jobId));
+  }
+
+  /** The card's title: the host's own wording, else the copy for a type we know,
+   *  else a neutral one — an unknown type must still read as something. */
+  function jobTitle(view: WidgetJobView): string {
+    if (view.title) return view.title;
+    if (view.type === "site_ingest") return L("jobTitleSiteIngest");
+    if (view.type === "media") return L("jobTitleMedia");
+    if (view.type === "coder") return L("jobTitleCoder");
+    return L("jobTitleFallback");
+  }
+
+  /** "3 of 12" / "3 so far" / nothing at all — `total` is null until a crawl has
+   *  read its first page, and "3 of 0" would be a lie. */
+  function jobCounts(view: WidgetJobView): string {
+    const done = view.progress?.done ?? 0;
+    const total = view.progress?.total ?? null;
+    if (total && total > 0) return L("jobProgress", { done, total });
+    return done > 0 ? L("jobProgressOpen", { done }) : "";
+  }
+
+  /** (Re)paint a job card from the latest read. Same element throughout the
+   *  job's life, so the card the user is looking at is the one that updates. */
+  function paintJob(card: HTMLElement, view: WidgetJobView): void {
+    const terminal = view.status === "done" || view.status === "failed";
+    const failed = view.status === "failed";
+    card.className =
+      `${PREFIX}-job` +
+      (terminal ? ` ${PREFIX}-job-done` : "") +
+      (failed ? ` ${PREFIX}-job-failed` : "");
+    const icon = failed
+      ? `<span class="${PREFIX}-act-x" aria-hidden="true">✕</span>`
+      : view.status === "done"
+        ? `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>`
+        : `<span class="${PREFIX}-act-spin" aria-hidden="true"></span>`;
+    const state = failed
+      ? L("jobFailed")
+      : view.status === "done"
+        ? L("jobDone")
+        : view.status === "queued"
+          ? L("jobQueued")
+          : L("jobRunning");
+    const counts = jobCounts(view);
+    // The progress LABEL is server text (for a crawl, a URL off the site being
+    // imported) — escaped like every other untrusted string the widget draws.
+    const detail = failed ? (view.error ?? "") : (view.progress?.label ?? "");
+    const total = view.progress?.total ?? 0;
+    const done = view.progress?.done ?? 0;
+    // A bar only where there is a real ratio to show; otherwise the counts line
+    // carries the progress on its own.
+    const pct =
+      total > 0
+        ? Math.max(0, Math.min(100, Math.round((done / total) * 100)))
+        : 0;
+    card.innerHTML =
+      `<div class="${PREFIX}-job-head">${icon}` +
+      `<span class="${PREFIX}-job-title">${escapeHtml(jobTitle(view))}</span>` +
+      `<span class="${PREFIX}-job-state">${escapeHtml(state)}</span></div>` +
+      (counts
+        ? `<div class="${PREFIX}-job-counts">${escapeHtml(counts)}</div>`
+        : "") +
+      (total > 0 && !terminal
+        ? `<div class="${PREFIX}-job-bar"><i style="width:${pct}%"></i></div>`
+        : "") +
+      (detail
+        ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
+        : "");
+    // Finished WITH something to look at — the notification's "here's the
+    // folder" without leaving the conversation.
+    if (view.status === "done" && isSafeRelPath(view.resultPath)) {
+      const path = view.resultPath;
+      const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+      btn.type = "button";
+      btn.innerHTML = `<span>${escapeHtml(L("jobOpenResult"))}</span> <span aria-hidden="true">→</span>`;
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await dispatchAction("navigate", { path });
+        } catch {
+          btn.disabled = false;
+        }
+      });
+      card.appendChild(btn);
+    }
+  }
+
+  /** A placeholder card for a job we have not read yet (the moment after Apply,
+   *  and the moment after a refresh) — the chat is never blank about it. */
+  function pendingJobView(): WidgetJobView {
+    return { status: "queued" };
+  }
+
+  /**
+   * Watch one job: draw its card (or re-point an existing one) and, unless a
+   * loop is already running for it, poll the generic read until it is terminal.
+   *
+   * Stops on: a terminal status, the safety ceiling, or `destroy()` (every wait
+   * goes through `waitAlive`, so an aborted widget never wakes up again).
+   */
+  function trackJob(jobId: string, tid: string | undefined): void {
+    const getJob = opts.getJob;
+    if (!getJob || !jobId) return;
+    const card = el("div", `${PREFIX}-job`);
+    paintJob(card, pendingJobView());
+    log.appendChild(card);
+    jobCards.set(jobId, card);
+    scrollDown(true);
+    if (tid) rememberJob(jobId, tid);
+    if (jobPolling.has(jobId)) return; // already being polled — the card is enough
+    jobPolling.add(jobId);
+    void (async () => {
+      const started = Date.now();
+      try {
+        for (;;) {
+          if (Date.now() - started >= JOB_POLL_MAX_MS) {
+            // Give up WATCHING, not on the job: it is still running server-side,
+            // and saying so is more honest than a spinner that never resolves.
+            const stalled = jobCards.get(jobId);
+            if (stalled) {
+              stalled.className = `${PREFIX}-job ${PREFIX}-job-done`;
+              stalled.textContent = L("jobUnreachable");
+            }
+            forgetJob(jobId);
+            return;
+          }
+          let view: WidgetJobView | null;
+          try {
+            view = await getJob(jobId);
+          } catch {
+            // A transient read failure is not a failed job — keep the spinner
+            // and try again on the next tick.
+            if (!(await waitAlive(JOB_POLL_MS))) return;
+            continue;
+          }
+          // A job the account can no longer read (deleted, or never existed) is
+          // not something to keep asking about.
+          if (!view) {
+            jobCards.get(jobId)?.remove();
+            jobCards.delete(jobId);
+            forgetJob(jobId);
+            return;
+          }
+          const live = jobCards.get(jobId);
+          if (live) paintJob(live, view);
+          if (view.status === "done" || view.status === "failed") {
+            forgetJob(jobId);
+            scrollDown();
+            return;
+          }
+          if (!(await waitAlive(JOB_POLL_MS))) return;
+        }
+      } finally {
+        jobPolling.delete(jobId);
+      }
+    })();
+  }
+
+  /**
+   * Re-attach the live cards for jobs started FROM this thread.
+   *
+   * This is what makes a running import survive a refresh — and also what
+   * restores the card after any transcript re-render (the end-of-turn reload and
+   * the completion broadcast both wipe the log). Cards are always rebuilt from
+   * the tracked list rather than moved, so there is one path, not two.
+   */
+  function reattachTrackedJobs(tid: string | undefined): void {
+    if (!opts.getJob || !tid) return;
+    jobCards.clear();
+    for (const j of loadTrackedJobs()) {
+      if (j.threadId === tid) trackJob(j.jobId, undefined);
+    }
+  }
+
   // Turn a FINAL assistant bubble's text into rich content: the host's real
   // <Markdown> when wired, else the built-in safe markdown→HTML, else plain.
   function applyAssistantRich(
@@ -2001,7 +2338,14 @@ export function createAiChatWidget(
   }
   // Re-render a full thread (messages + inline DATA WIDGETS) into the log,
   // replacing whatever is shown. Shared by history-reopen + refresh-restore.
-  function renderThreadItems(items: LoadedThreadItem[]): void {
+  // `tid` is the thread being rendered, which is NOT always the active one yet:
+  // reopening from history renders first and adopts the thread after. The live
+  // job cards belong to a THREAD, so they have to be re-attached for the one on
+  // screen, not the one that was open a moment ago.
+  function renderThreadItems(
+    items: LoadedThreadItem[],
+    tid: string | undefined = threadId
+  ): void {
     clearRich();
     log.innerHTML = "";
     history.length = 0;
@@ -2032,6 +2376,9 @@ export function createAiChatWidget(
         }
       }
     }
+    // The transcript we just drew is the finished record; anything this thread
+    // started that is STILL running goes back underneath it, live.
+    reattachTrackedJobs(tid);
     scrollDown(true);
   }
 
@@ -2257,6 +2604,10 @@ export function createAiChatWidget(
   } else if (opts.greeting) {
     addAssistantMessage(opts.greeting);
   }
+  // A background job this thread started may still be running from BEFORE the
+  // refresh — put its live card back immediately, off the restored thread id,
+  // without waiting for the (optional, async) full thread fetch below.
+  reattachTrackedJobs(threadId);
   // Persisted history is TEXT-ONLY (data widgets aren't stored in localStorage),
   // so on refresh the charts/tables were lost. If we have the thread id + a
   // loader, re-fetch the full thread and re-render WITH its widgets — matching
@@ -3324,7 +3675,7 @@ export function createAiChatWidget(
       const items = await opts.loadThread(id);
       // Replace the visible conversation with the chosen thread (messages +
       // inline data widgets). renderThreadItems clears rich roots + the log.
-      renderThreadItems(items);
+      renderThreadItems(items, id);
       threadId = id;
       saveState();
       void refreshArtifacts();
@@ -4066,10 +4417,15 @@ export function createAiChatWidget(
           if (v) edited[arg] = v;
           else delete edited[arg];
         }
-        const msg = await opts.onApplyProposal!(
+        const res = await opts.onApplyProposal!(
           name,
           threadId ? { ...edited, threadId } : edited
         );
+        const msg = typeof res === "string" ? res : res?.message;
+        // An apply that ENQUEUED answers with a job id. Keeping it is the whole
+        // difference between "I'll notify you when it's ready ✓" followed by
+        // minutes of silence, and a card that shows the work happening.
+        const jobId = res && typeof res === "object" ? res.jobId : undefined;
         disposePreview?.();
         // Resolved: it no longer blocks the end-of-turn reload.
         wrap.classList.remove(`${PREFIX}-proposal-pending`);
@@ -4077,8 +4433,9 @@ export function createAiChatWidget(
         const ok = el("div", `${PREFIX}-proposal-ok`);
         ok.innerHTML =
           `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
-          `<span>${escapeHtml((typeof msg === "string" && msg) || L("applied"))}</span>`;
+          `<span>${escapeHtml(msg || L("applied"))}</span>`;
         wrap.appendChild(ok);
+        if (jobId) trackJob(jobId, threadId);
       } catch {
         apply.disabled = false;
         apply.textContent = L("tryAgain");
@@ -5229,6 +5586,16 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid color-mix(in srgb,var(--aiw-accent) 27%,transparent);border-top-color:var(--aiw-accent);animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
+.${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-job-done{opacity:.85}
+.${PREFIX}-job-failed{border-color:#e5b8b8;background:#fdf3f3}
+.${PREFIX}-job-head{display:flex;align-items:center;gap:7px}
+.${PREFIX}-job-title{font-weight:600;color:var(--aiw-text)}
+.${PREFIX}-job-state{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-muted)}
+.${PREFIX}-job-counts{color:var(--aiw-text-2);font-variant-numeric:tabular-nums}
+.${PREFIX}-job-bar{height:4px;border-radius:3px;background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
+.${PREFIX}-job-bar>i{display:block;height:100%;background:var(--aiw-accent);transition:width .4s ease}
+.${PREFIX}-job-detail{color:var(--aiw-muted);font-size:11px;word-break:break-word}
 .${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed var(--aiw-border-strong);border-radius:9px;padding:4px 10px;font-size:12px;color:var(--aiw-muted);background:var(--aiw-bg)}
 .${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:#e5b8b8;color:#a23b3b;background:#fdf3f3;font-weight:600}
 .${PREFIX}-flag-ok{border-color:#bfe3c8;color:#2f7d43;background:#f2fbf5}
