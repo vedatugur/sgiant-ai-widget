@@ -291,6 +291,14 @@ const STANDARD_ACTION_ALREADY: Record<string, string> = {
  * Compared on pathname only: a query string or hash is a filter or an anchor
  * within the same page, not a different destination.
  */
+/** Where an account-relative path really lands, mirroring the hosts' own
+ *  `orgPath`/`adminPath`: already absolute stays put, anything else is prefixed
+ *  with the account. Kept in step with those two by construction — they are
+ *  idempotent for a path that already carries the prefix. */
+function resolveTarget(base: string, path: string): string {
+  return path.startsWith("/accounts/") ? path : `${base}${path}`;
+}
+
 function alreadyThere(path: string): boolean {
   if (typeof window === "undefined") return false;
   const strip = (p: string): string =>
@@ -322,7 +330,13 @@ export function createHostActions(
   const standard: Record<string, HostActionHandler> = {
     navigate: (data) => {
       if (data.path) {
-        if (alreadyThere(data.path)) return "Already there";
+        // Compare what the host will ACTUALLY open, not what the model wrote.
+        // The AI emits account-relative paths ("/assets"); the host prefixes
+        // the account before routing. Testing the bare path against the real
+        // location never matched, so "you are already here" could not fire on
+        // the one action most likely to be aimed at the current page.
+        if (alreadyThere(resolveTarget(base, data.path)))
+          return "Already there";
         cfg.navigate(data.path);
         return "Opened";
       }

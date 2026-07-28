@@ -5138,11 +5138,23 @@ export function createAiChatWidget(
       wrap.appendChild(chip);
       log.appendChild(wrap);
       scrollDown(true);
+      // The chip must always land on an OUTCOME. It used to be written once as
+      // "Opening …" and only rewritten on failure, so a successful navigation
+      // left it saying "Opening Open Assets…" for the rest of the conversation
+      // — which reads as a click that never finished, and was reported as
+      // exactly that. The handler's own words win when it has any ("Already on
+      // assets" is more use than a tick).
       void Promise.resolve(
         dispatchAction("navigate", { path: spec.path })
-      ).catch(() => {
-        chip.querySelector("span")!.textContent = `Couldn't open ${label}`;
-      });
+      ).then(
+        (msg) => {
+          chip.querySelector("span")!.textContent =
+            (typeof msg === "string" && msg) || `${label} ✓`;
+        },
+        () => {
+          chip.querySelector("span")!.textContent = `Couldn't open ${label}`;
+        }
+      );
       return;
     }
     const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
@@ -5151,10 +5163,18 @@ export function createAiChatWidget(
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
-        await dispatchAction("navigate", { path: spec.path });
-        btn.innerHTML = `<span>${escapeHtml(label)} ✓</span>`;
+        const msg = await dispatchAction("navigate", { path: spec.path });
+        // Say what actually happened. A blanket tick hid the difference
+        // between "opened" and "you are already there", which is the whole
+        // reason a click on the page you are on looked broken.
+        btn.innerHTML = `<span>${escapeHtml(
+          (typeof msg === "string" && msg) || `${label} ✓`
+        )}</span>`;
       } catch {
+        // Re-enabling in silence left the user to guess. Refusing an off-app
+        // path is a decision worth stating.
         btn.disabled = false;
+        btn.innerHTML = `<span>${escapeHtml(label)} — try again</span>`;
       }
     });
     wrap.appendChild(btn);
