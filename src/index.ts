@@ -830,6 +830,8 @@ export const WIDGET_LABELS = {
   // Lead form / preview / action chips
   submit: "Submit",
   sending: "Sending…",
+  /** Why a form's Send, or a proposal card's Apply, refused to go through. */
+  requiredFields: "Please fill in the highlighted fields first.",
   done: "Done ✓",
   preview: "Preview",
   otherOption: "+ Other…",
@@ -988,6 +990,15 @@ interface BuiltField {
  *  spellings rather than demanding exactly `"true"`. */
 function isTruthyValue(v: string | undefined): boolean {
   return ["true", "1", "yes", "on"].includes((v ?? "").trim().toLowerCase());
+}
+
+/** A proposal arg a field can be PREFILLED from: anything JSON-primitive, which
+ *  is everything with one obvious rendering. Objects/arrays have none, and
+ *  null/undefined mean the assistant proposed nothing for that arg. */
+function isPrimitiveArg(v: unknown): v is string | number | boolean {
+  return (
+    typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+  );
 }
 
 /** Read the fields off a proposal frame, defensively — this is model output. */
@@ -2240,12 +2251,21 @@ export function createAiChatWidget(
   function trackJob(jobId: string, tid: string | undefined): void {
     const getJob = opts.getJob;
     if (!getJob || !jobId) return;
+    if (tid) rememberJob(jobId, tid);
+    // Idempotent per id, and it has to be: `reattachTrackedJobs` calls this
+    // TWICE for the same job (once from browser storage, once when the server
+    // listing resolves). The dedupe used to sit below the append, so the second
+    // call drew a second card and overwrote the map entry — leaving the first
+    // one orphaned in the log, repainted by nobody and frozen on "Queued"
+    // forever. Bail before touching the DOM when the card is already on screen;
+    // a stale entry left detached by a transcript wipe is rebuilt instead.
+    const existing = jobCards.get(jobId);
+    if (existing?.isConnected) return;
     const card = el("div", `${PREFIX}-job`);
     paintJob(card, pendingJobView());
     log.appendChild(card);
     jobCards.set(jobId, card);
     scrollDown(true);
-    if (tid) rememberJob(jobId, tid);
     if (jobPolling.has(jobId)) return; // already being polled — the card is enough
     jobPolling.add(jobId);
     void (async () => {
@@ -2383,6 +2403,25 @@ export function createAiChatWidget(
     items: LoadedThreadItem[],
     tid: string | undefined = threadId
   ): void {
+    // A `question` card is NOT persisted server-side (unlike a creation or a
+    // data widget), and this re-render runs at the END of every turn — which is
+    // exactly when `ask_user` has just drawn one. Rebuilding purely from the
+    // transcript would erase the decision the assistant is waiting on: the card
+    // flashed in and vanished a moment later, so ask_user was dead on the
+    // floating widget. Carry the UNANSWERED cards across the wipe (they keep
+    // their listeners while detached, so they stay clickable). ANSWERED ones are
+    // dropped on purpose — the answer is a real user message in the reloaded
+    // transcript by now, and keeping the card would print the same decision
+    // twice. Only for the thread already on screen: switching conversations must
+    // not drag another one's question along. Same semantics as the React panel.
+    const carriedQuestions =
+      tid === threadId
+        ? Array.from(
+            log.querySelectorAll<HTMLElement>(
+              `.${PREFIX}-question:not(.${PREFIX}-question-done)`
+            )
+          )
+        : [];
     clearRich();
     log.innerHTML = "";
     history.length = 0;
@@ -2414,7 +2453,9 @@ export function createAiChatWidget(
       }
     }
     // The transcript we just drew is the finished record; anything this thread
-    // started that is STILL running goes back underneath it, live.
+    // started that is STILL running goes back underneath it, live — and so does
+    // the question the assistant is still blocked on.
+    for (const q of carriedQuestions) log.appendChild(q);
     reattachTrackedJobs(tid);
     scrollDown(true);
   }
@@ -4223,6 +4264,19 @@ export function createAiChatWidget(
     if (q.options?.length) {
       const list = el("div", `${PREFIX}-question-opts`);
       const picked = new Set<string>();
+      // Built before the options so toggling one can enable it. A multi-select
+      // confirm with nothing picked has nothing to send: leaving it enabled made
+      // the click a silent no-op (`deliver` bails on an empty answer), which
+      // reads as a broken button. The React panel disables it; so does this.
+      const confirm = q.multi
+        ? (el("button", `${PREFIX}-question-send`) as HTMLButtonElement)
+        : null;
+      if (confirm) {
+        confirm.type = "button";
+        confirm.textContent = L("questionConfirm");
+        confirm.disabled = true;
+        confirm.addEventListener("click", () => deliver([...picked]));
+      }
       for (const o of q.options) {
         const b = el("button", `${PREFIX}-question-opt`) as HTMLButtonElement;
         b.type = "button";
@@ -4244,20 +4298,12 @@ export function createAiChatWidget(
           if (picked.has(o.id)) picked.delete(o.id);
           else picked.add(o.id);
           b.classList.toggle(`${PREFIX}-question-opt-on`, picked.has(o.id));
+          if (confirm) confirm.disabled = picked.size === 0;
         });
         list.appendChild(b);
       }
       wrap.appendChild(list);
-      if (q.multi) {
-        const confirm = el(
-          "button",
-          `${PREFIX}-question-send`
-        ) as HTMLButtonElement;
-        confirm.type = "button";
-        confirm.textContent = L("questionConfirm");
-        confirm.addEventListener("click", () => deliver([...picked]));
-        wrap.appendChild(confirm);
-      }
+      if (confirm) wrap.appendChild(confirm);
     } else {
       // Free text.
       const row = el("div", `${PREFIX}-question-free`);
@@ -4300,8 +4346,20 @@ export function createAiChatWidget(
     // and with it every edit/regenerate/branch control.
     const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
     const title = el("div", `${PREFIX}-proposal-title`);
-    /** Args the user may correct before applying — see EDITABLE_ARGS. */
-    const edits = new Map<string, () => string>();
+    /**
+     * Args the user may correct before applying — see EDITABLE_ARGS.
+     *
+     * Each entry keeps the field's TYPE and its node, not just a reader: the
+     * apply path has to post a boolean as a boolean (not the string "false"),
+     * and has to be able to point at the control it is refusing to send without.
+     */
+    const edits: Array<{
+      arg: string;
+      type: string;
+      required: boolean;
+      read: () => string;
+      node: HTMLElement;
+    }> = [];
     // Show the acting agent (e.g. Nova) so the user sees WHO proposed this.
     if (agent) {
       const badge = el("span", `${PREFIX}-act-agent`);
@@ -4396,9 +4454,11 @@ export function createAiChatWidget(
         ...(field.options ? { options: field.options } : {}),
         ...(field.required ? { required: field.required } : {}),
         // Prefilled with what the assistant proposed: the user confirms or
-        // corrects, rather than typing from nothing.
-        value:
-          typeof args[field.arg] === "string" ? String(args[field.arg]) : "",
+        // corrects, rather than typing from nothing. Any PRIMITIVE counts —
+        // reading only strings meant `withReadme: true` drew an UNTICKED box and
+        // `maxPages: 20` drew an empty number field, so the card contradicted
+        // the very proposal it was there to confirm.
+        value: isPrimitiveArg(args[field.arg]) ? String(args[field.arg]) : "",
         ...(field.placeholder ? { placeholder: field.placeholder } : {}),
       });
       // Caption first — unless the control already draws one (a checkbox), in
@@ -4410,7 +4470,13 @@ export function createAiChatWidget(
       }
       row.appendChild(built.node);
       wrap.appendChild(row);
-      edits.set(field.arg, built.read);
+      edits.push({
+        arg: field.arg,
+        type: field.type ?? "text",
+        required: Boolean(field.required),
+        read: built.read,
+        node: built.node,
+      });
     }
     const summary = proposalSummary(name, args);
     if (summary) {
@@ -4418,6 +4484,14 @@ export function createAiChatWidget(
       s.textContent = summary;
       wrap.appendChild(s);
     }
+    // Shown when Apply is REFUSED because a field the assistant marked required
+    // was left blank. Applying anyway (which is what dropping the empty value
+    // did) sent an incomplete write; doing nothing at all reads as a dead
+    // button. Say which way it went.
+    const editErr = el("div", `${PREFIX}-proposal-err`);
+    editErr.textContent = L("requiredFields");
+    editErr.style.display = "none";
+    if (edits.length) wrap.appendChild(editErr);
     const row = el("div", `${PREFIX}-confirm-row`);
     const apply = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     apply.type = "button";
@@ -4430,6 +4504,52 @@ export function createAiChatWidget(
       wrap.remove();
     });
     apply.addEventListener("click", async () => {
+      // Collect the edits BEFORE anything is disabled or dispatched: a required
+      // field left blank has to stop the apply, and a blocked card must stay
+      // usable so the user can fill it in and click again.
+      // What the user typed WINS over what the assistant proposed — that is the
+      // entire point of showing them the field. An emptied OPTIONAL field means
+      // "you choose", so it is dropped rather than sent as "".
+      const edited: Record<string, unknown> = { ...args };
+      const missing: HTMLElement[] = [];
+      for (const f of edits) {
+        f.node.classList.remove(`${PREFIX}-field-invalid`);
+        const raw = f.read();
+        // Post the type the ARG actually is. Every control reads back a string,
+        // and the string "false" is TRUTHY server-side (`withReadme !== false`
+        // passes), so an unticked box used to change nothing at all.
+        if (f.type === "checkbox") {
+          const on = isTruthyValue(raw);
+          if (f.required && !on) {
+            missing.push(f.node);
+            continue;
+          }
+          edited[f.arg] = on;
+          continue;
+        }
+        if (!raw) {
+          if (f.required) {
+            missing.push(f.node);
+            continue;
+          }
+          delete edited[f.arg];
+          continue;
+        }
+        if (f.type === "number") {
+          const n = Number(raw);
+          // Non-numeric text in a number field is the user's answer, not a
+          // NaN to post — hand it over as typed and let the API judge it.
+          edited[f.arg] = Number.isFinite(n) ? n : raw;
+          continue;
+        }
+        edited[f.arg] = raw;
+      }
+      if (missing.length) {
+        for (const n of missing) n.classList.add(`${PREFIX}-field-invalid`);
+        editErr.style.display = "";
+        return;
+      }
+      editErr.style.display = "none";
       apply.disabled = true;
       apply.textContent = L("applying");
       // Media generation gets a live process chip (running → ✓/✗, video polled)
@@ -4445,15 +4565,6 @@ export function createAiChatWidget(
         // writes (scraped imports, generations) use it to keep chat debris
         // out of the library until explicitly saved. Tools that don't care
         // simply ignore the extra key.
-        // What the user typed WINS over what the assistant proposed — that is
-        // the entire point of showing them the field. An emptied field means
-        // "you choose", so it is dropped rather than sent as "".
-        const edited: Record<string, unknown> = { ...args };
-        for (const [arg, read] of edits) {
-          const v = read();
-          if (v) edited[arg] = v;
-          else delete edited[arg];
-        }
         const res = await opts.onApplyProposal!(
           name,
           threadId ? { ...edited, threadId } : edited
@@ -4853,6 +4964,10 @@ export function createAiChatWidget(
         radio.type = "radio";
         radio.name = groupName;
         radio.value = o;
+        // Required propagates to the inputs (one required radio makes the whole
+        // group required). It was dropped here, so a required choice reported
+        // itself as answered while nothing was selected.
+        if (field.required) radio.required = true;
         if (o === field.value) radio.checked = true;
         row.appendChild(radio);
         const cap = el("span", `${PREFIX}-field-check-label`);
@@ -4911,6 +5026,8 @@ export function createAiChatWidget(
       /** A checkbox answers "false" when unticked — a real answer for a normal
        *  field, and "not filled in" for this one. */
       boolish: boolean;
+      /** Highlighted when the form is held back on this control. */
+      node: HTMLElement;
     }[] = [];
     // Fields are built by ONE function, shared with the editable proposal card
     // — see `buildField`. Two implementations of "render an input from a spec"
@@ -4924,8 +5041,16 @@ export function createAiChatWidget(
         get: built.read,
         required: Boolean(field.required),
         boolish: field.type === "checkbox",
+        node: built.node,
       });
     }
+    // Why Send did nothing. A silent `return` on a missing required field left
+    // the user clicking a button that never reacted — with no way to guess which
+    // field was at fault.
+    const err = el("div", `${PREFIX}-form-err`);
+    err.textContent = L("requiredFields");
+    err.style.display = "none";
+    f.appendChild(err);
     const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
     submit.type = "submit";
     submit.textContent = spec.submit ?? L("submit");
@@ -4942,12 +5067,25 @@ export function createAiChatWidget(
       // untouched OPTIONAL field blocked a form whose required ones were all
       // filled, and a required checkbox passed while unticked because it reads
       // the string "false", which is not empty.
-      const missing = controls.some((c) => {
+      const missing = controls.filter((c) => {
         if (!c.required) return false;
         const v = data[c.name];
-        return c.boolish ? v !== "true" : !v;
+        return c.boolish ? !isTruthyValue(v) : !v;
       });
-      if (missing) return;
+      for (const c of controls)
+        c.node.classList.toggle(`${PREFIX}-field-invalid`, missing.includes(c));
+      if (missing.length) {
+        err.style.display = "";
+        // Put the cursor on the offending control — its node is the input
+        // itself for a text field, and a wrapper for a checkbox/radio group.
+        const first = missing[0]?.node;
+        (first?.matches("input,select,textarea")
+          ? first
+          : first?.querySelector<HTMLElement>("input,select,textarea")
+        )?.focus();
+        return;
+      }
+      err.style.display = "none";
       submit.disabled = true;
       submit.textContent = L("sending");
       try {
@@ -5696,6 +5834,9 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-question-free{display:flex;gap:6px;margin-top:2px}
 .${PREFIX}-question-input{flex:1 1 auto;min-width:0;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);font:inherit;font-size:13px}
 .${PREFIX}-question-send{padding:9px 14px;border-radius:9px;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+/* A multi-select confirm with nothing picked has nothing to send — it says so
+   rather than looking clickable and doing nothing. */
+.${PREFIX}-question-send:disabled{opacity:.5;cursor:not-allowed}
 .${PREFIX}-question-err{margin-top:8px;font-size:12px;line-height:1.45;color:#d93f0b}
 /* Answered: collapsed to the decision, so the transcript reads as a
    conversation rather than a dead form. */
@@ -5800,6 +5941,11 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    this a dark-mode select opens as black text on a black list. */
 .${PREFIX}-field option{background:var(--aiw-field-bg);color:var(--aiw-field-fg)}
 .${PREFIX}-field-group{display:flex;flex-direction:column;gap:6px}
+/* "This is the field that's holding you up." An outline rather than a border so
+   it lands the same on a bare input, a checkbox row and a radio GROUP — the
+   three shapes buildField can hand back. */
+.${PREFIX}-field-invalid{outline:1px solid #d93f0b;outline-offset:2px;border-radius:var(--aiw-field-radius)}
+.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:12.5px;line-height:1.45;color:#d93f0b}
 .${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
 .${PREFIX}-field-check-label{min-width:0}
 .${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:4px;cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
