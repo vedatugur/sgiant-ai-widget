@@ -189,6 +189,15 @@ export const STANDARD_ACTIONS = [
     description: "Open billing & credits.",
     surfaces: ["org"],
   },
+  {
+    // Missing until now, while the assistant offered it anyway: the model has
+    // every reason to think "open assets" exists (the asset library is a first
+    // class surface it has fifteen tools for), so it emitted the action, the
+    // widget announced "Opening Open Assets…", and dispatch found no handler.
+    name: "open-assets",
+    description: "Open the account's asset library.",
+    surfaces: ["org", "admin"],
+  },
   // Read-only UI control — point the user at a control ON the current page. Safe
   // and reversible (no state change), so no confirm. The `target` in `data` is a
   // `data-ai-target` id from the page's `uiTargets` catalog (see ui-control.ts).
@@ -238,6 +247,7 @@ export const STANDARD_ACTION_PATHS: Record<string, string> = {
   "open-dashboard-builder": "/dashboards/new/edit",
   "open-studio": "/studio",
   "open-billing": "/billing",
+  "open-assets": "/assets",
 };
 
 /** Human confirmation text for each named standard action (post-navigation). */
@@ -246,7 +256,32 @@ const STANDARD_ACTION_DONE: Record<string, string> = {
   "open-dashboard-builder": "Opened the dashboard builder",
   "open-studio": "Opened Studio",
   "open-billing": "Opened billing",
+  "open-assets": "Opened assets",
 };
+
+/** Said instead of "Opened …" when the user is ALREADY on that page. */
+const STANDARD_ACTION_ALREADY: Record<string, string> = {
+  "open-dashboards": "Already on dashboards",
+  "open-dashboard-builder": "Already in the dashboard builder",
+  "open-studio": "Already in Studio",
+  "open-billing": "Already on billing",
+  "open-assets": "Already on assets",
+};
+
+/**
+ * Are we already looking at this route?
+ *
+ * Navigating to the page you are standing on is not a helpful action, it is
+ * noise — and worse, it reads as a broken one, because nothing visibly happens.
+ * Compared on pathname only: a query string or hash is a filter or an anchor
+ * within the same page, not a different destination.
+ */
+function alreadyThere(path: string): boolean {
+  if (typeof window === "undefined") return false;
+  const strip = (p: string): string =>
+    p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
+  return strip(window.location.pathname) === strip(path);
+}
 
 export type HostActionHandler = (
   data: Record<string, string>
@@ -272,6 +307,7 @@ export function createHostActions(
   const standard: Record<string, HostActionHandler> = {
     navigate: (data) => {
       if (data.path) {
+        if (alreadyThere(data.path)) return "Already there";
         cfg.navigate(data.path);
         return "Opened";
       }
@@ -282,7 +318,10 @@ export function createHostActions(
   // place the advanced-view resolver also reads.
   for (const [name, path] of Object.entries(STANDARD_ACTION_PATHS)) {
     standard[name] = () => {
-      cfg.navigate(`${base}${path}`);
+      const target = `${base}${path}`;
+      if (alreadyThere(target))
+        return STANDARD_ACTION_ALREADY[name] ?? "Already there";
+      cfg.navigate(target);
       return STANDARD_ACTION_DONE[name] ?? "Opened";
     };
   }
@@ -304,7 +343,12 @@ export function createHostActions(
       return ok ? "Done on the page" : undefined;
     }
     const fn = map[action];
-    if (!fn) return;
+    // THROW, don't shrug. Returning undefined here resolved the widget's
+    // promise, and a resolved promise is rendered as "<label> ✓" — so an action
+    // this app cannot perform reported itself as done. That is how "Opening
+    // Open Assets…" turned into a tick next to a page that never opened. An
+    // action we do not have is a failure, and the chip must say so.
+    if (!fn) throw new Error(`unsupported action: ${action}`);
     return await fn(data);
   };
 }
