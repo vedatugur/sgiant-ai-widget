@@ -858,6 +858,42 @@ interface FormSpec {
   submit?: string;
 }
 
+/**
+ * A field the ASSISTANT asked the user to fill in on a proposal card.
+ *
+ * Declared by the proposal, never by the widget. A table of "which args are
+ * editable for which tool" hardcoded in the UI would mean the chat can only
+ * ever ask the questions the frontend was built to ask — a new tool, or a
+ * decision the model wants confirmed, would need a UI release. The model knows
+ * what it is unsure about; it says so, and the card renders it.
+ *
+ * Same shape as a `[[form:…]]` field, and built by the same `buildField`, so an
+ * input looks identical wherever the chat draws one.
+ */
+interface ProposalField {
+  /** The proposal ARG this field overwrites on apply. */
+  arg: string;
+  label?: string;
+  type?: string;
+  placeholder?: string;
+  options?: string[];
+  required?: boolean;
+}
+
+/** Read the fields off a proposal frame, defensively — this is model output. */
+function proposalFields(raw: unknown): ProposalField[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (f): f is ProposalField =>
+        Boolean(f) &&
+        typeof f === "object" &&
+        typeof (f as ProposalField).arg === "string" &&
+        Boolean((f as ProposalField).arg)
+    )
+    .slice(0, 6);
+}
+
 /** Pull a `[[form:{json}]]` directive out of assistant text, if present. Uses
  *  the shared brace-matching extractor, then validates the form shape. */
 function parseFormDirective(
@@ -3797,7 +3833,9 @@ export function createAiChatWidget(
   function renderProposal(
     name: string,
     args: Record<string, unknown>,
-    agent?: string
+    agent?: string,
+    /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
+    fields: ProposalField[] = []
   ): void {
     // `-pending` marks a card that is still AWAITING the user, and it is what
     // the end-of-turn reload checks. The reload used to look for `-proposal`,
@@ -3807,6 +3845,8 @@ export function createAiChatWidget(
     // and with it every edit/regenerate/branch control.
     const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
     const title = el("div", `${PREFIX}-proposal-title`);
+    /** Args the user may correct before applying — see EDITABLE_ARGS. */
+    const edits = new Map<string, () => string>();
     // Show the acting agent (e.g. Nova) so the user sees WHO proposed this.
     if (agent) {
       const badge = el("span", `${PREFIX}-act-agent`);
@@ -3888,6 +3928,33 @@ export function createAiChatWidget(
         wrap.appendChild(img);
       }
     }
+    // Editable args: the assistant's suggestion is a STARTING POINT, not a
+    // decision the user has to accept whole. Importing a site into a folder
+    // called "Website" and then renaming it afterwards is a worse experience
+    // than being handed the name with a cursor in it.
+    for (const field of fields) {
+      const row = el("label", `${PREFIX}-proposal-edit`);
+      if (field.label) {
+        const cap = el("span", `${PREFIX}-proposal-edit-label`);
+        cap.textContent = field.label;
+        row.appendChild(cap);
+      }
+      const input = buildField({
+        name: field.arg,
+        ...(field.type ? { type: field.type } : {}),
+        ...(field.label ? { label: field.label } : {}),
+        ...(field.options ? { options: field.options } : {}),
+        ...(field.required ? { required: field.required } : {}),
+        // Prefilled with what the assistant proposed: the user confirms or
+        // corrects, rather than typing from nothing.
+        value:
+          typeof args[field.arg] === "string" ? String(args[field.arg]) : "",
+        ...(field.placeholder ? { placeholder: field.placeholder } : {}),
+      });
+      row.appendChild(input);
+      wrap.appendChild(row);
+      edits.set(field.arg, () => input.value.trim());
+    }
     const summary = proposalSummary(name, args);
     if (summary) {
       const s = el("div", `${PREFIX}-proposal-summary`);
@@ -3921,9 +3988,18 @@ export function createAiChatWidget(
         // writes (scraped imports, generations) use it to keep chat debris
         // out of the library until explicitly saved. Tools that don't care
         // simply ignore the extra key.
+        // What the user typed WINS over what the assistant proposed — that is
+        // the entire point of showing them the field. An emptied field means
+        // "you choose", so it is dropped rather than sent as "".
+        const edited: Record<string, unknown> = { ...args };
+        for (const [arg, read] of edits) {
+          const v = read();
+          if (v) edited[arg] = v;
+          else delete edited[arg];
+        }
         const msg = await opts.onApplyProposal!(
           name,
-          threadId ? { ...args, threadId } : args
+          threadId ? { ...edited, threadId } : edited
         );
         disposePreview?.();
         // Resolved: it no longer blocks the end-of-turn reload.
@@ -3993,6 +4069,7 @@ export function createAiChatWidget(
       name: string;
       args: Record<string, unknown>;
       agent?: string;
+      fields: ProposalField[];
     }> = [];
     let turnIn = 0;
     let turnOut = 0;
@@ -4150,6 +4227,10 @@ export function createAiChatWidget(
                 name: frame.name,
                 args: (frame.args ?? {}) as Record<string, unknown>,
                 agent: (frame as { agent?: string }).agent,
+                // Inputs the assistant wants filled in before this is applied.
+                // Absent on every proposal that needs no decision, which is
+                // most of them — the card stays a plain confirmation.
+                fields: proposalFields((frame as { fields?: unknown }).fields),
               });
               producedAny = true;
             }
@@ -4199,7 +4280,8 @@ export function createAiChatWidget(
     const lastBubble = flushSegment(true);
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
-    for (const p of deferredProposals) renderProposal(p.name, p.args, p.agent);
+    for (const p of deferredProposals)
+      renderProposal(p.name, p.args, p.agent, p.fields);
     if (deferredProposals.length) scrollDown();
     if (!producedAny) {
       if (failure) showError(failure);
@@ -4251,6 +4333,53 @@ export function createAiChatWidget(
     }
   }
 
+  /**
+   * Build ONE input from a field spec — the widget's only place that turns a
+   * described field into a DOM control.
+   *
+   * Extracted because the editable proposal card needs exactly this and was
+   * about to grow its own copy. A second implementation would drift: the same
+   * `select` would look one way inside a form and another inside a card, and a
+   * later fix to one would quietly miss the other.
+   */
+  function buildField(field: {
+    name: string;
+    type?: string;
+    label?: string;
+    placeholder?: string;
+    options?: string[];
+    required?: boolean;
+    value?: string;
+  }): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+    let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    if (field.type === "textarea") {
+      input = el("textarea", `${PREFIX}-lead-input`) as HTMLTextAreaElement;
+    } else if (field.type === "select") {
+      const sel = el("select", `${PREFIX}-lead-input`) as HTMLSelectElement;
+      for (const o of field.options ?? []) {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        sel.appendChild(opt);
+      }
+      input = sel;
+    } else {
+      const i = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
+      i.type = field.type === "number" ? "number" : (field.type ?? "text");
+      input = i;
+    }
+    if ("placeholder" in input && field.placeholder)
+      (input as HTMLInputElement).placeholder = field.label
+        ? `${field.label} — ${field.placeholder}`
+        : field.placeholder;
+    else if ("placeholder" in input && field.label)
+      (input as HTMLInputElement).placeholder = field.label;
+    if (field.required) (input as HTMLInputElement).required = true;
+    // Prefilled: the card hands back a value the user can accept or rewrite.
+    if (field.value !== undefined) input.value = field.value;
+    return input;
+  }
+
   /** Render an AI-described input form inline; submit → host action. */
   function renderForm(spec: FormSpec): void {
     const wrap = el("div", `${PREFIX}-lead`);
@@ -4261,31 +4390,12 @@ export function createAiChatWidget(
     }
     const f = el("form", `${PREFIX}-lead-form`) as HTMLFormElement;
     const controls: { name: string; get: () => string }[] = [];
+    // Fields are built by ONE function, shared with the editable proposal card
+    // — see `buildField`. Two implementations of "render an input from a spec"
+    // is how a select ends up styled differently depending on which part of the
+    // chat drew it.
     for (const field of spec.fields.slice(0, 8)) {
-      let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-      if (field.type === "textarea") {
-        input = el("textarea", `${PREFIX}-lead-input`) as HTMLTextAreaElement;
-      } else if (field.type === "select") {
-        const sel = el("select", `${PREFIX}-lead-input`) as HTMLSelectElement;
-        for (const o of field.options ?? []) {
-          const opt = document.createElement("option");
-          opt.value = o;
-          opt.textContent = o;
-          sel.appendChild(opt);
-        }
-        input = sel;
-      } else {
-        const i = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
-        i.type = field.type === "number" ? "number" : (field.type ?? "text");
-        input = i;
-      }
-      if ("placeholder" in input && field.placeholder)
-        (input as HTMLInputElement).placeholder = field.label
-          ? `${field.label} — ${field.placeholder}`
-          : field.placeholder;
-      else if ("placeholder" in input && field.label)
-        (input as HTMLInputElement).placeholder = field.label;
-      if (field.required) (input as HTMLInputElement).required = true;
+      const input = buildField(field);
       f.appendChild(input);
       controls.push({ name: field.name, get: () => input.value.trim() });
     }
@@ -5258,6 +5368,8 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
 .${PREFIX}-proposal{align-self:stretch;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-proposal-title{font-size:13px;font-weight:700}
+.${PREFIX}-proposal-edit{display:flex;flex-direction:column;gap:4px}
+.${PREFIX}-proposal-edit-label{font-size:11.5px;font-weight:600;color:var(--aiw-text-2)}
 .${PREFIX}-proposal-summary{font-size:12.5px;color:var(--aiw-text-2);white-space:pre-wrap;line-height:1.45}
 .${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:#10b981;display:inline-flex;align-items:center;gap:6px}
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
