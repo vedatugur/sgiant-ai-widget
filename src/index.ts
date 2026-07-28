@@ -847,7 +847,17 @@ const LEAD_TOKEN = "[[collect-email]]";
 interface FormField {
   name: string;
   label?: string;
-  type?: "text" | "email" | "number" | "textarea" | "select";
+  /** Kept in step with what `buildField` can actually draw — a spec allowed to
+   *  ask for a control the builder cannot render is a promise to the model that
+   *  the UI then breaks. */
+  type?:
+    | "text"
+    | "email"
+    | "number"
+    | "textarea"
+    | "select"
+    | "checkbox"
+    | "radio";
   placeholder?: string;
   required?: boolean;
   options?: string[];
@@ -4500,7 +4510,14 @@ export function createAiChatWidget(
       wrap.appendChild(t);
     }
     const f = el("form", `${PREFIX}-lead-form`) as HTMLFormElement;
-    const controls: { name: string; get: () => string }[] = [];
+    const controls: {
+      name: string;
+      get: () => string;
+      required: boolean;
+      /** A checkbox answers "false" when unticked — a real answer for a normal
+       *  field, and "not filled in" for this one. */
+      boolish: boolean;
+    }[] = [];
     // Fields are built by ONE function, shared with the editable proposal card
     // — see `buildField`. Two implementations of "render an input from a spec"
     // is how a select ends up styled differently depending on which part of the
@@ -4508,7 +4525,12 @@ export function createAiChatWidget(
     for (const field of spec.fields.slice(0, 8)) {
       const built = buildField(field);
       f.appendChild(built.node);
-      controls.push({ name: field.name, get: built.read });
+      controls.push({
+        name: field.name,
+        get: built.read,
+        required: Boolean(field.required),
+        boolish: field.type === "checkbox",
+      });
     }
     const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
     submit.type = "submit";
@@ -4521,11 +4543,17 @@ export function createAiChatWidget(
       e.preventDefault();
       const data: Record<string, string> = {};
       for (const c of controls) data[c.name] = c.get();
-      if (
-        controls.some((c) => !data[c.name]) &&
-        spec.fields.some((x) => x.required)
-      )
-        return;
+      // Check the REQUIRED fields, each on its own. This used to ask "is any
+      // control empty AND is any field required", which failed both ways: an
+      // untouched OPTIONAL field blocked a form whose required ones were all
+      // filled, and a required checkbox passed while unticked because it reads
+      // the string "false", which is not empty.
+      const missing = controls.some((c) => {
+        if (!c.required) return false;
+        const v = data[c.name];
+        return c.boolish ? v !== "true" : !v;
+      });
+      if (missing) return;
       submit.disabled = true;
       submit.textContent = L("sending");
       try {
