@@ -327,6 +327,12 @@ export function buildThreadReplay(payload: {
  * simply omits it, and the card draws what it was given.
  */
 export interface WidgetJobView {
+  /**
+   * The job's id. Optional because a card fetched BY id already knows it — but
+   * required in practice for `listThreadJobs`, where the whole point is
+   * learning which jobs exist. A view without one simply cannot be re-attached.
+   */
+  id?: string;
   /** The generic job type, used ONLY to pick nicer copy for the types we happen
    *  to know. An unrecognised type renders with the neutral fallback title —
    *  which is the test that this stays type-agnostic. */
@@ -674,6 +680,18 @@ export interface AiChatWidgetOptions {
    * exactly as it is today (a one-line "started ✓" and no card).
    */
   getJob?: (jobId: string) => Promise<WidgetJobView | null>;
+  /**
+   * Jobs still RUNNING for a thread, asked of the server on reopen.
+   *
+   * The widget also remembers its own jobs in browser storage, which is fast
+   * and enough for the device that started them — and wrong everywhere else. A
+   * crawl begun on a phone, or before the cache was cleared, left the desktop
+   * showing a conversation with nothing happening in it while it ran. This is
+   * the authoritative answer; storage is the instant one.
+   *
+   * Omit it and re-attach stays per-browser, exactly as before.
+   */
+  listThreadJobs?: (threadId: string) => Promise<WidgetJobView[]>;
   /** This thread's UNSAVED session artifacts (media generated/scraped in the
    *  conversation, hidden from the library until saved) — drives the artifact
    *  strip above the composer. Omit on hosts without asset storage. */
@@ -2288,9 +2306,28 @@ export function createAiChatWidget(
   function reattachTrackedJobs(tid: string | undefined): void {
     if (!opts.getJob || !tid) return;
     jobCards.clear();
+    // Browser storage FIRST so the card is back on the same tick as the
+    // transcript — a job this device started is already known here, and waiting
+    // on a round-trip would flash an empty conversation.
     for (const j of loadTrackedJobs()) {
       if (j.threadId === tid) trackJob(j.jobId, undefined);
     }
+    // Then ask the SERVER what this thread actually has running. Storage only
+    // knows what this browser started, so an import begun on a phone, or before
+    // the cache was cleared, was invisible on every other device — the card
+    // said nothing was happening while the crawl ran. `trackJob` is idempotent
+    // per id, so a job both sources know about is drawn once.
+    const listRunning = opts.listThreadJobs;
+    if (!listRunning) return;
+    void listRunning(tid)
+      .then((running) => {
+        // The thread may have been switched while the request was in flight.
+        if (threadId !== tid) return;
+        for (const j of running) if (j.id) trackJob(j.id, tid);
+      })
+      .catch(() => {
+        /* offline or unauthorised — storage already covered this device */
+      });
   }
 
   // Turn a FINAL assistant bubble's text into rich content: the host's real
