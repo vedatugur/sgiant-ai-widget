@@ -609,12 +609,11 @@ export interface AiChatWidgetOptions {
     args: Record<string, unknown>
   ) => Promise<string | void | { message?: string; jobId?: string }>;
   /**
-   * Send the human's answer to a `question` frame back to the server.
-   *
-   * Separate from onApplyProposal on purpose: a proposal is "may I do this
-   * action", a question is "what should I do". The host wires this to the same
-   * answer endpoint every transport uses, so an answer given here and one given
-   * from Telegram resolve the same question identically.
+   * OBSERVE the human's answer to a `question` frame — analytics, or resolving
+   * the same question on another surface (a critical one also pushed to
+   * Telegram). NOT the delivery path: the ask_user turn has already ENDED
+   * server-side, so the widget itself delivers the answer as the next user
+   * message. A host that omits this loses nothing but the notification.
    */
   onAnswer?: (answer: {
     questionId: string;
@@ -656,6 +655,8 @@ export const WIDGET_LABELS = {
   // Question cards — the assistant asking the human to decide.
   questionConfirm: "Send",
   questionPlaceholder: "Type your answer…",
+  questionSendFailed:
+    "Couldn't send your answer — wait for the current reply to finish, then try again.",
   // Header / bubble
   openBubble: "Open {name}",
   panelAria: "{name} chat",
@@ -3758,12 +3759,36 @@ export function createAiChatWidget(
       wrap.appendChild(done);
     };
 
-    const send = (optionIds: string[], text?: string): void => {
-      opts.onAnswer?.({ questionId: q.questionId, optionIds, text });
+    // Shown in place of collapsing the card when the answer could NOT leave the
+    // browser. Collapsing anyway would tell the user their choice was accepted
+    // while the assistant never heard it.
+    const undelivered = el("div", `${PREFIX}-question-err`);
+    undelivered.textContent = L("questionSendFailed");
+    undelivered.style.display = "none";
+
+    /**
+     * Deliver the answer as an ordinary user message.
+     *
+     * The ask_user turn ENDED server-side the moment the question was emitted
+     * (see runAgentTurn) — there is no mid-turn channel to reply on, and "the
+     * answer arrives as the next message" is the design. `onAnswer` is only an
+     * observer hook, so it can never be what makes the answer land.
+     */
+    const deliver = (optionIds: string[], text?: string): void => {
       const chosen = optionIds
         .map((id) => q.options?.find((o) => o.id === id)?.label ?? id)
         .filter(Boolean);
-      answered(chosen.length ? chosen.join(", ") : (text ?? ""));
+      const answer = chosen.length ? chosen.join(", ") : (text ?? "").trim();
+      if (!answer) return;
+      // A turn is already streaming — sending now would be dropped by the
+      // composer guard, so say so and leave the controls live to retry.
+      if (busy) {
+        undelivered.style.display = "";
+        return;
+      }
+      opts.onAnswer?.({ questionId: q.questionId, optionIds, text });
+      void send(answer);
+      answered(answer);
     };
 
     if (q.options?.length) {
@@ -3782,7 +3807,7 @@ export function createAiChatWidget(
         }
         b.addEventListener("click", () => {
           if (!q.multi) {
-            send([o.id]);
+            deliver([o.id]);
             return;
           }
           // Multi-select: toggle, and confirm explicitly — otherwise the first
@@ -3801,7 +3826,7 @@ export function createAiChatWidget(
         ) as HTMLButtonElement;
         confirm.type = "button";
         confirm.textContent = L("questionConfirm");
-        confirm.addEventListener("click", () => send([...picked]));
+        confirm.addEventListener("click", () => deliver([...picked]));
         wrap.appendChild(confirm);
       }
     } else {
@@ -3815,7 +3840,7 @@ export function createAiChatWidget(
       go.textContent = L("questionConfirm");
       const submit = (): void => {
         const v = input.value.trim();
-        if (v) send([], v);
+        if (v) deliver([], v);
       };
       go.addEventListener("click", submit);
       input.addEventListener("keydown", (ev) => {
@@ -3826,6 +3851,7 @@ export function createAiChatWidget(
       wrap.appendChild(row);
     }
 
+    wrap.appendChild(undelivered);
     log.appendChild(wrap);
     scrollDown(true);
   }
@@ -5096,6 +5122,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-question-free{display:flex;gap:6px;margin-top:2px}
 .${PREFIX}-question-input{flex:1 1 auto;min-width:0;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);font:inherit;font-size:13px}
 .${PREFIX}-question-send{padding:9px 14px;border-radius:9px;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+.${PREFIX}-question-err{margin-top:8px;font-size:12px;line-height:1.45;color:#d93f0b}
 /* Answered: collapsed to the decision, so the transcript reads as a
    conversation rather than a dead form. */
 .${PREFIX}-question-done{border-style:dashed;opacity:.75}
