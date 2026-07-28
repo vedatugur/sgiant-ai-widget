@@ -881,6 +881,28 @@ interface ProposalField {
   required?: boolean;
 }
 
+/**
+ * A control `buildField` produced, plus how to read its answer.
+ *
+ * The reader is part of the return value because "what the user chose" is not
+ * `.value` for every control type — a checkbox is `.checked`, a radio group is
+ * whichever of its inputs is checked — and every caller wants the same thing: a
+ * string to put in the payload.
+ */
+interface BuiltField {
+  /** Append THIS — the control, or the wrapper a labelled/grouped one needs. */
+  node: HTMLElement;
+  read: () => string;
+  /** The control draws its own caption; a caller adding one would double it. */
+  selfLabelled?: boolean;
+}
+
+/** Truthiness for a prefilled checkbox — model output, so accept the obvious
+ *  spellings rather than demanding exactly `"true"`. */
+function isTruthyValue(v: string | undefined): boolean {
+  return ["true", "1", "yes", "on"].includes((v ?? "").trim().toLowerCase());
+}
+
 /** Read the fields off a proposal frame, defensively — this is model output. */
 function proposalFields(raw: unknown): ProposalField[] {
   if (!Array.isArray(raw)) return [];
@@ -1315,6 +1337,15 @@ export function createAiChatWidget(
   // baked into the sheet. Only what the host EXPLICITLY passed goes inline on
   // the roots — inline wins over both scheme blocks, so a themed host is
   // deterministic while an untouched widget still follows the OS scheme.
+  // Form controls additionally borrow the HOST app's control tokens when the
+  // page actually has them — see `hostDefinesPlatformTokens`. Resolved once at
+  // mount (the answer is a property of which page we're on, not of the moment),
+  // and expressed as a class so the CSS keeps reading live `var()`s: the app's
+  // own light/dark switch still repaints the chat's inputs with it.
+  if (hostDefinesPlatformTokens()) {
+    bubble.classList.add(`${PREFIX}-host-tokens`);
+    panel.classList.add(`${PREFIX}-host-tokens`);
+  }
   const themeTokens: Record<string, string> = { ...(opts.theme ?? {}) };
   if (opts.accent && !themeTokens.accent) themeTokens.accent = opts.accent;
   if ((opts.gradient || opts.accent) && !themeTokens.gradient) {
@@ -3960,12 +3991,7 @@ export function createAiChatWidget(
     // than being handed the name with a cursor in it.
     for (const field of fields) {
       const row = el("label", `${PREFIX}-proposal-edit`);
-      if (field.label) {
-        const cap = el("span", `${PREFIX}-proposal-edit-label`);
-        cap.textContent = field.label;
-        row.appendChild(cap);
-      }
-      const input = buildField({
+      const built = buildField({
         name: field.arg,
         ...(field.type ? { type: field.type } : {}),
         ...(field.label ? { label: field.label } : {}),
@@ -3977,9 +4003,16 @@ export function createAiChatWidget(
           typeof args[field.arg] === "string" ? String(args[field.arg]) : "",
         ...(field.placeholder ? { placeholder: field.placeholder } : {}),
       });
-      row.appendChild(input);
+      // Caption first — unless the control already draws one (a checkbox), in
+      // which case the card adding its own would say the same thing twice.
+      if (field.label && !built.selfLabelled) {
+        const cap = el("span", `${PREFIX}-proposal-edit-label`);
+        cap.textContent = field.label;
+        row.appendChild(cap);
+      }
+      row.appendChild(built.node);
       wrap.appendChild(row);
-      edits.set(field.arg, () => input.value.trim());
+      edits.set(field.arg, built.read);
     }
     const summary = proposalSummary(name, args);
     if (summary) {
@@ -4367,6 +4400,12 @@ export function createAiChatWidget(
    * about to grow its own copy. A second implementation would drift: the same
    * `select` would look one way inside a form and another inside a card, and a
    * later fix to one would quietly miss the other.
+   *
+   * Returns a node + a reader rather than the raw element, because not every
+   * control IS one element: a checkbox needs its label beside it to mean
+   * anything, and a radio needs one input per option. Handing the caller a
+   * `<select>` and letting it read `.value` worked only as long as every field
+   * happened to be a single text-ish box.
    */
   function buildField(field: {
     name: string;
@@ -4376,12 +4415,58 @@ export function createAiChatWidget(
     options?: string[];
     required?: boolean;
     value?: string;
-  }): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  }): BuiltField {
+    const type = field.type ?? "text";
+    // Boolean/choice controls carry their own caption — a bare 16px box with
+    // the label somewhere above it reads as decoration, not as a question.
+    if (type === "checkbox") {
+      const row = el("label", `${PREFIX}-field-check`);
+      const box = el("input", `${PREFIX}-check`) as HTMLInputElement;
+      box.type = "checkbox";
+      box.checked = isTruthyValue(field.value);
+      if (field.required) box.required = true;
+      row.appendChild(box);
+      const cap = el("span", `${PREFIX}-field-check-label`);
+      cap.textContent = field.label ?? field.placeholder ?? field.name;
+      row.appendChild(cap);
+      // Stringified so a field's answer is always a string, whatever it was
+      // drawn as — the submit path posts a flat Record<string,string>.
+      return {
+        node: row,
+        selfLabelled: true,
+        read: () => (box.checked ? "true" : "false"),
+      };
+    }
+    if (type === "radio" && field.options?.length) {
+      const group = el("div", `${PREFIX}-field-group`);
+      // The `name` attribute is what makes radios mutually exclusive, so it has
+      // to be unique per rendered group — two proposal cards asking the same
+      // question would otherwise fight over one selection.
+      const groupName = `${PREFIX}-${field.name}-${Math.random().toString(36).slice(2, 9)}`;
+      for (const o of field.options) {
+        const row = el("label", `${PREFIX}-field-check`);
+        const radio = el("input", `${PREFIX}-check`) as HTMLInputElement;
+        radio.type = "radio";
+        radio.name = groupName;
+        radio.value = o;
+        if (o === field.value) radio.checked = true;
+        row.appendChild(radio);
+        const cap = el("span", `${PREFIX}-field-check-label`);
+        cap.textContent = o;
+        row.appendChild(cap);
+        group.appendChild(row);
+      }
+      return {
+        node: group,
+        read: () =>
+          group.querySelector<HTMLInputElement>("input:checked")?.value ?? "",
+      };
+    }
     let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-    if (field.type === "textarea") {
-      input = el("textarea", `${PREFIX}-lead-input`) as HTMLTextAreaElement;
-    } else if (field.type === "select") {
-      const sel = el("select", `${PREFIX}-lead-input`) as HTMLSelectElement;
+    if (type === "textarea") {
+      input = el("textarea", `${PREFIX}-field`) as HTMLTextAreaElement;
+    } else if (type === "select") {
+      const sel = el("select", `${PREFIX}-field`) as HTMLSelectElement;
       for (const o of field.options ?? []) {
         const opt = document.createElement("option");
         opt.value = o;
@@ -4390,8 +4475,8 @@ export function createAiChatWidget(
       }
       input = sel;
     } else {
-      const i = el("input", `${PREFIX}-lead-input`) as HTMLInputElement;
-      i.type = field.type === "number" ? "number" : (field.type ?? "text");
+      const i = el("input", `${PREFIX}-field`) as HTMLInputElement;
+      i.type = type === "number" ? "number" : type;
       input = i;
     }
     if ("placeholder" in input && field.placeholder)
@@ -4403,7 +4488,7 @@ export function createAiChatWidget(
     if (field.required) (input as HTMLInputElement).required = true;
     // Prefilled: the card hands back a value the user can accept or rewrite.
     if (field.value !== undefined) input.value = field.value;
-    return input;
+    return { node: input, read: () => input.value.trim() };
   }
 
   /** Render an AI-described input form inline; submit → host action. */
@@ -4421,9 +4506,9 @@ export function createAiChatWidget(
     // is how a select ends up styled differently depending on which part of the
     // chat drew it.
     for (const field of spec.fields.slice(0, 8)) {
-      const input = buildField(field);
-      f.appendChild(input);
-      controls.push({ name: field.name, get: () => input.value.trim() });
+      const built = buildField(field);
+      f.appendChild(built.node);
+      controls.push({ name: field.name, get: built.read });
     }
     const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
     submit.type = "submit";
@@ -5055,6 +5140,43 @@ function addMsg(
 }
 
 let stylesInjected = false;
+/**
+ * Does the page around us define the PLATFORM's control variables?
+ *
+ * When the widget is mounted inside one of our own apps, `--input` / `--ring` /
+ * `--card` / … are already on `<html>` (packages/ui/src/styles/globals.css), and
+ * a text field in chat should be the same object as a text field on the page
+ * behind it — same border, same focus ring, same radius, flipping together when
+ * the app toggles `.dark`. When the widget is embedded on a customer's site,
+ * none of that exists and it must fall back to its own `--aiw-*` palette.
+ *
+ * The check is deliberately shape-based, not merely presence-based: `--input`
+ * is a plausible name for anyone to invent, but our tokens are HSL COMPONENTS
+ * ("220 9% 85%") so they can be used with an alpha. A site whose `--input` is
+ * `#fff` fails the test and we leave its page alone — the failure mode of
+ * guessing wrong here is an unreadable chat form on someone else's website.
+ */
+function hostDefinesPlatformTokens(): boolean {
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    const hslTriplet = /^-?[\d.]+\s+[\d.]+%\s+[\d.]+%$/;
+    const required = [
+      "--input",
+      "--ring",
+      "--card",
+      "--foreground",
+      "--muted-foreground",
+      "--primary-foreground",
+    ];
+    if (!required.every((v) => hslTriplet.test(cs.getPropertyValue(v).trim())))
+      return false;
+    return cs.getPropertyValue("--radius").trim().length > 0;
+  } catch {
+    // No DOM/computed style (SSR, hostile sandbox) — own palette is always safe.
+    return false;
+  }
+}
+
 function injectStyles(side: "left" | "right"): void {
   if (stylesInjected) return;
   stylesInjected = true;
@@ -5198,7 +5320,46 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-form-title{font-size:13px;font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
-.${PREFIX}-lead-input{width:100%;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-accent);border-radius:11px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit}
+/* ── Form controls ───────────────────────────────────────────────────────
+   Everything the chat can draw as an input goes through ONE token layer
+   (--aiw-field-*) instead of its own hexes and radii, and that layer is
+   remapped below to the platform's semantic control variables when the host
+   page has them. The geometry (40px tall, 12px inline padding, 14px text, a
+   recessed inner shadow, a 2px focus ring) MIRRORS packages/ui/src/components/
+   input.tsx — the widget is vanilla DOM in a detached root and cannot import
+   the React primitive, so the numbers are copied deliberately; that file is the
+   source of truth if they ever move. */
+.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-field-bg:var(--aiw-surface);--aiw-field-fg:var(--aiw-text);--aiw-field-border:var(--aiw-border-strong);--aiw-field-placeholder:var(--aiw-muted);--aiw-field-ring:var(--aiw-accent);--aiw-field-ring-fg:var(--aiw-accent-contrast);--aiw-field-radius:10px}
+/* Host-token mode. Added at mount only when the page really defines our
+   variables, so a customer site that happens to own an --input cannot repaint
+   the chat's controls. Values stay as var() references, never snapshots, so the
+   app's dark-mode class keeps driving them after mount. */
+.${PREFIX}-bubble.${PREFIX}-host-tokens,.${PREFIX}-panel.${PREFIX}-host-tokens{--aiw-field-bg:hsl(var(--card));--aiw-field-fg:hsl(var(--foreground));--aiw-field-border:hsl(var(--input));--aiw-field-placeholder:hsl(var(--muted-foreground));--aiw-field-ring:hsl(var(--ring));--aiw-field-ring-fg:hsl(var(--primary-foreground));--aiw-field-radius:calc(var(--radius) - 2px)}
+.${PREFIX}-field{width:100%;box-sizing:border-box;min-height:40px;padding:8px 12px;font-family:inherit;font-size:14px;line-height:1.45;color:var(--aiw-field-fg);background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:var(--aiw-field-radius);outline:none;box-shadow:inset 0 1px 2px 0 color-mix(in srgb,var(--aiw-field-fg) 5%,transparent);transition:border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-field::placeholder{color:var(--aiw-field-placeholder);opacity:1}
+.${PREFIX}-field:hover:not(:disabled){border-color:color-mix(in srgb,var(--aiw-field-border) 70%,var(--aiw-field-fg))}
+.${PREFIX}-field:focus{border-color:var(--aiw-field-ring);box-shadow:0 0 0 2px var(--aiw-field-ring)}
+.${PREFIX}-field:disabled{opacity:.5;cursor:not-allowed}
+textarea.${PREFIX}-field{min-height:76px;resize:vertical}
+/* The native select arrow is drawn by the OS and ignores our palette — in dark
+   mode it renders a black-on-dark wedge. Draw our own instead. */
+select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:32px;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa0a6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:15px}
+/* Options are drawn by the OS popup, which does NOT inherit the panel — without
+   this a dark-mode select opens as black text on a black list. */
+.${PREFIX}-field option{background:var(--aiw-field-bg);color:var(--aiw-field-fg)}
+.${PREFIX}-field-group{display:flex;flex-direction:column;gap:6px}
+.${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
+.${PREFIX}-field-check-label{min-width:0}
+.${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:4px;cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-check[type=radio]{border-radius:50%}
+.${PREFIX}-check:hover:not(:disabled){border-color:color-mix(in srgb,var(--aiw-field-border) 70%,var(--aiw-field-fg))}
+.${PREFIX}-check:focus-visible{border-color:var(--aiw-field-ring);box-shadow:0 0 0 2px var(--aiw-field-ring)}
+.${PREFIX}-check:checked{background:var(--aiw-field-ring);border-color:var(--aiw-field-ring)}
+/* Tick + dot are drawn from borders rather than a glyph so they scale with the
+   box and take the accent's contrast colour in both schemes. */
+.${PREFIX}-check[type=checkbox]:checked::after{content:"";position:absolute;left:4.5px;top:1.5px;width:4px;height:8px;border:solid var(--aiw-field-ring-fg);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.${PREFIX}-check[type=radio]:checked::after{content:"";position:absolute;left:3.5px;top:3.5px;width:7px;height:7px;border-radius:50%;background:var(--aiw-field-ring-fg)}
+.${PREFIX}-check:disabled{opacity:.5;cursor:not-allowed}
 .${PREFIX}-lead-btn{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:11px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
 .${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-lead-ok{font-size:13px;font-weight:600;color:var(--aiw-accent)}
@@ -5402,7 +5563,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}.${PREFIX}-lead-input option{background:var(--aiw-surface-raised);color:var(--aiw-text)}}
+@media (prefers-color-scheme:dark){.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
