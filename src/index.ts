@@ -643,7 +643,12 @@ export interface AiChatWidgetOptions {
    */
   onApplyProposal?: (
     name: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    /** The account this proposal is FOR, when the worker said. The host applies
+     *  on its own session and would otherwise aim at whatever account its page
+     *  is scoped to — which is not always the account the assistant reasoned
+     *  about, and on a platform page is not an account at all. */
+    opts?: { accountId?: string }
   ) => Promise<string | void | { message?: string; jobId?: string }>;
   /**
    * OBSERVE the human's answer to a `question` frame — analytics, or resolving
@@ -4336,7 +4341,9 @@ export function createAiChatWidget(
     args: Record<string, unknown>,
     agent?: string,
     /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
-    fields: ProposalField[] = []
+    fields: ProposalField[] = [],
+    /** The account this write targets, per the worker. */
+    proposalAccountId?: string
   ): void {
     // `-pending` marks a card that is still AWAITING the user, and it is what
     // the end-of-turn reload checks. The reload used to look for `-proposal`,
@@ -4567,7 +4574,8 @@ export function createAiChatWidget(
         // simply ignore the extra key.
         const res = await opts.onApplyProposal!(
           name,
-          threadId ? { ...edited, threadId } : edited
+          threadId ? { ...edited, threadId } : edited,
+          proposalAccountId ? { accountId: proposalAccountId } : undefined
         );
         const msg = typeof res === "string" ? res : res?.message;
         // An apply that ENQUEUED answers with a job id. Keeping it is the whole
@@ -4644,6 +4652,8 @@ export function createAiChatWidget(
       args: Record<string, unknown>;
       agent?: string;
       fields: ProposalField[];
+      /** The account the worker said this write is for. */
+      accountId?: string;
     }> = [];
     let turnIn = 0;
     let turnOut = 0;
@@ -4805,6 +4815,7 @@ export function createAiChatWidget(
                 // Absent on every proposal that needs no decision, which is
                 // most of them — the card stays a plain confirmation.
                 fields: proposalFields((frame as { fields?: unknown }).fields),
+                accountId: (frame as { accountId?: string }).accountId,
               });
               producedAny = true;
             }
@@ -4855,7 +4866,7 @@ export function createAiChatWidget(
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
     for (const p of deferredProposals)
-      renderProposal(p.name, p.args, p.agent, p.fields);
+      renderProposal(p.name, p.args, p.agent, p.fields, p.accountId);
     if (deferredProposals.length) scrollDown();
     if (!producedAny) {
       if (failure) showError(failure);
