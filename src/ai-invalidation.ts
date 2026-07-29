@@ -15,7 +15,7 @@ export const AI_DOMAIN_KEYS: Record<string, string[]> = {
   creations: ["studio-creations", "studio-status"],
   brand: ["ai-brand-profile", "brand-versions", "studio-status"],
   assets: ["asset-media", "asset-folders", "asset-usage", "assets"],
-  account: ["accounts-me", "account-products-activated"],
+  account: ["accounts-me", "account-products-activated", "account-settings"],
 };
 
 /** Which domains each apply-proposal name touches (for scoped invalidation). */
@@ -28,6 +28,8 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   generate_image: ["assets"],
   generate_video: ["assets"],
   organize_assets: ["assets"],
+  manage_folders: ["assets"],
+  set_account_settings: ["account"],
   edit_asset: ["assets"],
   create_asset: ["assets"],
   share_asset: ["assets"],
