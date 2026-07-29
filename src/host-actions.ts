@@ -170,6 +170,12 @@ export const STANDARD_ACTIONS = [
     surfaces: ["org", "admin", "marketing", "onboarding"],
   },
   {
+    name: "show-assets",
+    description:
+      "Open the asset library at a specific folder and/or preview a specific file. Pass `folderId` (from list_assets) to open that folder, `assetId` to open that file's preview, or both. Use it to SHOW the user what you just organised — filing assets into a folder and then not showing it leaves them to go find it.",
+    surfaces: ["org", "admin"],
+  },
+  {
     name: "open-dashboards",
     description: "Open the account's dashboards list.",
     surfaces: ["org"],
@@ -271,7 +277,14 @@ const STANDARD_ACTION_DONE: Record<string, string> = {
  * wait for the user to press the button.
  */
 export function isNavigationAction(name: string): boolean {
-  return name === "navigate" || name in STANDARD_ACTION_PATHS;
+  // `show-assets` is navigation too — it opens a folder/file and nothing else,
+  // buys nothing and changes nothing. It is listed explicitly rather than via
+  // STANDARD_ACTION_PATHS because it carries a target, so it has no fixed path.
+  return (
+    name === "navigate" ||
+    name === "show-assets" ||
+    name in STANDARD_ACTION_PATHS
+  );
 }
 
 /** Said instead of "Opened …" when the user is ALREADY on that page. */
@@ -303,7 +316,16 @@ function alreadyThere(path: string): boolean {
   if (typeof window === "undefined") return false;
   const strip = (p: string): string =>
     p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
-  return strip(window.location.pathname) === strip(path);
+  // The QUERY has to count, not just the path (#134). "Open the Rooms folder"
+  // is `/assets?folder=…`: judged on pathname alone that is "already there"
+  // whenever the user happens to be on /assets, so the one navigation most
+  // likely to be requested was the one guaranteed to be refused.
+  const [targetPath = "", targetQuery = ""] = path.split("?");
+  if (strip(window.location.pathname) !== strip(targetPath)) return false;
+  const current = new URLSearchParams(window.location.search);
+  const wanted = new URLSearchParams(targetQuery);
+  for (const [k, v] of wanted) if (current.get(k) !== v) return false;
+  return true;
 }
 
 export type HostActionHandler = (
@@ -315,6 +337,13 @@ export interface HostActionsConfig {
   accountId?: string;
   /** The host's router push (in-app SPA navigation). */
   navigate: (path: string) => void;
+  /** Point a MOUNTED asset library at a folder/asset. Supplied by the host as
+   *  `showAssetsAt` from @sgiant/assets — the router push alone cannot reach a
+   *  library that is already on screen. */
+  showAssets?: (t: {
+    folderId?: string | null;
+    assetId?: string | null;
+  }) => void;
   /** App-specific actions, merged over the standard set (can override). */
   handlers?: Record<string, HostActionHandler>;
 }
@@ -328,6 +357,24 @@ export function createHostActions(
 ): (action: string, data: Record<string, string>) => Promise<string | void> {
   const base = cfg.accountId ? `/accounts/${cfg.accountId}` : "";
   const standard: Record<string, HostActionHandler> = {
+    // Deep-link INTO the library: a folder and/or one file's preview.
+    //
+    // Two steps on purpose. If the user is elsewhere, the host router has to
+    // open /assets first; if they are already there, a same-route push fires no
+    // popstate and does not remount, so the library would never hear it — hence
+    // showAssetsAt, which writes the query AND announces it (#134).
+    "show-assets": (data) => {
+      const folderId = data.folderId || null;
+      const assetId = data.assetId || null;
+      if (!folderId && !assetId) return;
+      const query = new URLSearchParams();
+      if (folderId) query.set("folder", folderId);
+      if (assetId) query.set("asset", assetId);
+      const path = `${STANDARD_ACTION_PATHS["open-assets"]}?${query}`;
+      if (!alreadyThere(resolveTarget(base, path))) cfg.navigate(path);
+      cfg.showAssets?.({ folderId, assetId });
+      return assetId ? "Opened the file" : "Opened the folder";
+    },
     navigate: (data) => {
       if (data.path) {
         // Compare what the host will ACTUALLY open, not what the model wrote.
