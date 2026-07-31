@@ -812,6 +812,7 @@ export const WIDGET_LABELS = {
   jobTitleSiteIngest: "Importing the website",
   jobTitleMedia: "Rendering media",
   jobTitleCoder: "Working on a code task",
+  jobTitleReport: "Generating the report",
   jobTitleFallback: "Background job",
   jobQueued: "Queued",
   jobRunning: "Running",
@@ -2222,6 +2223,7 @@ export function createAiChatWidget(
     if (view.type === "site_ingest") return L("jobTitleSiteIngest");
     if (view.type === "media") return L("jobTitleMedia");
     if (view.type === "coder") return L("jobTitleCoder");
+    if (view.type === "report") return L("jobTitleReport");
     return L("jobTitleFallback");
   }
 
@@ -4306,6 +4308,23 @@ export function createAiChatWidget(
         )}"${args.withReadme === false ? "" : ", with a README per page"}.`,
         "Runs in the background — a notification arrives when it lands.",
       ].join("\n");
+    }
+    // A report is also one small card with minutes of consequences — say what
+    // will happen, not just the raw args.
+    if (name === "generate_report") {
+      const lines = [String(args.request ?? "")];
+      if (typeof args.title === "string" && args.title)
+        lines.push(`Title: ${args.title}`);
+      lines.push(
+        `Period: ${String(args.dateFrom ?? "?")} → ${String(args.dateTo ?? "?")}`
+      );
+      lines.push(
+        `Lands as a PDF in Assets → ${String(args.folderName ?? "") || "Reports"}.`
+      );
+      lines.push(
+        "Runs in the background — a notification arrives when it's ready."
+      );
+      return lines.filter(Boolean).join("\n");
     }
     return Object.entries(args)
       .filter(([k]) => k !== "id")
