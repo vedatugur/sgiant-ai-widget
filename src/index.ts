@@ -338,7 +338,7 @@ export interface WidgetJobView {
    *  which is the test that this stays type-agnostic. */
   type?: string;
   /** The coarse, type-agnostic lifecycle — `JobStatus` on the wire. */
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
   /** Done-of-total, with a short label for what is happening right now (the page
    *  being crawled). `total` is null while it is not yet known. */
   progress?: { done?: number; total?: number | null; label?: string | null };
@@ -710,6 +710,13 @@ export interface AiChatWidgetOptions {
    * Omit it and re-attach stays per-browser, exactly as before.
    */
   listThreadJobs?: (threadId: string) => Promise<WidgetJobView[]>;
+  /**
+   * Cancel a running/queued job the chat is watching (the card's Cancel
+   * button). Cooperative on the server — a crawl stops at the next page
+   * boundary — so the card keeps polling and flips to "Cancelled" when the
+   * runner actually stops. Omit to hide the button.
+   */
+  cancelJob?: (jobId: string) => Promise<void>;
   /** This thread's UNSAVED session artifacts (media generated/scraped in the
    *  conversation, hidden from the library until saved) — drives the artifact
    *  strip above the composer. Omit on hosts without asset storage. */
@@ -799,6 +806,9 @@ export const WIDGET_LABELS = {
   jobRunning: "Running",
   jobDone: "Finished",
   jobFailed: "Failed",
+  jobCancelled: "Cancelled",
+  jobCancel: "Cancel",
+  jobCancelling: "Cancelling…",
   jobProgress: "{done} of {total}",
   /** Used while the total is still unknown — a crawl learns it after page one. */
   jobProgressOpen: "{done} so far",
@@ -2193,7 +2203,10 @@ export function createAiChatWidget(
   /** (Re)paint a job card from the latest read. Same element throughout the
    *  job's life, so the card the user is looking at is the one that updates. */
   function paintJob(card: HTMLElement, view: WidgetJobView): void {
-    const terminal = view.status === "done" || view.status === "failed";
+    const terminal =
+      view.status === "done" ||
+      view.status === "failed" ||
+      view.status === "cancelled";
     const failed = view.status === "failed";
     card.className =
       `${PREFIX}-job` +
@@ -2203,14 +2216,18 @@ export function createAiChatWidget(
       ? `<span class="${PREFIX}-act-x" aria-hidden="true">✕</span>`
       : view.status === "done"
         ? `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>`
-        : `<span class="${PREFIX}-act-spin" aria-hidden="true"></span>`;
+        : view.status === "cancelled"
+          ? `<span class="${PREFIX}-act-x" aria-hidden="true">–</span>`
+          : `<span class="${PREFIX}-act-spin" aria-hidden="true"></span>`;
     const state = failed
       ? L("jobFailed")
       : view.status === "done"
         ? L("jobDone")
-        : view.status === "queued"
-          ? L("jobQueued")
-          : L("jobRunning");
+        : view.status === "cancelled"
+          ? L("jobCancelled")
+          : view.status === "queued"
+            ? L("jobQueued")
+            : L("jobRunning");
     const counts = jobCounts(view);
     // The progress LABEL is server text (for a crawl, a URL off the site being
     // imported) — escaped like every other untrusted string the widget draws.
@@ -2278,6 +2295,28 @@ export function createAiChatWidget(
           await dispatchAction("navigate", { path });
         } catch {
           btn.disabled = false;
+        }
+      });
+      card.appendChild(btn);
+    }
+    // Still in flight and the host can stop it → Cancel. The server cancel is
+    // cooperative, so the button just asks: the card keeps polling and flips
+    // to "Cancelled" when the runner actually stops at its next boundary.
+    if (!terminal && view.id && opts.cancelJob) {
+      const jobId = view.id;
+      const cancel = opts.cancelJob;
+      const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
+      btn.type = "button";
+      btn.innerHTML = `<span>${escapeHtml(L("jobCancel"))}</span>`;
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        btn.textContent = L("jobCancelling");
+        try {
+          await cancel(jobId);
+        } catch {
+          // Couldn't reach the server — the button is usable again.
+          btn.disabled = false;
+          btn.innerHTML = `<span>${escapeHtml(L("jobCancel"))}</span>`;
         }
       });
       card.appendChild(btn);
@@ -2351,7 +2390,11 @@ export function createAiChatWidget(
           }
           const live = jobCards.get(jobId);
           if (live) paintJob(live, view);
-          if (view.status === "done" || view.status === "failed") {
+          if (
+            view.status === "done" ||
+            view.status === "failed" ||
+            view.status === "cancelled"
+          ) {
             forgetJob(jobId);
             scrollDown();
             return;
