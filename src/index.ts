@@ -4219,11 +4219,21 @@ export function createAiChatWidget(
         return "Revoke the share link";
       const what =
         args.targetKind === "folder" ? "the folder" : "the selected file";
-      const parts = [`Share ${what} publicly`];
-      if (typeof args.password === "string" && args.password)
+      const restricted = args.audience === "restricted";
+      const recipients = Array.isArray(args.recipients)
+        ? args.recipients.filter((e) => typeof e === "string")
+        : [];
+      const parts = [
+        restricted
+          ? `Share ${what} with ${recipients.length ? recipients.join(", ").slice(0, 120) : "specific people"} (email-verified)`
+          : `Share ${what} publicly`,
+      ];
+      if (!restricted && typeof args.password === "string" && args.password)
         parts.push("password-protected");
       if (typeof args.expiresInDays === "number" && args.expiresInDays > 0)
         parts.push(`expires in ${args.expiresInDays}d`);
+      const sendTo = Array.isArray(args.sendTo) ? args.sendTo.length : 0;
+      if (sendTo) parts.push(`emailed to ${sendTo}`);
       return parts.join(" · ");
     }
     if (name === "create_asset") {
