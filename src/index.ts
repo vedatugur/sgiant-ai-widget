@@ -1426,6 +1426,17 @@ export function createAiChatWidget(
     }
   }
   const history: StoredMsg[] = [];
+  /**
+   * How long a conversation keeps auto-restoring after its last activity.
+   *
+   * Restore exists so a refresh or a page change mid-task doesn't lose the
+   * chat — a WORKING-SESSION convenience, not an archive. Without a cutoff the
+   * widget reopened on whatever was said last, however long ago: days later
+   * the first thing on screen was a stale test message instead of the
+   * greeting. Older conversations are one click away in History; only a
+   * recent one comes back on its own.
+   */
+  const RESTORE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   function loadState(): void {
     if (!storeKey) return;
     try {
@@ -1434,7 +1445,15 @@ export function createAiChatWidget(
       const s = JSON.parse(raw) as {
         threadId?: string;
         messages?: StoredMsg[];
+        savedAt?: number;
       };
+      // No stamp (a pre-cutoff save) counts as stale — the greeting wins.
+      if (
+        typeof s.savedAt !== "number" ||
+        Date.now() - s.savedAt > RESTORE_MAX_AGE_MS
+      ) {
+        return;
+      }
       threadId = s.threadId;
       if (Array.isArray(s.messages)) history.push(...s.messages);
     } catch {
@@ -1446,7 +1465,11 @@ export function createAiChatWidget(
     try {
       localStorage.setItem(
         storeKey,
-        JSON.stringify({ threadId, messages: history.slice(-40) })
+        JSON.stringify({
+          threadId,
+          messages: history.slice(-40),
+          savedAt: Date.now(),
+        })
       );
     } catch {
       /* storage full/blocked — non-fatal */
