@@ -349,6 +349,19 @@ export interface WidgetJobView {
   /** Where the finished work landed — an in-app, root-relative path the card
    *  links to (e.g. "/assets"). Omit when the job produced nothing to open. */
   resultPath?: string | null;
+  /**
+   * The job's FLOW — the runner's own narration (which pages the AI picked,
+   * how it grouped them, what each step yielded), oldest first. Server text,
+   * escaped like every other untrusted string. Rides the same poll as
+   * progress, so the card is live while the job runs — and because it comes
+   * from the server, a page refresh replays it instead of losing it.
+   */
+  events?: Array<{
+    /** "status" | "decision" | "step" | "problem" — coarse render hint. */
+    kind?: string;
+    message: string;
+    at?: string;
+  }>;
 }
 
 export interface AiChatWidgetOptions {
@@ -790,6 +803,8 @@ export const WIDGET_LABELS = {
   /** Used while the total is still unknown — a crawl learns it after page one. */
   jobProgressOpen: "{done} so far",
   jobOpenResult: "Open the result",
+  /** Toggle under the flow tail that reveals the job's full activity feed. */
+  jobFlowAll: "Show all {count} steps",
   jobUnreachable: "Still running in the background — check back shortly",
   // Proposal confirm cards
   proposalUpdateCreation: "Apply this update to the creation?",
@@ -2208,6 +2223,34 @@ export function createAiChatWidget(
       total > 0
         ? Math.max(0, Math.min(100, Math.round((done / total) * 100)))
         : 0;
+    // The FLOW: the last few narration lines while running (the live feel),
+    // the whole story behind a toggle once it is long. All server text —
+    // escaped per line.
+    const events = view.events ?? [];
+    const tailStart = terminal
+      ? Math.max(0, events.length - 3)
+      : Math.max(0, events.length - 5);
+    const flowLine = (e: { kind?: string; message: string }) =>
+      `<li class="${PREFIX}-job-ev${
+        e.kind === "problem"
+          ? ` ${PREFIX}-job-ev-problem`
+          : e.kind === "decision"
+            ? ` ${PREFIX}-job-ev-decision`
+            : ""
+      }">${escapeHtml(e.message)}</li>`;
+    const flow = events.length
+      ? `<ul class="${PREFIX}-job-flow">${events
+          .slice(tailStart)
+          .map(flowLine)
+          .join("")}</ul>` +
+        (tailStart > 0
+          ? `<details class="${PREFIX}-job-flow-all"><summary>${escapeHtml(
+              L("jobFlowAll", { count: events.length })
+            )}</summary><ul class="${PREFIX}-job-flow">${events
+              .map(flowLine)
+              .join("")}</ul></details>`
+          : "")
+      : "";
     card.innerHTML =
       `<div class="${PREFIX}-job-head">${icon}` +
       `<span class="${PREFIX}-job-title">${escapeHtml(jobTitle(view))}</span>` +
@@ -2220,7 +2263,8 @@ export function createAiChatWidget(
         : "") +
       (detail
         ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
-        : "");
+        : "") +
+      flow;
     // Finished WITH something to look at — the notification's "here's the
     // folder" without leaving the conversation.
     if (view.status === "done" && isSafeRelPath(view.resultPath)) {
@@ -5802,6 +5846,15 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-job-bar{height:4px;border-radius:3px;background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
 .${PREFIX}-job-bar>i{display:block;height:100%;background:var(--aiw-accent);transition:width .4s ease}
 .${PREFIX}-job-detail{color:var(--aiw-muted);font-size:11px;word-break:break-word}
+.${PREFIX}-job-flow{list-style:none;margin:6px 0 0;padding:0 0 0 2px;display:flex;flex-direction:column;gap:3px}
+.${PREFIX}-job-ev{position:relative;padding-left:12px;color:var(--aiw-text-2);font-size:11px;line-height:1.35;word-break:break-word}
+.${PREFIX}-job-ev::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:50%;background:var(--aiw-muted)}
+.${PREFIX}-job-ev-decision{color:var(--aiw-text)}
+.${PREFIX}-job-ev-decision::before{background:var(--aiw-accent,currentColor)}
+.${PREFIX}-job-ev-problem{color:#e5484d}
+.${PREFIX}-job-ev-problem::before{background:#e5484d}
+.${PREFIX}-job-flow-all{margin-top:4px}
+.${PREFIX}-job-flow-all>summary{cursor:pointer;color:var(--aiw-muted);font-size:11px;user-select:none}
 .${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed var(--aiw-border-strong);border-radius:9px;padding:4px 10px;font-size:12px;color:var(--aiw-muted);background:var(--aiw-bg)}
 .${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:#e5b8b8;color:#a23b3b;background:#fdf3f3;font-weight:600}
 .${PREFIX}-flag-ok{border-color:#bfe3c8;color:#2f7d43;background:#f2fbf5}
