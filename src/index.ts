@@ -375,6 +375,17 @@ export interface AiChatWidgetOptions {
   /** Account the chat is scoped to. Omit for the public/anonymous endpoint. */
   accountId?: string;
   /**
+   * DYNAMIC account scope, read at call time and preferred over `accountId`.
+   * For hosts whose page context changes while the widget lives on (the admin
+   * backoffice follows staff across accounts): re-creating the widget per
+   * account aborts an in-flight reply and visibly resets the chat, so such a
+   * host mounts ONE instance and feeds the current account through here.
+   */
+  getAccountScope?: () => string | undefined;
+  /** Dynamic twin of `uploadEndpoint`, same reason. The attach button exists
+   *  when either is provided. */
+  getUploadEndpoint?: () => string | undefined;
+  /**
    * Extra fields merged into every POST body — e.g. `{ visitorId, source }` for
    * the anonymous marketing endpoint. Never put secrets here; it's plain JSON.
    */
@@ -3143,7 +3154,8 @@ export function createAiChatWidget(
     }, 4000);
   }
   async function uploadFiles(files: FileList | null): Promise<void> {
-    if (!files || !opts.uploadEndpoint) return;
+    const uploadEndpoint = opts.getUploadEndpoint?.() ?? opts.uploadEndpoint;
+    if (!files || !uploadEndpoint) return;
     if (attachBtn) attachBtn.disabled = true;
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
@@ -3155,7 +3167,7 @@ export function createAiChatWidget(
         }
         const fd = new FormData();
         fd.append("file", file);
-        const res = await fetch(opts.uploadEndpoint, {
+        const res = await fetch(uploadEndpoint, {
           method: "POST",
           headers: token ? { authorization: `Bearer ${token}` } : {},
           credentials: opts.withCredentials ? "include" : "same-origin",
@@ -3186,7 +3198,7 @@ export function createAiChatWidget(
       if (fileInput) fileInput.value = "";
     }
   }
-  if (opts.uploadEndpoint) {
+  if (opts.uploadEndpoint || opts.getUploadEndpoint) {
     fileInput = el("input", "") as HTMLInputElement;
     fileInput.type = "file";
     fileInput.multiple = true;
@@ -4823,7 +4835,7 @@ export function createAiChatWidget(
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
           ...(pageContext ? { pageContext } : {}),
-          accountId: opts.accountId ?? "",
+          accountId: opts.getAccountScope?.() ?? opts.accountId ?? "",
           threadId,
           content,
           ...(atts.length ? { attachments: atts.map((a) => a.mediaId) } : {}),
@@ -5682,7 +5694,8 @@ export function createAiChatWidget(
    * over a card still awaiting the user, and only for the `ai` domain.
    */
   const offAiChange = subscribeAiChange((e) => {
-    if (opts.accountId && e.accountId && e.accountId !== opts.accountId) return;
+    const scope = opts.getAccountScope?.() ?? opts.accountId;
+    if (scope && e.accountId && e.accountId !== scope) return;
     if (!e.domains?.includes("ai")) return;
     if (busy || !threadId || !opts.loadThread) return;
     if (log.querySelector(`.${PREFIX}-proposal-pending`)) return;
