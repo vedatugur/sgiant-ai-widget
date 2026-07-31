@@ -694,7 +694,7 @@ export interface AiChatWidgetOptions {
    * to a "queued" state right after Apply.
    */
   getMediaJob?: (jobId: string) => Promise<{
-    status: "queued" | "processing" | "done" | "error";
+    status: "queued" | "processing" | "done" | "error" | "cancelled";
     error?: string | null;
   }>;
   /**
@@ -2112,6 +2112,10 @@ export function createAiChatWidget(
           }
           if (st.status === "error") {
             paintActivity(chip, st.error || L("videoFailed"), "error");
+            break;
+          }
+          if (st.status === "cancelled") {
+            paintActivity(chip, L("jobCancelled"), "error");
             break;
           }
         }
