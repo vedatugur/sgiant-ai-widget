@@ -3209,7 +3209,7 @@ export function createAiChatWidget(
     fileInput.type = "file";
     fileInput.multiple = true;
     fileInput.accept =
-      "image/*,.svg,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json";
+      "image/*,.svg,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml";
     fileInput.style.display = "none";
     fileInput.addEventListener(
       "change",
