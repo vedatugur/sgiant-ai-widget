@@ -2026,6 +2026,13 @@ export function createAiChatWidget(
     if (!model) return "";
     return model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
   }
+  /** Chips draw their own ✓/✕ glyph, but many host apply messages (and a few
+   *  labels) historically END in a textual "✓" too — rendered together they
+   *  read as a double checkmark ("✓ Brand updated … ✓"). The glyph wins; the
+   *  textual tick is stripped wherever text sits next to a glyph. */
+  function stripTick(s: string): string {
+    return s.replace(/\s*✓\s*$/u, "");
+  }
   function paintActivity(
     chip: HTMLElement,
     label: string,
@@ -2033,6 +2040,7 @@ export function createAiChatWidget(
     agent?: string,
     model?: string
   ): void {
+    label = stripTick(label);
     const icon =
       status === "running"
         ? `<span class="${PREFIX}-act-spin" aria-hidden="true"></span>`
@@ -4807,7 +4815,7 @@ export function createAiChatWidget(
         const ok = el("div", `${PREFIX}-proposal-ok`);
         ok.innerHTML =
           `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
-          `<span>${escapeHtml(msg || L("applied"))}</span>`;
+          `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
         wrap.appendChild(ok);
         if (jobId) trackJob(jobId, threadId);
       } catch {
