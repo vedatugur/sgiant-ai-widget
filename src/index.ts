@@ -763,6 +763,10 @@ export const WIDGET_LABELS = {
   pastConversations: "Past conversations",
   /** History-row spinner tooltip: this conversation has a reply in flight. */
   threadAnswering: "Answering…",
+  /** Shown when the live stream drops mid-reply: the server finishes the turn
+   *  and the widget polls the thread until the reply lands. */
+  streamLostRecovering:
+    "Connection lost — still working on the reply; it will appear here when ready.",
   history: "History",
   moreOptions: "More options",
   more: "More",
@@ -4817,6 +4821,65 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
+  /**
+   * Stream-loss recovery. The api runs a turn to completion and persists the
+   * transcript even when the browser's stream dies (QUIC/proxy drops — seen
+   * live: the reply landed 8 minutes after the client lost the connection).
+   * So a transport failure is NOT a failed turn: keep the thread marked
+   * "answering…" (which also blocks double-sending into it) and poll until
+   * THIS turn's exchange lands, then show it. The transcript is persisted at
+   * turn END (the user message and the reply arrive together), so the signal
+   * is "the last user message is the one we sent, followed by an assistant
+   * reply" — merely seeing a trailing assistant message would false-positive
+   * on the PREVIOUS exchange in an existing thread. `sentContent` is null for
+   * a regenerate (no new user message; any trailing reply counts). Bounded at
+   * 15 minutes; on timeout the thread simply unlocks and the reply — if any —
+   * shows on its next open.
+   */
+  async function recoverLostTurn(
+    turnThread: string,
+    sentContent: string | null
+  ): Promise<void> {
+    if (!opts.loadThread) return;
+    pendingThreads.add(turnThread);
+    syncBusy();
+    try {
+      for (let i = 0; i < 90 && !alive.signal.aborted; i++) {
+        await new Promise((r) => setTimeout(r, 10_000));
+        if (alive.signal.aborted) return;
+        let items: LoadedThreadItem[];
+        try {
+          items = await opts.loadThread(turnThread);
+        } catch {
+          continue; // transient — the same outage that killed the stream
+        }
+        const msgs = items.filter(
+          (it): it is Extract<LoadedThreadItem, { role: string }> =>
+            "role" in it
+        );
+        const last = msgs[msgs.length - 1];
+        if (!last || last.role !== "assistant") continue;
+        if (sentContent !== null) {
+          const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+          if (!lastUser || lastUser.content.trim() !== sentContent.trim())
+            continue; // still the PREVIOUS exchange — our turn hasn't landed
+        }
+        pendingThreads.delete(turnThread);
+        syncBusy();
+        if (threadId === turnThread) {
+          renderThreadItems(items, turnThread);
+          maybeDing();
+          scrollDown();
+          saveState();
+        }
+        return;
+      }
+    } finally {
+      pendingThreads.delete(turnThread);
+      syncBusy();
+    }
+  }
+
   async function send(
     content: string,
     fork?: { parentId?: string | null; regenerate?: boolean }
@@ -4879,6 +4942,7 @@ export function createAiChatWidget(
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
+    let transportLost = false;
     // Close the current text bubble and render its markdown, so the NEXT thing
     // (a widget/activity, or more text) lands AFTER it — keeping the reply in
     // true order instead of dumping widgets below all the text. `final` also
@@ -5089,6 +5153,12 @@ export function createAiChatWidget(
         }
       }
     } catch (err) {
+      // TRANSPORT loss (QUIC/network drop, proxy hiccup) — distinct from a
+      // server-sent error frame: the api keeps running the turn server-side
+      // and persists the transcript at the end, so the reply is NOT lost,
+      // the browser just can't see the rest of the stream. Recover by
+      // polling the thread until the reply lands (see below).
+      transportLost = true;
       failure = (err as Error).message || "Network error.";
     } finally {
       pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
@@ -5108,6 +5178,17 @@ export function createAiChatWidget(
     // proposal cards (they are ephemeral, never persisted, so this is their
     // only way to reach the user). Otherwise leave everything for the thread
     // to show on next open; the History spinner has just cleared.
+    // Transport died mid-stream but the api runs the turn to completion and
+    // persists the transcript at the end — recover instead of giving up: keep
+    // the thread marked "answering…" and poll until the reply lands (seen live
+    // with QUIC drops through the edge; the reply arrived minutes later).
+    if (transportLost && turnThread && opts.loadThread) {
+      typing.remove();
+      if (live()) showError(L("streamLostRecovering"));
+      void recoverLostTurn(turnThread, isRegen ? null : content);
+      return;
+    }
+
     if (!live()) {
       typing.remove(); // detached or not — harmless either way
       if (turnThread && threadId === turnThread && opts.loadThread) {
