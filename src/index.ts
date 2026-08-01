@@ -370,7 +370,9 @@ export interface AiChatWidgetOptions {
   /** Media-upload endpoint (POST multipart) for chat attachments — e.g.
    *  https://api.sgiant.io/accounts/:id/assets/media. When set (authed
    *  surfaces), the composer shows a paperclip so the user can attach files the
-   *  assistant reads. Omit on the anonymous surface (no library to store into). */
+   *  assistant reads. Uploads are sent SESSION-scoped (`session=1` + the
+   *  current threadId): reachable from the chat history, never filed into the
+   *  asset library. Omit on the anonymous surface (nowhere to store). */
   uploadEndpoint?: string;
   /** Account the chat is scoped to. Omit for the public/anonymous endpoint. */
   accountId?: string;
@@ -3121,7 +3123,8 @@ export function createAiChatWidget(
   }
 
   // Attachments (authed surfaces only): a paperclip that opens a file picker,
-  // uploads into the media library, and stages refs for the next turn.
+  // uploads session-scoped (never into the asset library), and stages refs for
+  // the next turn.
   const stagedAtts: WidgetAtt[] = [];
   const attBar = el("div", `${PREFIX}-attbar`);
   attBar.style.display = "none";
@@ -3173,6 +3176,10 @@ export function createAiChatWidget(
         }
         const fd = new FormData();
         fd.append("file", file);
+        // Chat attachments are SESSION-scoped: reachable from the chat history
+        // by id, but never filed into the asset library.
+        fd.append("session", "1");
+        if (threadId) fd.append("threadId", threadId);
         const res = await fetch(uploadEndpoint, {
           method: "POST",
           headers: token ? { authorization: `Bearer ${token}` } : {},
