@@ -5566,9 +5566,10 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
-  /** Render an AI-authored HTML preview in a fully sandboxed iframe (sandbox=""
-   *  → no scripts, no same-origin) so it paints the real look but can't execute
-   *  or reach out. The chat-side twin of @sgiant/ui's <AiPlayground>. */
+  /** Render an AI-authored HTML preview in a sandboxed iframe. Scripts stay
+   *  OFF (static HTML, can't execute), but allow-same-origin is granted so the
+   *  parent page's blob: URLs (resolved private media) can paint — an
+   *  opaque-origin frame refuses them and every resolved image breaks. */
   function renderPreview(spec: PreviewSpec): void {
     const wrap = el("div", `${PREFIX}-preview`);
     const bar = el("div", `${PREFIX}-preview-bar`);
@@ -5578,7 +5579,7 @@ export function createAiChatWidget(
     title.textContent = spec.title || L("preview");
     bar.append(dots, title);
     const frame = el("iframe", `${PREFIX}-preview-frame`) as HTMLIFrameElement;
-    frame.setAttribute("sandbox", "");
+    frame.setAttribute("sandbox", "allow-same-origin");
     frame.setAttribute("title", spec.title || L("preview"));
     frame.srcdoc = wrapPreviewHtml(spec.html);
     wrap.append(bar, frame);
