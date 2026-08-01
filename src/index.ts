@@ -761,6 +761,8 @@ export const WIDGET_LABELS = {
   panelAria: "{name} chat",
   newChat: "New chat",
   pastConversations: "Past conversations",
+  /** History-row spinner tooltip: this conversation has a reply in flight. */
+  threadAnswering: "Answering…",
   history: "History",
   moreOptions: "More options",
   more: "More",
@@ -1381,7 +1383,35 @@ export function createAiChatWidget(
    *  that has been torn down stops writing to its own dead DOM and storage. */
   const alive = new AbortController();
   let threadId: string | undefined;
+  /** True when the VIEW on screen has a turn in flight (per-thread, not
+   *  global): it blocks double-sending into the same conversation, while other
+   *  threads stay free to receive a new message. Derived from
+   *  `pendingThreads` by `syncBusy()` — never written directly elsewhere. */
   let busy = false;
+  /**
+   * Cross-thread stream fence. Every send() captures the view generation;
+   * switching threads / starting a new chat bumps it. A stale turn keeps
+   * CONSUMING its stream so the server completes + persists normally, but
+   * stops touching the visible log / `history` / localStorage — the reply
+   * belongs to ITS thread, not whichever conversation is now on screen (the
+   * exact bleed users reported when switching mid-answer).
+   */
+  let viewGen = 0;
+  /** Placeholder key for a turn whose brand-new thread id hasn't arrived yet
+   *  (the server names the thread in the first frame). */
+  const NEW_TURN_KEY = "·new·";
+  /** Threads with a response in flight — drives the History list's
+   *  "answering…" spinner and the per-thread busy state. */
+  const pendingThreads = new Set<string>();
+  const isThreadPending = (key: string | undefined): boolean =>
+    pendingThreads.has(key ?? NEW_TURN_KEY);
+  /** Recompute `busy` for the CURRENT view (call after any switch or any
+   *  pending-set change). Function-declared so early code can reference it;
+   *  it only runs after the composer exists. */
+  function syncBusy(): void {
+    busy = isThreadPending(threadId);
+    sendBtn.disabled = busy;
+  }
   let lastUserContent = "";
   // The navigable pages from the most recent turn's pageContext, cached so the
   // #111 prose-nav fallback (linkifyProseNav) can match a model's "Open <page>"
@@ -3273,12 +3303,14 @@ export function createAiChatWidget(
   // start fresh with the greeting. Shared by the "New chat" button and any
   // caller that opens the widget on a fresh thread (see open's forceNew).
   const startNewChat = (): void => {
+    viewGen++; // fence: any in-flight turn stops painting into this view
     threadId = undefined;
     history.length = 0;
     saveState();
     clearRich();
     log.innerHTML = "";
     if (opts.greeting) addAssistantMessage(opts.greeting);
+    syncBusy();
     void renderSuggestions();
     void refreshArtifacts();
   };
@@ -3852,6 +3884,13 @@ export function createAiChatWidget(
         const ti = el("span", `${PREFIX}-history-title`);
         ti.textContent = th.title || L("untitledConversation");
         item.appendChild(ti);
+        // A response is in flight for this conversation — show it working.
+        if (isThreadPending(th.id)) {
+          const spin = el("span", `${PREFIX}-act-spin`);
+          spin.title = L("threadAnswering");
+          spin.setAttribute("aria-label", L("threadAnswering"));
+          item.appendChild(spin);
+        }
         if (th.updatedAt) {
           const dt = el("span", `${PREFIX}-history-date`);
           dt.textContent = relTime(th.updatedAt);
@@ -3902,10 +3941,12 @@ export function createAiChatWidget(
     if (!opts.loadThread) return;
     try {
       const items = await opts.loadThread(id);
+      viewGen++; // fence: an in-flight turn from the previous view goes silent
       // Replace the visible conversation with the chosen thread (messages +
       // inline data widgets). renderThreadItems clears rich roots + the log.
       renderThreadItems(items, id);
       threadId = id;
+      syncBusy();
       saveState();
       void refreshArtifacts();
       overlay.remove();
@@ -4783,7 +4824,14 @@ export function createAiChatWidget(
     // A regenerate re-answers an existing user turn — it carries no new user
     // message, so it must NOT push a user bubble to the DOM / history.
     const isRegen = fork?.regenerate === true;
-    busy = true;
+    // Turn fence: this turn renders only while the user is still on the view
+    // it started from. `turnThread` is the thread the reply BELONGS to (fixed
+    // once the server names it); `live()` gates every visible side effect.
+    const myGen = viewGen;
+    let turnThread: string | undefined = threadId;
+    const live = (): boolean => viewGen === myGen && !alive.signal.aborted;
+    pendingThreads.add(turnThread ?? NEW_TURN_KEY);
+    syncBusy();
     if (!isRegen) lastUserContent = content;
     // Take + clear any staged attachments for THIS turn.
     const atts = stagedAtts.splice(0);
@@ -4910,9 +4958,19 @@ export function createAiChatWidget(
             buf = buf.slice(idx + 1);
             const frame = parseLine(line);
             if (!frame) continue;
-            if (frame.threadId) threadId = frame.threadId;
+            if (frame.threadId) {
+              // The server named this turn's thread. Re-key the pending entry;
+              // update the GLOBAL threadId only while the user is still here —
+              // after a switch it must not clobber the view they moved to.
+              if (turnThread !== frame.threadId) {
+                pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+                turnThread = frame.threadId;
+                pendingThreads.add(turnThread);
+              }
+              if (live()) threadId = frame.threadId;
+            }
             const piece = frame.text ?? frame.d;
-            if (piece) {
+            if (piece && live()) {
               if (!assistant) {
                 typing.remove();
                 assistant = addMsg(log, "assistant", "");
@@ -4933,7 +4991,7 @@ export function createAiChatWidget(
             }
             // Inline data widget (render_chart). Flush the current text first so
             // the chart lands AFTER it, in order — not below the whole reply.
-            if (frame.type === "widget") {
+            if (frame.type === "widget" && live()) {
               typing.remove();
               flushSegment(false);
               renderServerWidget(frame.spec, frame.rows, frame.comparisonRows);
@@ -4942,7 +5000,12 @@ export function createAiChatWidget(
             // Live agent-activity step — a process chip (running → ok/error). On
             // start, flush text so the chip sits AFTER it (true order) and flip
             // the role badge to match the tool (Talk → Analytics, etc.).
-            if (frame.type === "activity" && frame.label && frame.status) {
+            if (
+              frame.type === "activity" &&
+              frame.label &&
+              frame.status &&
+              live()
+            ) {
               typing.remove();
               if (frame.status === "running") {
                 flushSegment(false);
@@ -4959,7 +5022,12 @@ export function createAiChatWidget(
               producedAny = true;
             }
             // The assistant is ASKING the human to decide something.
-            if (frame.type === "question" && frame.questionId && frame.prompt) {
+            if (
+              frame.type === "question" &&
+              frame.questionId &&
+              frame.prompt &&
+              live()
+            ) {
               typing.remove();
               flushSegment(false);
               renderQuestion(
@@ -5023,13 +5091,38 @@ export function createAiChatWidget(
     } catch (err) {
       failure = (err as Error).message || "Network error.";
     } finally {
-      busy = false;
-      sendBtn.disabled = false;
-      input.focus();
+      pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+      syncBusy();
+      if (live()) input.focus();
       // A turn just consumed credits — refresh the remaining-credits readout.
       void refreshBalance();
-      // A generation/import may have just landed — refresh the artifact strip.
-      void refreshArtifacts();
+      // A generation/import may have just landed — refresh the artifact strip
+      // (thread-scoped, so only when this turn's thread is the one on screen).
+      if (threadId === turnThread) void refreshArtifacts();
+    }
+
+    // Stale turn finished in the background (the user switched away while it
+    // streamed). Nothing here may touch the visible view UNLESS the user has
+    // switched BACK to this turn's thread — then reload the canonical
+    // transcript (the reply is persisted server-side) and surface any pending
+    // proposal cards (they are ephemeral, never persisted, so this is their
+    // only way to reach the user). Otherwise leave everything for the thread
+    // to show on next open; the History spinner has just cleared.
+    if (!live()) {
+      typing.remove(); // detached or not — harmless either way
+      if (turnThread && threadId === turnThread && opts.loadThread) {
+        try {
+          renderThreadItems(await opts.loadThread(turnThread), turnThread);
+        } catch {
+          /* the thread shows the reply on its next open */
+        }
+        for (const p of deferredProposals)
+          renderProposal(p.name, p.args, p.agent, p.fields, p.accountId);
+        maybeDing();
+        scrollDown();
+        saveState();
+      }
+      return;
     }
 
     // Clear the typing indicator + render the FINAL text segment (with
@@ -5081,10 +5174,18 @@ export function createAiChatWidget(
     // self-heal on the next send or when the thread is reopened — a fair trade
     // to avoid destroying a pending Apply card.
     const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal-pending`);
-    if (threadId && opts.loadThread && opts.setActiveLeaf && !hasLiveProposal) {
+    // Reload THIS TURN's thread (never whatever the view has become) — and only
+    // while the user is still on it; the fence above already handled the
+    // switched-away cases.
+    if (
+      turnThread &&
+      opts.loadThread &&
+      opts.setActiveLeaf &&
+      !hasLiveProposal
+    ) {
       try {
-        const reloaded = await opts.loadThread(threadId);
-        renderThreadItems(reloaded);
+        const reloaded = await opts.loadThread(turnThread);
+        if (live()) renderThreadItems(reloaded, turnThread);
       } catch {
         /* keep the streamed view if the reload fails */
       }
