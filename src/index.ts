@@ -1690,7 +1690,7 @@ export function createAiChatWidget(
     hActions.appendChild(historyBtn);
   }
   // ── "More" overflow menu ──────────────────────────────────────────────────
-  // The secondary/toggle controls (download, auto-save, flag, sound, auto-nav)
+  // The secondary/toggle controls (download, flag, sound, auto-nav)
   // used to sit side-by-side in the header. As their number grew the title bar
   // became a cramped, unreadable strip of look-alike icons. They now live in a
   // labeled dropdown behind a single kebab button, so the header keeps only the
