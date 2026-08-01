@@ -5638,13 +5638,17 @@ export function createAiChatWidget(
   }
 
   /** Render a navigation suggestion. With auto-navigate ON it follows the link
-   *  immediately (showing a "Opening …" chip); OFF it offers a confirm button. */
+   *  immediately (showing a "Opening …" chip); OFF it offers a confirm button.
+   *  ADVANCED mode always auto-follows: navigation there only retargets the
+   *  embedded iframe (the user is WATCHING the assistant drive the app — a
+   *  confirm button per page defeats the mode), while the browser-local toggle
+   *  keeps governing normal widget mode, where navigation moves the real app. */
   function renderNavigate(spec: NavigateSpec, replay = false): void {
     const wrap = el("div", `${PREFIX}-nav`);
     const label = spec.label || "Open page";
     // On replay (history / post-turn thread restore) always render the button,
     // never auto-follow — re-opening a conversation must not navigate the app.
-    if (autoNav && !replay) {
+    if ((autoNav || advanced) && !replay) {
       const chip = el("div", `${PREFIX}-autonav`);
       chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
       wrap.appendChild(chip);
@@ -5811,8 +5815,13 @@ export function createAiChatWidget(
     }
     // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
     // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
-    // state / costs credits) ALWAYS asks, even in auto mode.
-    if (autoNav && isNavigationAction(spec.name) && !spec.confirm) {
+    // state / costs credits) ALWAYS asks, even in auto mode. Advanced mode
+    // auto-runs pure navigation unconditionally (it only moves the iframe).
+    if (
+      (autoNav || advanced) &&
+      isNavigationAction(spec.name) &&
+      !spec.confirm
+    ) {
       const label = spec.label || "Opening…";
       const chip = el("div", `${PREFIX}-autonav`);
       chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
