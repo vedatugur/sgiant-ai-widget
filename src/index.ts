@@ -3221,6 +3221,17 @@ export function createAiChatWidget(
     attachBtn.setAttribute("aria-label", L("attachFile"));
     attachBtn.title = L("attachFileHint");
     attachBtn.addEventListener("click", () => fileInput!.click());
+    // Paste-to-attach: a screenshot (or copied file) pasted into the composer
+    // becomes a staged attachment — the same pipeline as the paperclip. Only
+    // intercept when the clipboard actually carries files; plain text pastes
+    // fall through untouched.
+    input.addEventListener("paste", (e) => {
+      const files = (e as ClipboardEvent).clipboardData?.files;
+      if (files && files.length) {
+        e.preventDefault();
+        void uploadFiles(files);
+      }
+    });
     form.append(attachBtn, input, sendBtn, fileInput);
   } else {
     form.append(input, sendBtn);
