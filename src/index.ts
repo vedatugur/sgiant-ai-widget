@@ -6540,8 +6540,8 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-kpi-d{font-size:11px;font-weight:600;color:var(--aiw-accent);margin-top:2px}
 .${PREFIX}-widget-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .${PREFIX}-widget-table th{text-align:left;font-weight:700;color:var(--aiw-text-2);border-bottom:1px solid var(--aiw-border);padding:6px 8px}
-.${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:#222}
-.${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:13.5px;color:#222;display:flex;flex-direction:column;gap:3px}
+.${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:var(--aiw-text)}
+.${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:13.5px;color:var(--aiw-text);display:flex;flex-direction:column;gap:3px}
 .${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent);border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-nav-btn:hover{background:color-mix(in srgb,var(--aiw-accent) 11%,transparent)}
