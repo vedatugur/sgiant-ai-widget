@@ -1,9 +1,21 @@
 {
   "extends": "@sgiant/tsconfig/base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"]
+    // Source-only browser package (main/exports → src, like @sgiant/ui and
+    // @sgiant/assets): consumers are bundlers, so no dist is emitted. Bundler
+    // resolution + JSX because this package now imports @sgiant/assets' raw
+    // .tsx sources (the shared apply-proposal helpers), which use
+    // extensionless imports that NodeNext refuses.
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

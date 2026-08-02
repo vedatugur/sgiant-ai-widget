@@ -34,6 +34,10 @@ export {
 } from "./host-actions";
 // Used locally too (the block above only RE-exports for consumers): the
 // auto-navigate gate needs to know what counts as navigation.
+import {
+  CHAT_ATTACHMENT_MAX_BYTES,
+  CHAT_ATTACHMENT_MAX_COUNT,
+} from "@sgiant/shared";
 import { isNavigationAction } from "./host-actions";
 // Same reason: the block below re-exports these for consumers, but the widget
 // itself subscribes so a finished background job can refresh the transcript.
@@ -71,6 +75,14 @@ export {
   type AiChangeEvent,
   type LiveSyncOptions,
 } from "./ai-invalidation";
+// THE single tool-name → endpoint mapping for applying a confirm-gated write
+// proposal — every host (org/admin widget adapters, the full-page panel
+// client) calls this instead of keeping its own copy.
+export {
+  applyProposal,
+  MEDIA_OP_TOOLS,
+  type ApplyProposalCtx,
+} from "./apply-proposal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
@@ -3192,8 +3204,11 @@ export function createAiChatWidget(
       attBar.appendChild(chip);
     });
   }
-  // Max size for one attachment (matches the api's multipart cap).
-  const MAX_ATT_BYTES = 25 * 1024 * 1024;
+  // Max size for one attachment — the shared transport cap. NOTE the api's
+  // TURN-time caps are tighter per kind (5 MB image vision block, 12 MB native
+  // PDF — see @sgiant/shared chat-attachment-limits); an oversize image still
+  // uploads but resolves as a skipped note the model sees.
+  const MAX_ATT_BYTES = CHAT_ATTACHMENT_MAX_BYTES;
   function attError(msg: string): void {
     const chip = el("span", `${PREFIX}-att ${PREFIX}-att-err`);
     chip.textContent = `⚠ ${msg}`;
@@ -3210,8 +3225,11 @@ export function createAiChatWidget(
     if (attachBtn) attachBtn.disabled = true;
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
-      for (const file of Array.from(files).slice(0, 6)) {
-        if (stagedAtts.length >= 6) break;
+      for (const file of Array.from(files).slice(
+        0,
+        CHAT_ATTACHMENT_MAX_COUNT
+      )) {
+        if (stagedAtts.length >= CHAT_ATTACHMENT_MAX_COUNT) break;
         if (file.size > MAX_ATT_BYTES) {
           attError(`"${file.name}" is too large (max 25 MB)`);
           continue;

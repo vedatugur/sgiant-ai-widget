@@ -8,11 +8,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -b",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sgiant/ai-agent-bridge": "*"
+    "@sgiant/ai-agent-bridge": "*",
+    "@sgiant/assets": "*",
+    "@sgiant/shared": "*"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",
