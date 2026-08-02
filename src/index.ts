@@ -97,6 +97,12 @@ export type LoadedThreadItem =
       id?: string;
       /** Parent turn in the conversation tree (null on a root message). */
       parentId?: string | null;
+      /** Persisted per-turn token spend (assistant messages) — replays the
+       *  ↑/↓ tokens caption that the live stream draws, so it survives the
+       *  end-of-turn thread reload and thread reopen. Shown even on the free
+       *  staff lane: not billed there, still worth seeing. */
+      inputTokens?: number;
+      outputTokens?: number;
       /** ‹n/m› sibling switcher data — present when this turn has siblings. */
       branch?: {
         index: number;
@@ -229,6 +235,10 @@ export function buildThreadReplay(payload: {
     role: string;
     content: string;
     createdAt?: string;
+    /** Persisted per-turn token spend (assistant rows; both read endpoints
+     *  return them) — carried into the replay's tokens caption. */
+    inputTokens?: number | null;
+    outputTokens?: number | null;
   }>;
   artifacts?: Array<{
     kind: string;
@@ -256,6 +266,8 @@ export function buildThreadReplay(payload: {
         content: m.content,
         ...(m.id ? { id: m.id } : {}),
         ...(m.parentId !== undefined ? { parentId: m.parentId } : {}),
+        ...(m.inputTokens ? { inputTokens: m.inputTokens } : {}),
+        ...(m.outputTokens ? { outputTokens: m.outputTokens } : {}),
         ...(m.id && branchNav?.has(m.id)
           ? { branch: branchNav.get(m.id) }
           : {}),
@@ -2587,6 +2599,18 @@ export function createAiChatWidget(
   // reopening from history renders first and adopts the thread after. The live
   // job cards belong to a THREAD, so they have to be re-attached for the one on
   // screen, not the one that was open a moment ago.
+  /** The ↑in / ↓out tokens caption under an assistant reply — one builder for
+   *  the live stream and the transcript replay so the two can never drift. */
+  function usageBadge(inTok: number, outTok: number): HTMLElement {
+    const cap = el("div", `${PREFIX}-usage`);
+    cap.innerHTML =
+      `<span class="${PREFIX}-usage-pill">↑ ${inTok.toLocaleString()}</span>` +
+      `<span class="${PREFIX}-usage-pill">↓ ${outTok.toLocaleString()}</span>` +
+      `<span class="${PREFIX}-usage-sep">·</span>` +
+      `<span>${(inTok + outTok).toLocaleString()} tokens</span>`;
+    return cap;
+  }
+
   function renderThreadItems(
     items: LoadedThreadItem[],
     tid: string | undefined = threadId
@@ -2631,6 +2655,15 @@ export function createAiChatWidget(
         const before = log.lastChild;
         if (it.role === "assistant") addAssistantMessage(it.content);
         else addMsg(log, it.role, it.content);
+        // Persisted per-turn token caption — the live stream draws this under
+        // the reply, but this reload runs right after the turn and used to
+        // wipe it. Rendered from the stored counts so it also survives reopen
+        // (and shows on the free staff lane, where it's insight, not billing).
+        if (it.role === "assistant" && (it.inputTokens || it.outputTokens)) {
+          log.appendChild(
+            usageBadge(it.inputTokens ?? 0, it.outputTokens ?? 0)
+          );
+        }
         history.push({ role: it.role, content: it.content });
         // Branch controls (edit / regenerate / ‹n/m›) on branching hosts, and/or
         // the per-message vote when a vote endpoint is wired.
@@ -3022,8 +3055,11 @@ export function createAiChatWidget(
     }
     statusEl.style.display = "flex";
     statusRoleEl.textContent = ROLE_NAMES[activeRole] ?? activeRole;
-    if (creditBalance === null) statusCreditsVal.textContent = "—";
-    else if (!creditRaf) {
+    // null = "not credit-driven here" (the free staff lane): hide the credits
+    // chip entirely — a dash read as a broken balance, and there is nothing
+    // to show. The role indicator stays.
+    statusCreditsEl.style.display = creditBalance === null ? "none" : "";
+    if (creditBalance !== null && !creditRaf) {
       displayedCredits = creditBalance;
       setCreditsText(displayedCredits);
     }
@@ -3072,8 +3108,10 @@ export function createAiChatWidget(
     if (!opts.getBalance) return;
     statusEl.style.display = "flex";
     statusRoleEl.textContent = ROLE_NAMES[activeRole] ?? activeRole;
+    // Same null-hides-the-chip rule as renderStatus (free staff lane).
+    statusCreditsEl.style.display = creditBalance === null ? "none" : "";
     if (creditBalance === null) {
-      statusCreditsVal.textContent = "—";
+      /* chip hidden */
     } else if (!creditInit) {
       creditInit = true; // first read snaps (no count-up from zero on open)
       displayedCredits = creditBalance;
@@ -5262,12 +5300,7 @@ export function createAiChatWidget(
       if (failure) showError(failure);
       // Per-message token badge under the reply (UI-friendly tokens caption).
       if (turnIn + turnOut > 0) {
-        const cap = el("div", `${PREFIX}-usage`);
-        cap.innerHTML =
-          `<span class="${PREFIX}-usage-pill">↑ ${turnIn.toLocaleString()}</span>` +
-          `<span class="${PREFIX}-usage-pill">↓ ${turnOut.toLocaleString()}</span>` +
-          `<span class="${PREFIX}-usage-sep">·</span>` +
-          `<span>${(turnIn + turnOut).toLocaleString()} tokens</span>`;
+        const cap = usageBadge(turnIn, turnOut);
         if (lastBubble) lastBubble.insertAdjacentElement("afterend", cap);
         else log.appendChild(cap);
       }
