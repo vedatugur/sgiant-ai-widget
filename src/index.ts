@@ -6229,13 +6229,17 @@ function injectStyles(side: "left" | "right"): void {
    Without the chip the mascot floated as a formless gradient blob that did not
    read as "a chat" at all — the reported "I can't see any chatbox" (#88): the
    widget was mounted and working, just invisible as an affordance. */
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:2147483000;width:64px;height:64px;border:2px solid transparent;border-radius:50%;background:linear-gradient(var(--aiw-surface-raised),var(--aiw-surface-raised)) padding-box,var(--aiw-gradient) border-box;color:var(--aiw-accent-contrast);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 10px 26px rgba(0,0,0,.32),0 2px 8px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
+/* Layering: the widget sits ABOVE page content and content-level overlays
+   (viewers/drawers, z<=40) but BELOW the app's Radix modals (z-50) — a dialog
+   the user opens must cover the chat, not hide behind it. The old max-int
+   z-index put the chat over every modal. */
+.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:48;width:64px;height:64px;border:2px solid transparent;border-radius:50%;background:linear-gradient(var(--aiw-surface-raised),var(--aiw-surface-raised)) padding-box,var(--aiw-gradient) border-box;color:var(--aiw-accent-contrast);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 10px 26px rgba(0,0,0,.32),0 2px 8px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
 .${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06);box-shadow:0 14px 32px rgba(0,0,0,.4),0 3px 10px rgba(0,0,0,.2)}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:2147483000;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1)}
+.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1)}
 .${PREFIX}-header{background:var(--aiw-gradient);color:var(--aiw-accent-contrast);padding:12px 14px;display:flex;align-items:center;gap:10px}
 /* Drag-to-reposition. touch-action:none is what makes this work on a
    touchscreen — without it the browser claims the gesture as a scroll and the
