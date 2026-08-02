@@ -4403,6 +4403,16 @@ export function createAiChatWidget(
       lines.push(
         `Period: ${String(args.dateFrom ?? "?")} → ${String(args.dateTo ?? "?")}`
       );
+      // Staff-plane scope: the one fact that distinguishes a fleet report
+      // from a single-account one belongs ON the card being approved.
+      if (args.allAccounts === true) {
+        lines.push("Covers EVERY account (platform-wide data).");
+      } else if (
+        Array.isArray(args.subjectAccountIds) &&
+        args.subjectAccountIds.length > 0
+      ) {
+        lines.push(`Covers ${args.subjectAccountIds.length} accounts' data.`);
+      }
       lines.push(
         `Lands as a PDF in Assets → ${String(args.folderName ?? "") || "Reports"}.`
       );
