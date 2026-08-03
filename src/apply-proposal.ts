@@ -216,17 +216,27 @@ export async function applyProposal(
   }
   if (name === "generate_report") {
     // Same enqueue-and-return shape as ingest_site: minutes of work (plan →
-    // queries → author → PDF), a live job card via the generic job id, and the
-    // notification reports the finished document.
+    // queries → author → document), a live job card via the generic job id,
+    // and the notification reports the finished document. The message names
+    // the ACTUAL output format — a PPTX ask confirmed with "the PDF will
+    // land…" read as the wrong job being started.
     const started = await api<{ job?: { jobId?: string | null } }>(
       `/accounts/${accountId}/reports/generate`,
       { method: "POST", body: JSON.stringify(args) }
     );
+    const isPptx =
+      String((args as { format?: unknown }).format ?? "").toLowerCase() ===
+      "pptx";
     return {
-      message: t("aiAssistant.apply.reportStarted", {
-        defaultValue:
-          "Generating the report — the PDF will land in your assets ✓",
-      }),
+      message: isPptx
+        ? t("aiAssistant.apply.reportStartedPptx", {
+            defaultValue:
+              "Building the presentation — the PPTX will land in your assets ✓",
+          })
+        : t("aiAssistant.apply.reportStarted", {
+            defaultValue:
+              "Generating the report — the PDF will land in your assets ✓",
+          }),
       ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
     };
   }
