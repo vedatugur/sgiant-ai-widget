@@ -1209,7 +1209,7 @@ function isSafeFrameUrl(url: string): boolean {
 function parseJsonDirective<T>(
   text: string,
   tag: string
-): { spec: T; stripped: string } | null {
+): { spec: T; stripped: string; start: number; end: number } | null {
   const open = `[[${tag}:`;
   const start = text.indexOf(open);
   if (start < 0) return null;
@@ -1244,7 +1244,7 @@ function parseJsonDirective<T>(
     if (text[after] === "]") after++;
     if (text[after] === "]") after++;
     const stripped = (text.slice(0, start) + text.slice(after)).trim();
-    return { spec, stripped };
+    return { spec, stripped, start, end: after };
   } catch {
     return null;
   }
@@ -5017,16 +5017,24 @@ export function createAiChatWidget(
     let turnOut = 0;
     let failure: string | null = null;
     let transportLost = false;
+    // Chars of assistantRaw already painted into the streaming bubble. The
+    // display can lag behind assistantRaw: directive bytes ([[tag:{json}]])
+    // are withheld from view while they stream (see processStreamDisplay).
+    let shownLen = 0;
     // Close the current text bubble and render its markdown, so the NEXT thing
     // (a widget/activity, or more text) lands AFTER it — keeping the reply in
     // true order instead of dumping widgets below all the text. `final` also
     // parses inline directives. Returns the rendered bubble (for the token tag).
     const flushSegment = (final: boolean): HTMLElement | null => {
       const bubble = assistant;
+      // On a NON-final flush, bake only what the user has SEEN and carry the
+      // withheld tail (a directive still streaming) into the next segment —
+      // baking half a [[widget:{…}]] would show raw JSON AND orphan its tail.
+      let raw = final ? assistantRaw : assistantRaw.slice(0, shownLen);
+      assistantRaw = final ? "" : assistantRaw.slice(shownLen);
+      shownLen = 0;
       if (!bubble) return null;
       assistant = null;
-      let raw = assistantRaw;
-      assistantRaw = "";
       bubble.classList.remove(`${PREFIX}-streaming`);
       if (!raw.trim()) {
         bubble.remove();
@@ -5036,6 +5044,134 @@ export function createAiChatWidget(
       history.push({ role: "assistant", content: raw });
       applyAssistantRich(bubble, raw, true);
       return bubble;
+    };
+    // ---- Directive-aware streaming display --------------------------------
+    // Directives ([[tag:{json}]]) arrive INSIDE the text stream. They used to
+    // scroll by as raw JSON and only become cards when the turn finished. Now
+    // the stream painter WITHHOLDS directive bytes as they arrive, and purely
+    // visual cards (widget / preview / custom tags) render the moment their
+    // JSON completes — mid-reply, in true order. Side-effecting directives
+    // (navigate / action / chips / form) stay hidden in assistantRaw for the
+    // end-of-turn renderDirectives pass, unchanged.
+    const streamDirectiveTag = (tag: string): "now" | "later" | null => {
+      if (tag === "widget" || tag === "preview" || customRenderers[tag])
+        return "now";
+      if (
+        tag === "navigate" ||
+        tag === "action" ||
+        tag === "chips" ||
+        tag === "form"
+      )
+        return "later";
+      return null;
+    };
+    const appendStreamText = (s: string): void => {
+      if (!s) return;
+      if (!assistant) {
+        typing.remove();
+        assistant = addMsg(log, "assistant", "");
+        assistant.classList.add(`${PREFIX}-streaming`);
+      }
+      const masked = maskMarkdown(s);
+      if (masked) {
+        const tok = el("span", `${PREFIX}-tok`);
+        tok.textContent = masked;
+        assistant.appendChild(tok);
+      }
+    };
+    const renderStreamDirective = (tag: string, spec: unknown): void => {
+      const custom = customRenderers[tag];
+      if (custom) {
+        const host = el("div", `${PREFIX}-widget ${PREFIX}-custom`);
+        log.appendChild(host);
+        try {
+          const dispose = custom(host, spec);
+          if (dispose) richDisposers.push(dispose);
+        } catch {
+          host.remove();
+        }
+        scrollDown(true);
+        return;
+      }
+      if (tag === "widget") {
+        renderWidget(spec as WidgetSpec);
+        return;
+      }
+      const p = spec as PreviewSpec;
+      if (typeof p.html === "string") renderPreview(p);
+    };
+    const processStreamDisplay = (): void => {
+      for (;;) {
+        const pending = assistantRaw.slice(shownLen);
+        if (!pending) return;
+        const open = pending.indexOf("[[");
+        if (open < 0) {
+          // Withhold a lone trailing "[" — it may grow into an opener.
+          const cut = pending.endsWith("[")
+            ? pending.length - 1
+            : pending.length;
+          appendStreamText(pending.slice(0, cut));
+          shownLen += cut;
+          return;
+        }
+        if (open > 0) {
+          appendStreamText(pending.slice(0, open));
+          shownLen += open;
+          continue;
+        }
+        // pending starts with "[[" — read the tag.
+        const m = /^\[\[([a-z-]{1,24})(:|\]\])?/i.exec(pending);
+        if (!m) {
+          if (pending.length <= 2) return; // bare "[[" — tag may follow
+          appendStreamText("[["); // "[[" + a non-tag char — literal text
+          shownLen += 2;
+          continue;
+        }
+        if (!m[2] && pending.length === 2 + m[1].length) return; // tag typing
+        if (m[2] === "]]") {
+          if (`[[${m[1]}]]` === LEAD_TOKEN) {
+            shownLen += m[0].length; // hide the token; final pass renders it
+            continue;
+          }
+          appendStreamText("[[");
+          shownLen += 2;
+          continue;
+        }
+        if (!m[2]) {
+          // Tag chars ended in something that is not ":" — literal text.
+          appendStreamText("[[");
+          shownLen += 2;
+          continue;
+        }
+        const mode = streamDirectiveTag(m[1]);
+        if (!mode) {
+          appendStreamText("[[");
+          shownLen += 2;
+          continue;
+        }
+        const d = parseJsonDirective<unknown>(pending, m[1]);
+        if (!d || d.start !== 0) {
+          // Incomplete (still streaming) — hold. Give up on a pathological
+          // never-closing directive so the rest of the reply isn't hostage.
+          if (pending.length > 20000) {
+            appendStreamText("[[");
+            shownLen += 2;
+            continue;
+          }
+          return;
+        }
+        if (mode === "later") {
+          shownLen += d.end; // keep in raw (final pass acts on it), hide only
+          continue;
+        }
+        // Renderable NOW: bake the text seen so far, paint the card, resume.
+        const rest = pending.slice(d.end);
+        assistantRaw = assistantRaw.slice(0, shownLen);
+        flushSegment(false);
+        renderStreamDirective(m[1], d.spec);
+        assistantRaw = rest;
+        shownLen = 0;
+      }
     };
     try {
       const token = opts.getToken ? await opts.getToken() : opts.token;
@@ -5109,22 +5245,13 @@ export function createAiChatWidget(
             }
             const piece = frame.text ?? frame.d;
             if (piece && live()) {
-              if (!assistant) {
-                typing.remove();
-                assistant = addMsg(log, "assistant", "");
-                assistant.classList.add(`${PREFIX}-streaming`);
-              }
               assistantRaw += piece;
               producedAny = true;
-              // Stream MASKED plain text (markdown marks hidden) with a per-token
-              // fade+blur reveal — a cool typing feel without showing raw ** / ##
-              // / | while typing. The real markdown renders once at the end.
-              const masked = maskMarkdown(piece);
-              if (masked) {
-                const tok = el("span", `${PREFIX}-tok`);
-                tok.textContent = masked;
-                assistant.appendChild(tok);
-              }
+              // Stream MASKED plain text (markdown marks hidden) with a
+              // per-token fade+blur reveal — directive bytes are withheld and
+              // visual cards paint mid-stream (see processStreamDisplay). The
+              // real markdown still renders once at the end of each segment.
+              processStreamDisplay();
               scrollDown();
             }
             // Inline data widget (render_chart). Flush the current text first so
