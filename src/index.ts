@@ -6229,7 +6229,7 @@ function escapeHtml(s: string): string {
 }
 
 /** Wrap a bare HTML fragment in a minimal document so a preview always renders
- *  sanely; a full document is used as-is. Mirrors @sgiant/ui's AiPlayground. */
+ *  sanely; a full document is used as-is. */
 function wrapPreviewHtml(html: string): string {
   const s = (html ?? "").trim();
   if (/<!doctype|<html[\s>]/i.test(s)) return s;
