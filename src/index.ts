@@ -863,7 +863,6 @@ export const WIDGET_LABELS = {
   // Proposal confirm cards
   proposalUpdateCreation: "Apply this update to the creation?",
   proposalAddCreation: "Add this creation to your studio?",
-  proposalAddStock: "Add this stock media to your assets?",
   proposalAddImage: "Add this image to your assets?",
   proposalGenImage: "Generate this image? (uses credits)",
   proposalGenVideo: "Generate this video? (renders in the background)",
@@ -4205,7 +4204,6 @@ export function createAiChatWidget(
   const PROPOSAL_LABELS: Record<string, string> = {
     update_creation: L("proposalUpdateCreation"),
     render_creation: L("proposalAddCreation"),
-    add_stock_to_assets: L("proposalAddStock"),
     add_scraped_media: L("proposalAddImage"),
     generate_image: L("proposalGenImage"),
     generate_video: L("proposalGenVideo"),
@@ -4261,13 +4259,6 @@ export function createAiChatWidget(
         ? String(body.body).trim()
         : JSON.stringify(args.body, null, 2);
       return rendered ? `${head}\n\n${rendered}` : head;
-    }
-    if (name === "add_stock_to_assets") {
-      const parts: string[] = [];
-      if (typeof args.type === "string") parts.push(String(args.type));
-      if (typeof args.provider === "string") parts.push(String(args.provider));
-      if (typeof args.creator === "string") parts.push(`© ${args.creator}`);
-      return parts.join(" · ");
     }
     if (name === "add_scraped_media") {
       const parts: string[] = [];
@@ -4682,35 +4673,6 @@ export function createAiChatWidget(
       wrap.appendChild(previewHost);
       const d = opts.renderCreation(previewHost, args.payload);
       if (d) disposePreview = d;
-    }
-    // Stock import — PREVIEW the media (loaded from the provider, NOT saved) so
-    // the user sees exactly what they're about to add before clicking Apply.
-    if (name === "add_stock_to_assets") {
-      const thumb =
-        typeof args.thumbUrl === "string" && args.thumbUrl ? args.thumbUrl : "";
-      const full =
-        typeof args.url === "string" && args.url && args.type !== "video"
-          ? args.url
-          : "";
-      const src = thumb || full;
-      if (src) {
-        const img = el("img", `${PREFIX}-proposal-media`) as HTMLImageElement;
-        img.src = src;
-        img.loading = "lazy";
-        img.alt =
-          typeof args.creator === "string" && args.creator
-            ? `Stock preview — ${args.creator}`
-            : "Stock preview";
-        if (args.type === "video") {
-          const badge = el("span", `${PREFIX}-proposal-media-badge`);
-          badge.textContent = L("videoBadge");
-          const holder = el("div", `${PREFIX}-proposal-media-holder`);
-          holder.append(img, badge);
-          wrap.appendChild(holder);
-        } else {
-          wrap.appendChild(img);
-        }
-      }
     }
     // Scraped-media import — PREVIEW the actual image/video (loaded from its
     // source URL, NOT saved) before the user clicks Apply.

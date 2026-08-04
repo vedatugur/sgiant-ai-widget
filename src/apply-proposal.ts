@@ -125,16 +125,6 @@ export async function applyProposal(
       ? t("aiAssistant.apply.creationUpdated", "Creation updated ✓")
       : t("aiAssistant.apply.creationAdded", "Creation added to your studio ✓");
   }
-  if (name === "add_stock_to_assets") {
-    await api(`/accounts/${accountId}/studio/stock/import`, {
-      method: "POST",
-      body: JSON.stringify({ item: args }),
-    });
-    return t(
-      "aiAssistant.apply.addedToAssets",
-      "Added to your asset library ✓"
-    );
-  }
   if (name === "add_scraped_media") {
     // threadId + auto-save intent ride at the body root, the rest of the args
     // are the item itself.

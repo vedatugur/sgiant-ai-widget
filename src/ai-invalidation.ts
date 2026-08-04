@@ -22,7 +22,6 @@ export const AI_DOMAIN_KEYS: Record<string, string[]> = {
 export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   update_creation: ["creations"],
   render_creation: ["creations"],
-  add_stock_to_assets: ["assets"],
   add_scraped_media: ["assets"],
   ingest_website: ["assets"],
   generate_image: ["assets"],
