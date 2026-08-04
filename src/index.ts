@@ -5450,6 +5450,13 @@ export function createAiChatWidget(
     // self-heal on the next send or when the thread is reopened — a fair trade
     // to avoid destroying a pending Apply card.
     const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal-pending`);
+    // Same wipe hazard for a FAILED turn: the error card (Retry/Report) is
+    // ephemeral UI and the failed turn persisted nothing, so the canonical
+    // reload would repaint an EMPTY thread — deleting the user's own message
+    // AND the error they were meant to read (the "error flashes then the chat
+    // goes blank" report). Keep the streamed view whenever an error card is on
+    // screen; the next successful send reloads and self-heals the ids.
+    const hasErrorCard = !!log.querySelector(`.${PREFIX}-error`);
     // Reload THIS TURN's thread (never whatever the view has become) — and only
     // while the user is still on it; the fence above already handled the
     // switched-away cases.
@@ -5457,7 +5464,8 @@ export function createAiChatWidget(
       turnThread &&
       opts.loadThread &&
       opts.setActiveLeaf &&
-      !hasLiveProposal
+      !hasLiveProposal &&
+      !hasErrorCard
     ) {
       try {
         const reloaded = await opts.loadThread(turnThread);
