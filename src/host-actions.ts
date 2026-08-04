@@ -271,10 +271,10 @@ const STANDARD_ACTION_DONE: Record<string, string> = {
  * The auto-navigate option promises exactly this and nothing more. It used to
  * decide by asking whether the model had attached a `confirm` to its own action,
  * which put the safety decision in the model's hands: an action it emitted
- * without one ran instantly and unattended. `research-brand` is confirm-less in
- * that sense and spends metered web-search credit, so "auto-navigate" could buy
- * things. Navigation is a closed set — enumerate it, and let everything else
- * wait for the user to press the button.
+ * without one ran instantly and unattended — and a confirm-less action can
+ * spend metered credit, so "auto-navigate" could buy things. Navigation is a
+ * closed set — enumerate it, and let everything else wait for the user to
+ * press the button.
  */
 export function isNavigationAction(name: string): boolean {
   // `show-assets` is navigation too — it opens a folder/file and nothing else,

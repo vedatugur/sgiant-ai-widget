@@ -3009,7 +3009,6 @@ export function createAiChatWidget(
   };
   // Which role an in-app ACTION belongs to, so the badge reflects the live task.
   const ACTION_ROLE: Record<string, string> = {
-    "research-brand": "analytics",
     "open-dashboards": "analytics",
     "open-dashboard-builder": "analytics",
     "open-studio": "creation",
@@ -3786,8 +3785,8 @@ export function createAiChatWidget(
   /**
    * The single funnel for every in-app action Copilot requests. In advanced view
    * it retargets: on-page control/operate → the iframe (via the bridge); a
-   * navigation-class action → the iframe's URL. Otherwise (and for app-specific
-   * handlers like research-brand) it falls back to the host's `onWidgetAction`.
+   * navigation-class action → the iframe's URL. Otherwise (and for any
+   * app-specific handlers) it falls back to the host's `onWidgetAction`.
    */
   const dispatchAction = async (
     name: string,
@@ -5990,7 +5989,7 @@ export function createAiChatWidget(
   }
 
   function renderAction(spec: ActionSpec): void {
-    // Reflect the acting capability in the status badge (e.g. research-brand →
+    // Reflect the acting capability in the status badge (e.g. open-dashboards →
     // Analytics, open-studio → Creation); plain navigation stays Talk.
     if (ACTION_ROLE[spec.name]) setRole(ACTION_ROLE[spec.name]);
     const wrap = el("div", `${PREFIX}-nav`);
