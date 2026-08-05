@@ -83,6 +83,14 @@ export {
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
+/**
+ * The window event that opens the assistant panel. Owned here, next to the
+ * `openEventName` option that consumes it, so a nav link, a Studio toolbar
+ * button and the widget host can never drift onto different strings and
+ * silently produce a dead button.
+ */
+export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
+
 /** One item replayed from a past thread: a chat message, or an inline data
  *  widget (so reopening restores the conversation's charts/tables, not just
  *  text). The render hooks / fallback handle the actual drawing. */
@@ -424,7 +432,7 @@ export interface AiChatWidgetOptions {
     | undefined
     | Promise<PageContext | Record<string, unknown> | undefined>;
   /**
-   * Window event name that opens the panel (e.g. "sgiant:open-assistant"), so a
+   * Window event name that opens the panel — pass `OPEN_ASSISTANT_EVENT`, so a
    * nav/sidebar link elsewhere in the app can summon the widget.
    */
   openEventName?: string;
