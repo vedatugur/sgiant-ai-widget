@@ -683,7 +683,7 @@ export interface AiChatWidgetOptions {
   ) => (() => void) | void;
   /**
    * Render a `.sgiant` creation PAYLOAD as a live visual preview — the SAME
-   * CreationPreview the Studio uses. Wired by the in-app host (mounts a React
+   * SgiantPlayer the Studio uses. Wired by the in-app host (mounts a React
    * root); used in the `render_creation` proposal card so the user SEES the
    * design before they apply it. Returns a disposer (unmount). Omit on external
    * embeds (no React) → the card falls back to its text summary.
@@ -4670,7 +4670,7 @@ export function createAiChatWidget(
     );
     wrap.appendChild(title);
     // Live `.sgiant` preview — for render_creation, show the actual design (the
-    // host mounts CreationPreview) so the user sees what they're about to add.
+    // host mounts SgiantPlayer) so the user sees what they're about to add.
     let disposePreview: (() => void) | undefined;
     if (
       name === "render_creation" &&
