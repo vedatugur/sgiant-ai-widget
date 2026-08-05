@@ -59,18 +59,6 @@ export function invalidateAiTouched(
     void qc.invalidateQueries({ queryKey: [key, accountId] });
 }
 
-/**
- * Invalidate exactly what one apply-proposal `name` touches. Unknown names fall
- * back to invalidating everything, so a new action is never under-invalidated.
- */
-export function invalidateForAction(
-  qc: QueryInvalidator,
-  accountId: string,
-  name: string
-): void {
-  invalidateAiTouched(qc, accountId, AI_ACTION_DOMAINS[name]);
-}
-
 // --- Cross-tab real-time -------------------------------------------------------
 // An AI change in ONE tab should make EVERY tab of this browser live, on any
 // page. BroadcastChannel is same-origin + browser-native (no server), so the

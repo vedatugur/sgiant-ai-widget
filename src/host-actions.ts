@@ -128,119 +128,12 @@ export function makePageContext(
   return ctx;
 }
 
-/** Render a PageContext into a compact, prompt-ready UI-context block (trusted
- *  framing is added by the caller). Shared by every surface so the wording the
- *  model sees is identical. Returns "" when there's nothing useful to say. */
-export function formatPageContext(pc: PageContext): string {
-  const lines: string[] = [];
-  const where = pc.pageInfo?.title || pc.page || pc.path;
-  lines.push(`The user is currently on: ${where} (${pc.path}).`);
-  if (pc.pageInfo) {
-    lines.push(`This page: ${pc.pageInfo.purpose}.`);
-    if (pc.pageInfo.sections?.length)
-      lines.push(`Sections here: ${pc.pageInfo.sections.join(", ")}.`);
-  }
-  if (pc.recentPages?.length)
-    lines.push(`Recently visited: ${pc.recentPages.slice(-8).join(" → ")}.`);
-  if (pc.navTargets?.length) {
-    lines.push("Pages you can open (use ONLY these for navigation):");
-    for (const t of pc.navTargets) {
-      const how = t.action ? `action "${t.action}"` : `path "${t.path}"`;
-      lines.push(`- ${t.title} — ${t.purpose} (${how}).`);
-    }
-  }
-  if (pc.uiTargets?.length) {
-    lines.push(
-      "Controls on this page (point the user at ONE with a highlight/scroll-to/focus-field action, by its id):"
-    );
-    for (const t of pc.uiTargets.slice(0, 40)) {
-      lines.push(`- id "${t.id}"${t.label ? ` — ${t.label}` : ""}.`);
-    }
-  }
-  return lines.join("\n");
-}
-
-/** Machine-readable catalog of the standard actions — feed (filtered by the
- *  account's navigationEnabled + role) into the model's turn context so Copilot
- *  only proposes actions that exist and are permitted. */
-export const STANDARD_ACTIONS = [
-  {
-    name: "navigate",
-    description: "Go to an in-app page by its path (SPA route).",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-  {
-    name: "show-assets",
-    description:
-      "Open the asset library at a specific folder and/or preview a specific file. Pass `folderId` (from list_assets) to open that folder, `assetId` to open that file's preview, or both. Use it to SHOW the user what you just organised — filing assets into a folder and then not showing it leaves them to go find it.",
-    surfaces: ["org", "admin"],
-  },
-  {
-    name: "open-dashboards",
-    description: "Open the account's dashboards list.",
-    surfaces: ["org"],
-  },
-  {
-    name: "open-dashboard-builder",
-    description: "Open the dashboard builder to create a new dashboard.",
-    surfaces: ["org"],
-  },
-  {
-    name: "open-studio",
-    description: "Open Creative Studio.",
-    surfaces: ["org"],
-  },
-  {
-    name: "open-billing",
-    description: "Open billing & credits.",
-    surfaces: ["org"],
-  },
-  {
-    // Missing until now, while the assistant offered it anyway: the model has
-    // every reason to think "open assets" exists (the asset library is a first
-    // class surface it has fifteen tools for), so it emitted the action, the
-    // widget announced "Opening Open Assets…", and dispatch found no handler.
-    name: "open-assets",
-    description: "Open the account's asset library.",
-    surfaces: ["org", "admin"],
-  },
-  // Read-only UI control — point the user at a control ON the current page. Safe
-  // and reversible (no state change), so no confirm. The `target` in `data` is a
-  // `data-ai-target` id from the page's `uiTargets` catalog (see ui-control.ts).
-  {
-    name: "highlight",
-    description:
-      "Pulse a ring around an on-page control (by its data-ai-target id in data.target) and scroll it into view. Read-only.",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-  {
-    name: "scroll-to",
-    description:
-      "Scroll an on-page control (data.target) into view without highlighting. Read-only.",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-  {
-    name: "focus-field",
-    description:
-      "Focus an on-page input/field (data.target) so the user can type. Read-only.",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-  // State-changing UI control — ALWAYS confirm-gated (the widget forces a Confirm
-  // step before dispatch). `target` is a data-ai-target id; `fill` also needs
-  // `value` in data.
-  {
-    name: "fill",
-    description:
-      "Type a value into an on-page field (data.target id + data.value). Changes state — ALWAYS include a confirm.",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-  {
-    name: "click",
-    description:
-      "Click an on-page button/control (data.target id). Changes state — ALWAYS include a confirm.",
-    surfaces: ["org", "admin", "marketing", "onboarding"],
-  },
-] as const;
+// NOTE: `formatPageContext` and `STANDARD_ACTIONS` lived here and were deleted
+// 2026-08-05 with zero callers. Both were client-side twins of things that moved
+// server-side: prompt assembly now runs in apps/api (formatPageContextHint in
+// lib/page-context.ts) and the permitted action set is stated in
+// packages/ai-core/src/prompt.ts. Don't rebuild a client catalogue — it drifted
+// from the live one (12 actions vs 5) the whole time it sat unused.
 
 /**
  * Account-relative path each named standard action opens. Single source of truth
