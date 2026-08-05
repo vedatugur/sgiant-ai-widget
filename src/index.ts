@@ -4291,11 +4291,16 @@ export function createAiChatWidget(
       const parts: string[] = [];
       if (typeof args.name === "string") parts.push(`“${args.name}”`);
       if (typeof args.format === "string") parts.push(String(args.format));
-      const payload = args.payload as { scenes?: unknown[] } | undefined;
-      const scenes = Array.isArray(payload?.scenes)
-        ? payload!.scenes.length
-        : 0;
-      if (scenes) parts.push(`${scenes} scene${scenes === 1 ? "" : "s"}`);
+      // A creation is a media MANIFEST — count its items. A legacy scene
+      // payload (an older proposal replayed from a transcript) still summarises
+      // by scene count so old cards don't go blank.
+      const payload = args.payload as
+        | { items?: unknown[]; scenes?: unknown[] }
+        | undefined;
+      const items = Array.isArray(payload?.items) ? payload.items.length : 0;
+      const scenes = Array.isArray(payload?.scenes) ? payload.scenes.length : 0;
+      if (items) parts.push(`${items} item${items === 1 ? "" : "s"}`);
+      else if (scenes) parts.push(`${scenes} scene${scenes === 1 ? "" : "s"}`);
       return parts.join(" · ");
     }
     if (name === "update_creation") {
