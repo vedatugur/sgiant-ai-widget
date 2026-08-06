@@ -6316,7 +6316,14 @@ function injectStyles(side: "left" | "right"): void {
    here; the dark media block below only REDEFINES tokens; explicit host
    overrides (accent/gradient/theme) land INLINE on the roots and win over
    both, so a themed host is never surprised by the OS color scheme. */
-.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#888;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0}
+/* Status surfaces (error card, failed job, flag notes) are TOKENS, not literal
+ * colours. They used to be hardcoded light hexes with no dark counterpart, so
+ * in dark mode a failed job painted #fdf3f3 (near-white) while its title stayed
+ * var(--aiw-text) = #eee — white on white, i.e. invisible. Same class of bug
+ * left the error card's rust text on its own near-black background. Anything
+ * that needs a red/green surface must use these four vars so the dark override
+ * below reaches it automatically. */
+.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#888;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -6334,7 +6341,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
 .${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-job-done{opacity:.85}
-.${PREFIX}-job-failed{border-color:#e5b8b8;background:#fdf3f3}
+.${PREFIX}-job-failed{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg)}
 .${PREFIX}-job-head{display:flex;align-items:center;gap:7px}
 .${PREFIX}-job-title{font-weight:600;color:var(--aiw-text)}
 .${PREFIX}-job-state{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-muted)}
@@ -6347,13 +6354,13 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-job-ev::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:50%;background:var(--aiw-muted)}
 .${PREFIX}-job-ev-decision{color:var(--aiw-text)}
 .${PREFIX}-job-ev-decision::before{background:var(--aiw-accent,currentColor)}
-.${PREFIX}-job-ev-problem{color:#e5484d}
-.${PREFIX}-job-ev-problem::before{background:#e5484d}
+.${PREFIX}-job-ev-problem{color:var(--aiw-danger-text)}
+.${PREFIX}-job-ev-problem::before{background:currentColor}
 .${PREFIX}-job-flow-all{margin-top:4px}
 .${PREFIX}-job-flow-all>summary{cursor:pointer;color:var(--aiw-muted);font-size:11px;user-select:none}
 .${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed var(--aiw-border-strong);border-radius:9px;padding:4px 10px;font-size:12px;color:var(--aiw-muted);background:var(--aiw-bg)}
-.${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:#e5b8b8;color:#a23b3b;background:#fdf3f3;font-weight:600}
-.${PREFIX}-flag-ok{border-color:#bfe3c8;color:#2f7d43;background:#f2fbf5}
+.${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:var(--aiw-danger-border);color:var(--aiw-danger-text);background:var(--aiw-danger-bg);font-weight:600}
+.${PREFIX}-flag-ok{border-color:var(--aiw-ok-border);color:var(--aiw-ok-text);background:var(--aiw-ok-bg)}
 .${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:10.5px;color:var(--aiw-muted);font-variant-numeric:tabular-nums}
 .${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid var(--aiw-border);border-radius:6px;padding:0 5px;line-height:16px}
 .${PREFIX}-usage-sep{opacity:.5}
@@ -6451,11 +6458,11 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-typing span{width:7px;height:7px;border-radius:50%;background:var(--aiw-accent);animation:${PREFIX}-blink 1.2s infinite}
 .${PREFIX}-typing span:nth-child(2){animation-delay:.2s}
 .${PREFIX}-typing span:nth-child(3){animation-delay:.4s}
-.${PREFIX}-error{align-self:stretch;border:1px solid #f3c5b6;background:#fff6f2;border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise .2s ease}
-.${PREFIX}-error-text{font-size:13px;font-weight:600;color:#b23b18}
-.${PREFIX}-error-detail{font-size:11px;color:#9a6b5c;margin-top:3px;word-break:break-word}
+.${PREFIX}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-error-text{font-size:13px;font-weight:600;color:var(--aiw-danger-text)}
+.${PREFIX}-error-detail{font-size:11px;color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word}
 .${PREFIX}-error-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
-.${PREFIX}-error-btn{border:1px solid #e3b9a8;background:var(--aiw-surface);color:#a33;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-error-btn{border:1px solid var(--aiw-danger-border);background:var(--aiw-surface);color:var(--aiw-danger-text);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
 .${PREFIX}-error-retry{background:var(--aiw-accent);border-color:var(--aiw-accent);color:var(--aiw-accent-contrast)}
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
@@ -6544,7 +6551,7 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-atts.${PREFIX}-user{align-self:flex-end;justify-content:flex-end}
 .${PREFIX}-att-x{border:none;background:transparent;color:var(--aiw-muted);font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
-.${PREFIX}-att-err{border-color:#e9c2c2;background:#fdf3f3;color:#a23b3b}
+.${PREFIX}-att-err{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg);color:var(--aiw-danger-text)}
 .${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:3px;color:var(--aiw-muted);opacity:.55;transition:opacity .15s ease}
 .${PREFIX}-msgactions:hover,.${PREFIX}-msgactions:focus-within{opacity:1}
 /* User edit sits at the message's bottom-RIGHT, hugging the bubble edge, and is
@@ -6725,7 +6732,7 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626}.${PREFIX}-error{background:#231613;border-color:#5a2c1d}}
+@media (prefers-color-scheme:dark){.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}}
 @media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
