@@ -1597,6 +1597,14 @@ export function createAiChatWidget(
   const posKey = layoutScope ? `ayca:pos:${layoutScope}` : null;
 
   /**
+   * Below this width the panel is a FULL-SCREEN bottom sheet (see the
+   * `@media (max-width:640px)` block). Declared up here because `applyPos`
+   * needs it and runs at mount — a `const` defined later would be in the
+   * temporal dead zone and throw.
+   */
+  const isSheet = (): boolean => window.matchMedia("(max-width:640px)").matches;
+
+  /**
    * Keep the panel fully on screen.
    *
    * Runs on drop AND on window resize — without the resize pass, a position
@@ -1622,6 +1630,14 @@ export function createAiChatWidget(
   };
 
   const applyPos = (p: { x: number; y: number } | null): void => {
+    // The mobile sheet is full-screen via CSS `inset:0`, and an INLINE
+    // left/top beats a stylesheet rule. So a position saved by dragging the
+    // panel on desktop used to survive onto the phone: the sheet never went
+    // full-screen, it floated at the desktop coordinates with the host app's
+    // header showing through — its logo and top-right actions colliding with
+    // the widget's own. Below the breakpoint the saved position simply does
+    // not apply. It stays in storage, so going back to desktop restores it.
+    if (isSheet()) return toCorner();
     if (!p) return toCorner();
     const { x, y } = clampPos(p.x, p.y);
     // Atomic: a non-finite result (a NaN slipping in from a drag/resize edge
@@ -3456,8 +3472,8 @@ export function createAiChatWidget(
 
   // Swipe-down-to-close (mobile bottom sheet). Dragging the header/grab-handle
   // pulls the panel down with the finger; releasing past a threshold dismisses
-  // it, otherwise it springs back. No-op on desktop widths.
-  const isSheet = (): boolean => window.matchMedia("(max-width:640px)").matches;
+  // it, otherwise it springs back. No-op on desktop widths — `isSheet` is
+  // declared next to `applyPos`, which needs it at mount.
 
   // iOS keyboard handling. On the mobile full-screen sheet the soft keyboard
   // shrinks the VISUAL viewport but NOT 100dvh, so a focused composer would sit
