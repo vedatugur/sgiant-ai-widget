@@ -3461,6 +3461,9 @@ export function createAiChatWidget(
     // combine with a re-applied axis into an off-screen anchor.
     panel.style.left = panel.style.top = "";
     panel.style.right = panel.style.bottom = "";
+    // Same reason: a leftover keyboard flag would suppress the safe-area
+    // padding on the next open, with no keyboard to justify it.
+    panel.classList.remove(`${PREFIX}-kb`);
     bubble.style.display = "flex";
     rememberOpen(false);
   };
@@ -3486,6 +3489,8 @@ export function createAiChatWidget(
     const apply = (): void => {
       if (!isSheet() || panel.style.display === "none") {
         panel.style.height = "";
+        panel.style.bottom = "";
+        panel.classList.remove(`${PREFIX}-kb`);
         // Desktop / non-sheet: the panel's `top` is owned by the drag-to-
         // reposition logic, NOT the keyboard handler. Clearing it here dropped a
         // dragged panel to `top:auto` → off-screen, and a refresh re-stranded it.
@@ -3495,6 +3500,18 @@ export function createAiChatWidget(
       }
       panel.style.height = `${vv.height}px`;
       panel.style.top = `${vv.offsetTop}px`;
+      // The sheet's CSS is `inset:0`, so `bottom:0` is still in play. top +
+      // height + bottom is over-constrained; engines are entitled to resolve
+      // that differently, and the one that honours `bottom` stretches the
+      // panel back under the keyboard. Pin it to auto so the height we just
+      // measured is the height that renders.
+      panel.style.bottom = "auto";
+      // Keyboard up ⇒ the home indicator is covered, so drop the safe-area
+      // padding that iOS still reports (see the -kb rules).
+      panel.classList.toggle(
+        `${PREFIX}-kb`,
+        vv.height < window.innerHeight - 80
+      );
     };
     apply();
     vv.addEventListener("resize", apply);
@@ -6777,6 +6794,18 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
   .${PREFIX}-title{font-size:16px}
   .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
   .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  /* iOS auto-zooms the page when a focused field is under 16px, and the zoom
+     is what then makes the sheet scroll sideways. 16px is the threshold, not
+     a preference — do not lower it. text-size-adjust stops iOS inflating the
+     rest of the text to compensate. */
+  .${PREFIX}-input,.${PREFIX}-edit-input,.${PREFIX}-question-input,
+  .${PREFIX}-lead-form input,.${PREFIX}-lead-form textarea{font-size:16px}
+  .${PREFIX}-panel{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  /* While the soft keyboard is up it covers the home indicator, but iOS keeps
+     reporting safe-area-inset-bottom as if it were still there — leaving a
+     dead band under the composer. The keyboard handler sets this flag. */
+  .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-form{padding-bottom:10px}
+  .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-log{padding-bottom:14px}
   .${PREFIX}-bubble{bottom:16px;${side}:16px}
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
