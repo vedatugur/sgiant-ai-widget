@@ -6755,7 +6755,15 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
    chat is comfortably usable instead of a cramped corner card. */
 @media (max-width:640px){
-  .${PREFIX}-panel{inset:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1);transition:none}
+  /* z-index: the desktop 48 sits deliberately BELOW the app's Radix modals
+     (z-50) so a dialog covers the chat. That rule did not anticipate page
+     CHROME at the same level: the marketing site's header is
+     "fixed inset-x-0 top-0 z-50", so it painted over the top 66px of the
+     full-screen sheet — its logo, locale switcher and hamburger landing on
+     top of the widget's own avatar and buttons (reported 2026-08-07).
+     A full-screen sheet covers the viewport and IS the modal surface while
+     it is open, so here — and only here — it outranks host chrome. */
+  .${PREFIX}-panel{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1);transition:none}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
   /* Give the title its own full-width row: avatar + actions share the top row,
