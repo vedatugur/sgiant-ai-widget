@@ -105,10 +105,10 @@ export async function applyProposal(
     return t("aiAssistant.apply.creationUpdated", "Creation updated ✓");
   }
   if (name === "render_creation") {
-    // Close the authoring loop: the AI designed a complete .sgiant; the server
-    // wraps + validates it into a contract-correct envelope and saves it as a
-    // creation. When the AI passes an `id`, the same import endpoint UPDATES
-    // that existing creation in place (refine, not dupe).
+    // Close the authoring loop: the AI assembled a complete media manifest; the
+    // server validates it (format, sanitiser, every mediaId must resolve) and
+    // saves it as a creation. When the AI passes an `id`, the same endpoint
+    // UPDATES that existing creation in place (refine, not dupe).
     const targetId = typeof args.id === "string" ? args.id : undefined;
     await api(`/accounts/${accountId}/studio/creations/import`, {
       method: "POST",
