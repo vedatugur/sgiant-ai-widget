@@ -37,6 +37,24 @@ import {
   CHAT_ATTACHMENT_MAX_COUNT,
 } from "@sgiant/shared";
 import { isNavigationAction } from "./host-actions";
+// The component vocabulary composed UI cards are drawn from. Re-exported below
+// for hosts that want to validate a spec before handing it over.
+import {
+  normalizeUiSpec,
+  uiSpecMediaIds,
+  type UiAction,
+  type UiItem,
+} from "./ui-spec";
+export {
+  normalizeUiSpec,
+  uiSpecMediaIds,
+  KNOWN_UI_STATUSES,
+  type UiSpec,
+  type UiItem,
+  type UiAction,
+  type UiLayout,
+  type UiStatus,
+} from "./ui-spec";
 // Same reason: the block below re-exports these for consumers, but the widget
 // itself subscribes so a finished background job can refresh the transcript.
 import { subscribeAiChange } from "./ai-invalidation";
@@ -690,6 +708,20 @@ export interface AiChatWidgetOptions {
    */
   renderCreation?: (host: HTMLElement, payload: unknown) => (() => void) | void;
   /**
+   * Resolve library media ids to URLs the browser can load, for `[[ui:…]]`
+   * cards. Called ONCE per card with every id it needs; return a map (omit an
+   * id that can't be resolved — the tile then says so rather than sitting
+   * blank).
+   *
+   * This is the reason a composed card can show the account's own pictures at
+   * all: the widget is embeddable and has no session of its own, so only the
+   * host can mint a signed URL. It is also why the spec names media by ID and
+   * never by URL — an id resolves against media the ACCOUNT owns, so a model
+   * that invents one gets an empty tile instead of the client's browser
+   * fetching a URL the model chose.
+   */
+  resolveMediaUrls?: (ids: string[]) => Promise<Record<string, string>>;
+  /**
    * Apply a confirm-gated WRITE-tool proposal (e.g. `update_creation`). The AI
    * never mutates directly — it proposes; the widget shows a card and THIS runs
    * only when the user clicks Apply (a Clerk-authed action in the host). Map the
@@ -924,6 +956,19 @@ export const WIDGET_LABELS = {
   reportFailed: "Couldn't report — try later",
   // Signup CTA (anonymous surfaces)
   signupCta: "Sign up — it's free to start",
+  // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
+  // OTHER status the model writes is shown in its own words, untranslated,
+  // because only these four are ours to name.
+  uiStatusPending: "Waiting",
+  uiStatusRunning: "Working…",
+  uiStatusReady: "Ready",
+  uiStatusFailed: "Failed",
+  /** A tile whose media hasn't been produced yet — the space is deliberately
+   *  kept so the card doesn't reflow when the picture lands. */
+  uiMediaPending: "Not made yet",
+  /** A tile whose media id resolved to nothing (deleted, or not this account's).
+   *  Said plainly, because a blank tile reads as a broken product. */
+  uiMediaMissing: "Unavailable",
 } as const;
 
 /** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */
@@ -1118,9 +1163,11 @@ function stripDirectivesForReplay(text: string): {
   clean: string;
   notes: string[];
   navs: NavigateSpec[];
+  uis: unknown[];
 } {
   let t = text;
   const notes: string[] = [];
+  const uis: unknown[] = [];
   // Navigation is idempotent and side-effect-free, so on replay we hand it back
   // to be re-rendered as a REAL clickable chip rather than flattened to an inert
   // note — otherwise every "Open <page>" the assistant offered goes dead the
@@ -1147,6 +1194,18 @@ function stripDirectivesForReplay(text: string): {
     t = w.stripped;
     notes.push(`▦ ${w.spec.title || "widget"}`);
   }
+  // Composed UI cards are handed BACK to be re-drawn, not flattened to a note.
+  // A card is the substance of the turn, not a decoration on it: a client who
+  // reopens the conversation tomorrow to look at the scenes they were approving
+  // would otherwise find "▦ card" where the scenes had been. Re-drawing is safe
+  // because every button on a card requires a click — nothing here can run by
+  // itself on restore.
+  for (let i = 0; i < 4; i++) {
+    const u = parseJsonDirective<unknown>(t, "ui");
+    if (!u) break;
+    t = u.stripped;
+    uis.push(u.spec);
+  }
   for (let i = 0; i < 3; i++) {
     const p = parseJsonDirective<PreviewSpec>(t, "preview");
     if (!p) break;
@@ -1168,7 +1227,7 @@ function stripDirectivesForReplay(text: string): {
     t = t.replace(LEAD_TOKEN, "").trim();
     notes.push("📝 Form — submitted");
   }
-  return { clean: t, notes, navs };
+  return { clean: t, notes, navs, uis };
 }
 
 /**
@@ -2599,7 +2658,7 @@ export function createAiChatWidget(
   function addAssistantMessage(text: string): HTMLElement {
     // Replay: render clean prose (directives the live turn already handled are
     // stripped) + an inert note per directive — never raw [[…]] code.
-    const { clean, notes, navs } = stripDirectivesForReplay(text);
+    const { clean, notes, navs, uis } = stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
     applyAssistantRich(bubble, clean);
     for (const n of notes) {
@@ -2607,6 +2666,9 @@ export function createAiChatWidget(
       note.textContent = n;
       log.appendChild(note);
     }
+    // Composed cards are re-drawn in full — see the note in
+    // stripDirectivesForReplay for why they are not flattened to a note.
+    for (const u of uis) renderUiCard(u);
     // Re-render navigation as a REAL chip so "Open <page>" stays clickable after
     // a reload/restore (#111) — in replay mode so it never auto-navigates on open.
     if (opts.onWidgetAction)
@@ -4132,6 +4194,13 @@ export function createAiChatWidget(
       t = w.stripped;
       renderWidget(w.spec);
     }
+    // Composed UI cards — the assistant's own layout, drawn from primitives.
+    for (let i = 0; i < 4; i++) {
+      const u = parseJsonDirective<unknown>(t, "ui");
+      if (!u) break;
+      t = u.stripped;
+      renderUiCard(u.spec);
+    }
     // Dynamic HTML previews — the AI draws a mockup/preview and we paint it in a
     // FULLY sandboxed iframe (no scripts, no same-origin) right in the chat.
     for (let i = 0; i < 3; i++) {
@@ -5059,7 +5128,12 @@ export function createAiChatWidget(
     // (navigate / action / chips / form) stay hidden in assistantRaw for the
     // end-of-turn renderDirectives pass, unchanged.
     const streamDirectiveTag = (tag: string): "now" | "later" | null => {
-      if (tag === "widget" || tag === "preview" || customRenderers[tag])
+      if (
+        tag === "widget" ||
+        tag === "ui" ||
+        tag === "preview" ||
+        customRenderers[tag]
+      )
         return "now";
       if (
         tag === "navigate" ||
@@ -5100,6 +5174,10 @@ export function createAiChatWidget(
       }
       if (tag === "widget") {
         renderWidget(spec as WidgetSpec);
+        return;
+      }
+      if (tag === "ui") {
+        renderUiCard(spec);
         return;
       }
       const p = spec as PreviewSpec;
@@ -5753,6 +5831,227 @@ export function createAiChatWidget(
     }
     log.appendChild(card);
     scrollDown(true);
+  }
+
+  // ── Composed UI cards — `[[ui:{…}]]` ────────────────────────────────────────
+  //
+  // The assistant composes a card out of primitives this widget knows how to
+  // draw (see ui-spec.ts for the vocabulary and why it is a vocabulary rather
+  // than markup). Nothing here knows what a storyboard is, or a shortlist, or a
+  // room-type picker: it draws tiles with media, a state and buttons, and the
+  // buttons go to the host by name through the SAME `dispatchAction` an
+  // `[[action:…]]` uses — so a composed card can never do anything the host
+  // doesn't already allow.
+
+  /** The label for a tile's state: ours to translate for the four we know,
+   *  the model's own words for anything else. */
+  function uiStatusLabel(status: string): string {
+    if (status === "pending") return L("uiStatusPending");
+    if (status === "running") return L("uiStatusRunning");
+    if (status === "ready") return L("uiStatusReady");
+    if (status === "failed") return L("uiStatusFailed");
+    return status;
+  }
+
+  /** One button on a card or tile. */
+  function buildUiAction(a: UiAction, itemId?: string): HTMLElement {
+    const wrap = el("span", `${PREFIX}-ui-act`);
+    const variant =
+      a.variant === "primary"
+        ? ` ${PREFIX}-ui-btn-primary`
+        : a.variant === "danger"
+          ? ` ${PREFIX}-ui-btn-danger`
+          : "";
+    const btn = el("button", `${PREFIX}-ui-btn${variant}`) as HTMLButtonElement;
+    btn.type = "button";
+    const label = a.label || a.name;
+    btn.textContent = label;
+    // The tile's own id rides along, so a handler knows WHICH tile was acted on
+    // without the model having to repeat it inside every button's data.
+    const data = { ...(a.data ?? {}), ...(itemId ? { itemId } : {}) };
+    const run = async (): Promise<void> => {
+      btn.disabled = true;
+      try {
+        const msg = await dispatchAction(a.name, data);
+        btn.textContent = (typeof msg === "string" && msg) || `${label} ✓`;
+      } catch {
+        btn.disabled = false;
+        btn.textContent = `${label} — ${L("tryAgain")}`;
+      }
+    };
+    btn.addEventListener("click", () => {
+      if (!a.confirm) {
+        void run();
+        return;
+      }
+      // The confirm replaces THIS BUTTON, not the card. A single [[action:…]]
+      // card can take itself over to ask, because it is the only thing there;
+      // a composed card holds many actions, and hiding a whole storyboard
+      // behind one question would lose the very thing being confirmed.
+      wrap.textContent = "";
+      const q = el("span", `${PREFIX}-ui-confirm-q`);
+      q.textContent = a.confirm;
+      const yes = el("button", `${PREFIX}-ui-btn`) as HTMLButtonElement;
+      yes.type = "button";
+      yes.textContent = L("confirm");
+      const no = el("button", `${PREFIX}-ui-btn-ghost`) as HTMLButtonElement;
+      no.type = "button";
+      no.textContent = L("cancel");
+      const restore = (): void => {
+        wrap.textContent = "";
+        wrap.appendChild(btn);
+      };
+      yes.addEventListener("click", () => {
+        restore();
+        void run();
+      });
+      no.addEventListener("click", restore);
+      wrap.append(q, yes, no);
+    });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  /** One tile. The media box is drawn EMPTY-BUT-SIZED and filled in later, so
+   *  the card doesn't reflow (and scroll out from under a reading user) when
+   *  the pictures land. */
+  function buildUiTile(it: UiItem): HTMLElement {
+    const tile = el("div", `${PREFIX}-ui-tile`);
+    const box = el("div", `${PREFIX}-ui-media`);
+    if (it.mediaId) {
+      box.dataset.mid = it.mediaId;
+      if (it.posterMediaId) box.dataset.poster = it.posterMediaId;
+      if (it.media) box.dataset.kind = it.media;
+    }
+    const ph = el("span", `${PREFIX}-ui-media-ph`);
+    ph.textContent = it.mediaId ? "" : L("uiMediaPending");
+    box.appendChild(ph);
+    if (it.status) {
+      const badge = el(
+        "span",
+        `${PREFIX}-ui-badge ${PREFIX}-ui-badge-${
+          it.status === "pending" ||
+          it.status === "running" ||
+          it.status === "ready" ||
+          it.status === "failed"
+            ? it.status
+            : "other"
+        }`
+      );
+      badge.textContent = uiStatusLabel(it.status);
+      box.appendChild(badge);
+    }
+    tile.appendChild(box);
+    if (it.title) {
+      const t = el("div", `${PREFIX}-ui-tile-title`);
+      t.textContent = it.title;
+      tile.appendChild(t);
+    }
+    if (it.caption) {
+      const c = el("div", `${PREFIX}-ui-tile-cap`);
+      c.textContent = it.caption;
+      tile.appendChild(c);
+    }
+    if (it.actions?.length) {
+      const row = el("div", `${PREFIX}-ui-tile-actions`);
+      for (const a of it.actions) row.appendChild(buildUiAction(a, it.id));
+      tile.appendChild(row);
+    }
+    return tile;
+  }
+
+  /** Does this URL point at something to PLAY rather than show? The id alone
+   *  can't say, so the model's own `media` hint wins and the extension is the
+   *  fallback — a clip drawn as an <img> is a broken tile, which is worse than
+   *  a still drawn in a <video> (that still shows the frame). */
+  function looksLikeVideo(url: string): boolean {
+    return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+  }
+
+  /** Resolve a card's media ids and paint them in. One batched call for the
+   *  whole card — a request per tile would be a burst of round-trips for what
+   *  is conceptually one picture set. */
+  async function fillUiMedia(ids: string[], card: HTMLElement): Promise<void> {
+    let urls: Record<string, string> = {};
+    if (ids.length && opts.resolveMediaUrls) {
+      try {
+        urls = (await opts.resolveMediaUrls(ids)) ?? {};
+      } catch {
+        urls = {}; // every tile then says "Unavailable" — never a blank box
+      }
+    }
+    const boxes = card.querySelectorAll<HTMLElement>(`.${PREFIX}-ui-media`);
+    for (const box of Array.from(boxes)) {
+      const mid = box.dataset.mid;
+      if (!mid) continue;
+      const url = urls[mid];
+      const ph = box.querySelector<HTMLElement>(`.${PREFIX}-ui-media-ph`);
+      if (!url) {
+        if (ph) ph.textContent = L("uiMediaMissing");
+        continue;
+      }
+      const isVideo = box.dataset.kind
+        ? box.dataset.kind === "video"
+        : looksLikeVideo(url);
+      const node = el(
+        isVideo ? "video" : "img",
+        `${PREFIX}-ui-media-el`
+      ) as HTMLImageElement & HTMLVideoElement;
+      node.src = url;
+      if (isVideo) {
+        node.controls = true;
+        node.preload = "metadata";
+        node.playsInline = true;
+        const poster = box.dataset.poster ? urls[box.dataset.poster] : "";
+        if (poster) node.poster = poster;
+      } else {
+        node.loading = "lazy";
+        node.alt = "";
+      }
+      // A media id that resolves to a URL the browser then refuses (expired
+      // signature, deleted object) must still read as a state, not a blank.
+      node.addEventListener("error", () => {
+        node.remove();
+        const p = el("span", `${PREFIX}-ui-media-ph`);
+        p.textContent = L("uiMediaMissing");
+        box.appendChild(p);
+      });
+      ph?.remove();
+      box.insertBefore(node, box.firstChild);
+    }
+  }
+
+  /** Draw a composed UI card in the log. */
+  function renderUiCard(raw: unknown): void {
+    const spec = normalizeUiSpec(raw);
+    if (!spec) return; // nothing worth drawing — the reply's text stands alone
+    const card = el("div", `${PREFIX}-ui`);
+    if (spec.title) {
+      const t = el("div", `${PREFIX}-ui-title`);
+      t.textContent = spec.title;
+      card.appendChild(t);
+    }
+    if (spec.caption) {
+      const c = el("div", `${PREFIX}-ui-cap`);
+      c.textContent = spec.caption;
+      card.appendChild(c);
+    }
+    if (spec.items.length) {
+      const items = el(
+        "div",
+        `${PREFIX}-ui-items ${PREFIX}-ui-${spec.layout} ${PREFIX}-ui-a-${spec.aspect}`
+      );
+      for (const it of spec.items) items.appendChild(buildUiTile(it));
+      card.appendChild(items);
+    }
+    if (spec.actions.length) {
+      const row = el("div", `${PREFIX}-ui-actions`);
+      for (const a of spec.actions) row.appendChild(buildUiAction(a));
+      card.appendChild(row);
+    }
+    log.appendChild(card);
+    scrollDown(true);
+    void fillUiMedia(uiSpecMediaIds(spec), card);
   }
 
   /** Map an analytics render_chart frame (spec + StatsQueryRow[]) to an inline
@@ -6726,6 +7025,41 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-widget-cap{font-size:13px;color:var(--aiw-text-2);margin-top:2px}
 .${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:var(--aiw-accent);margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+/* Composed UI cards ([[ui:…]]) — tiles the assistant lays out itself. */
+.${PREFIX}-ui{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-ui-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:6px}
+.${PREFIX}-ui-cap{font-size:13px;color:var(--aiw-text-2);margin-bottom:10px}
+/* A strip SCROLLS rather than shrinking its tiles: squeezing eight scenes into
+   a 340px panel makes every one of them too small to judge, which defeats the
+   point of showing them. Snap points keep the scroll landing on whole tiles. */
+.${PREFIX}-ui-strip{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.${PREFIX}-ui-strip>.${PREFIX}-ui-tile{flex:0 0 132px;scroll-snap-align:start}
+.${PREFIX}-ui-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.${PREFIX}-ui-list{display:flex;flex-direction:column;gap:8px}
+.${PREFIX}-ui-list>.${PREFIX}-ui-tile{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:start}
+.${PREFIX}-ui-list .${PREFIX}-ui-media{grid-row:span 3}
+.${PREFIX}-ui-media{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--aiw-surface-2);border:1px solid var(--aiw-border-soft);display:flex;align-items:center;justify-content:center}
+.${PREFIX}-ui-a-portrait .${PREFIX}-ui-media{aspect-ratio:4/5}
+.${PREFIX}-ui-a-story .${PREFIX}-ui-media{aspect-ratio:9/16}
+.${PREFIX}-ui-a-landscape .${PREFIX}-ui-media,.${PREFIX}-ui-a-wide .${PREFIX}-ui-media{aspect-ratio:16/9}
+.${PREFIX}-ui-media-el{width:100%;height:100%;object-fit:cover;display:block}
+.${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
+.${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
+.${PREFIX}-ui-badge-ready{background:#16794a}
+.${PREFIX}-ui-badge-running{background:var(--aiw-accent);color:var(--aiw-accent-contrast)}
+.${PREFIX}-ui-badge-failed{background:#a32020}
+.${PREFIX}-ui-tile-title{font-size:12px;font-weight:600;color:var(--aiw-text);margin-top:6px;line-height:1.25}
+.${PREFIX}-ui-tile-cap{font-size:11.5px;color:var(--aiw-text-2);margin-top:2px;line-height:1.3}
+.${PREFIX}-ui-tile-actions,.${PREFIX}-ui-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.${PREFIX}-ui-actions{margin-top:10px}
+.${PREFIX}-ui-act{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
+.${PREFIX}-ui-btn{padding:5px 10px;border-radius:8px;border:1px solid var(--aiw-border-strong);background:var(--aiw-bg);color:var(--aiw-text);font-size:11.5px;font-weight:600;cursor:pointer}
+.${PREFIX}-ui-btn:hover{background:var(--aiw-surface-2)}
+.${PREFIX}-ui-btn:disabled{opacity:.5;cursor:default}
+.${PREFIX}-ui-btn-primary{background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-color:transparent}
+.${PREFIX}-ui-btn-danger{color:#a32020;border-color:color-mix(in srgb,#a32020 40%,transparent)}
+.${PREFIX}-ui-btn-ghost{padding:5px 8px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--aiw-muted);font-size:11.5px;font-weight:600;cursor:pointer}
+.${PREFIX}-ui-confirm-q{font-size:11.5px;color:var(--aiw-text-2)}
 .${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise .2s ease}
 .${PREFIX}-preview-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border-soft)}
 .${PREFIX}-preview-dots{display:inline-flex;gap:4px}
