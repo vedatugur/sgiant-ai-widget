@@ -25,9 +25,28 @@
 export type UiLayout = "strip" | "grid" | "list";
 
 /**
+ * The one action name the WIDGET answers itself: send `data.text` (falling back
+ * to the button's label) back into the conversation as if the user had typed
+ * it. Everything else goes to the host by name.
+ *
+ * This is what makes the vocabulary self-sufficient. Without it, every button a
+ * composed card wants — "Redo scene 2", "Make it warmer", "Use the sunset one"
+ * — is a capability the HOST has to implement and name in advance, which is the
+ * per-scenario frontend work this whole design exists to remove. With it, the
+ * assistant's own tools are the implementation: the button says the thing, the
+ * assistant does it, and a card can offer an action nobody wrote code for.
+ *
+ * Precedent, not novelty: `[[chips:…]]` already answers by sending the chosen
+ * text as an ordinary message, which keeps the transcript in order and honest —
+ * the click is visible in the conversation as the sentence it stood for.
+ */
+export const UI_SAY_ACTION = "say";
+
+/**
  * A button on a card or tile. Dispatched through the host's existing
  * `onWidgetAction(name, data)` — the same path `[[action:…]]` already uses, so
- * a UI card can only ever do what the host already permits by name.
+ * a UI card can only ever do what the host already permits by name — except for
+ * `say` (see UI_SAY_ACTION), which the widget answers itself.
  */
 export interface UiAction {
   name: string;
@@ -220,6 +239,9 @@ function normalizeAction(v: unknown): UiAction | null {
   const data = normalizeData(v.data);
   const variant =
     v.variant === "primary" || v.variant === "danger" ? v.variant : undefined;
+  // A `say` button with nothing to say is inert for the same reason a nameless
+  // one is: it looks exactly like a button that works.
+  if (name === UI_SAY_ACTION && !data?.text && !label) return null;
   return {
     name,
     ...(label ? { label } : {}),

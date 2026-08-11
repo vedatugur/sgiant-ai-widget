@@ -42,6 +42,7 @@ import { isNavigationAction } from "./host-actions";
 import {
   normalizeUiSpec,
   uiSpecMediaIds,
+  UI_SAY_ACTION,
   type UiAction,
   type UiItem,
 } from "./ui-spec";
@@ -49,6 +50,7 @@ export {
   normalizeUiSpec,
   uiSpecMediaIds,
   KNOWN_UI_STATUSES,
+  UI_SAY_ACTION,
   type UiSpec,
   type UiItem,
   type UiAction,
@@ -5871,6 +5873,14 @@ export function createAiChatWidget(
     const data = { ...(a.data ?? {}), ...(itemId ? { itemId } : {}) };
     const run = async (): Promise<void> => {
       btn.disabled = true;
+      // `say` is answered here, not by the host: it puts its text into the
+      // conversation as an ordinary user message (exactly as a chip does), so
+      // the assistant's own tools carry it out and the transcript records the
+      // click as the sentence it stood for.
+      if (a.name === UI_SAY_ACTION) {
+        void send((a.data?.text || label).trim());
+        return;
+      }
       try {
         const msg = await dispatchAction(a.name, data);
         btn.textContent = (typeof msg === "string" && msg) || `${label} ✓`;
