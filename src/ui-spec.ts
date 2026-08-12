@@ -81,6 +81,20 @@ export interface UiItem {
   media?: "image" | "video";
   /** Drawn as a badge; a known one is also coloured. */
   status?: UiStatus;
+  /**
+   * A running job this tile is the view of — the card stops being a snapshot.
+   *
+   * Without it, a storyboard card drawn while six clips render is stale the
+   * moment it paints: the client scrolls back an hour later to a rail of
+   * "rendering" badges over empty boxes, with the finished clips sitting in the
+   * library. The tile subscribes to the job's existing poll and fills in its
+   * own media and status when the render lands.
+   *
+   * The GENERIC job id (what `/accounts/:id/jobs/:jobId` answers), not a
+   * media_job detail id — the wrong one 404s, and a 404 makes the widget
+   * conclude the job is gone.
+   */
+  jobId?: string;
   actions?: UiAction[];
 }
 
@@ -287,8 +301,15 @@ function normalizeItem(v: unknown): UiItem | null {
   const status = normalizeStatus(v.status);
   const media =
     v.media === "video" || v.media === "image" ? v.media : undefined;
+  // Same opaque-token shape as a media id, and checked for the same reason: it
+  // is put straight into a URL the widget then polls.
+  const jobId = sanitizeMediaId(v.jobId);
   const actions = normalizeActions(v.actions);
-  if (!mediaId && !title && !caption && !status && !actions.length) return null;
+  // A tile that is NOTHING but a pending render is the whole point of `jobId` —
+  // "scene 3 is being made, watch this space" — so it must survive the
+  // has-anything-to-show check that would otherwise drop it.
+  if (!mediaId && !title && !caption && !status && !jobId && !actions.length)
+    return null;
   return {
     ...(id ? { id } : {}),
     ...(title ? { title } : {}),
@@ -297,6 +318,7 @@ function normalizeItem(v: unknown): UiItem | null {
     ...(posterMediaId ? { posterMediaId } : {}),
     ...(media ? { media } : {}),
     ...(status ? { status } : {}),
+    ...(jobId ? { jobId } : {}),
     ...(actions.length ? { actions } : {}),
   };
 }

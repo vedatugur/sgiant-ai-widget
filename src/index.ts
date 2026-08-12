@@ -48,6 +48,7 @@ import {
   UI_SAY_ACTION,
   type UiAction,
   type UiItem,
+  type UiStatus,
 } from "./ui-spec";
 export {
   normalizeUiSpec,
@@ -401,6 +402,17 @@ export interface WidgetJobView {
   /** Where the finished work landed — an in-app, root-relative path the card
    *  links to (e.g. "/assets"). Omit when the job produced nothing to open. */
   resultPath?: string | null;
+  /**
+   * The MEDIA this job produced, by id — what lets a `[[ui:…]]` tile that was
+   * drawn empty ("Scene 2, rendering") fill itself in with the actual clip the
+   * moment the render lands, instead of asking the client to go and look.
+   *
+   * An id and not a URL, for the same reason everywhere else in this file: ours
+   * are signed and short-lived, and a render runs for minutes. The widget
+   * resolves it through the same batched `resolveMediaUrls` every other tile
+   * uses. Omitted by every job type that produces no single asset.
+   */
+  resultMediaId?: string | null;
   /**
    * The job's FLOW — the runner's own narration (which pages the AI picked,
    * how it grouped them, what each step yielded), oldest first. Server text,
@@ -2285,6 +2297,149 @@ export function createAiChatWidget(
   /** Job ids with a poll loop already running — a re-attach must never start a
    *  second one. */
   const jobPolling = new Set<string>();
+  /**
+   * Everything ELSE that wants to know how a job is going.
+   *
+   * The job card was the only watcher for a long time, so the poll painted it
+   * directly. It is not any more: a `[[ui:…]]` tile can name a jobId and has to
+   * repaint itself as that render finishes. Two pollers for one job would be
+   * two answers to the same question, drifting apart and costing double, so
+   * there is ONE loop per job id and it fans out to whoever is listening.
+   *
+   * Each subscriber carries the node it paints, because the transcript is wiped
+   * and redrawn on every turn (`reattachTrackedJobs`): the node a subscriber
+   * closed over is detached moments later, and a subscriber list that never
+   * forgot them would grow without bound and paint into nothing.
+   */
+  const jobWatchers = new Map<
+    string,
+    Set<{
+      node: HTMLElement;
+      paint: (view: WidgetJobView) => void;
+      /** Has this node ever actually been in the document? A tile subscribes
+       *  while it is still being BUILT — the card it belongs to is appended a
+       *  few statements later — so "not connected" only means "gone" once it
+       *  has been seen connected at least once. Pruning on the first poll
+       *  instead would silently unsubscribe every tile whose job answered
+       *  faster than the card was assembled. */
+      seen: boolean;
+    }>
+  >();
+
+  /**
+   * Hand one poll result to everyone watching that job: the card, and any tile
+   * that named it. Subscribers whose node has left the document are dropped
+   * here rather than on a timer — a detached node is the definition of a
+   * subscriber with nothing left to paint.
+   */
+  function emitJob(jobId: string, view: WidgetJobView): void {
+    const card = jobCards.get(jobId);
+    if (card) paintJob(card, view);
+    const subs = jobWatchers.get(jobId);
+    if (!subs) return;
+    for (const sub of subs) {
+      if (!sub.node.isConnected) {
+        // Detached AFTER having been on screen — the transcript that held it
+        // was wiped, so there is nothing left to paint.
+        if (sub.seen) subs.delete(sub);
+        continue;
+      }
+      sub.seen = true;
+      try {
+        sub.paint(view);
+      } catch {
+        // One bad subscriber must not stop the others (or the poll) — a tile
+        // that throws is a drawing bug, not a reason to stall the job.
+      }
+    }
+    if (!subs.size) jobWatchers.delete(jobId);
+  }
+
+  /**
+   * Poll one job to a terminal state, fanning every result out through
+   * `emitJob`. Idempotent per id: a second call while a loop is running simply
+   * returns, which is what lets a tile and a card share one poll.
+   *
+   * Stops on: a terminal status, the safety ceiling, or `destroy()` (every wait
+   * goes through `waitAlive`, so an aborted widget never wakes up again).
+   */
+  function watchJob(jobId: string): void {
+    const getJob = opts.getJob;
+    if (!getJob || !jobId) return;
+    if (jobPolling.has(jobId)) return;
+    jobPolling.add(jobId);
+    void (async () => {
+      const started = Date.now();
+      try {
+        for (;;) {
+          if (Date.now() - started >= JOB_POLL_MAX_MS) {
+            // Give up WATCHING, not on the job: it is still running server-side,
+            // and saying so is more honest than a spinner that never resolves.
+            const stalled = jobCards.get(jobId);
+            if (stalled) {
+              stalled.className = `${PREFIX}-job ${PREFIX}-job-done`;
+              stalled.textContent = L("jobUnreachable");
+            }
+            forgetJob(jobId);
+            return;
+          }
+          let view: WidgetJobView | null;
+          try {
+            view = await getJob(jobId);
+          } catch {
+            // A transient read failure is not a failed job — keep the spinner
+            // and try again on the next tick.
+            if (!(await waitAlive(JOB_POLL_MS))) return;
+            continue;
+          }
+          // A job the account can no longer read (deleted, or never existed) is
+          // not something to keep asking about.
+          if (!view) {
+            jobCards.get(jobId)?.remove();
+            jobCards.delete(jobId);
+            jobWatchers.delete(jobId);
+            forgetJob(jobId);
+            return;
+          }
+          emitJob(jobId, view);
+          if (
+            view.status === "done" ||
+            view.status === "failed" ||
+            view.status === "cancelled"
+          ) {
+            forgetJob(jobId);
+            jobWatchers.delete(jobId);
+            scrollDown();
+            return;
+          }
+          if (!(await waitAlive(JOB_POLL_MS))) return;
+        }
+      } finally {
+        jobPolling.delete(jobId);
+      }
+    })();
+  }
+
+  /**
+   * Subscribe a node to a job's progress and make sure the job is being polled.
+   *
+   * The node is what a tile passes so it can be dropped once the transcript
+   * that held it is gone.
+   */
+  function subscribeJob(
+    jobId: string,
+    node: HTMLElement,
+    paint: (view: WidgetJobView) => void
+  ): void {
+    if (!opts.getJob || !jobId) return;
+    let subs = jobWatchers.get(jobId);
+    if (!subs) {
+      subs = new Set();
+      jobWatchers.set(jobId, subs);
+    }
+    subs.add({ node, paint, seen: false });
+    watchJob(jobId);
+  }
 
   function loadTrackedJobs(): TrackedJob[] {
     if (!jobsKey) return [];
@@ -2478,16 +2633,19 @@ export function createAiChatWidget(
   }
 
   /**
-   * Watch one job: draw its card (or re-point an existing one) and, unless a
-   * loop is already running for it, poll the generic read until it is terminal.
+   * Give one job a CARD in the log, and make sure it is being watched.
    *
-   * Stops on: a terminal status, the safety ceiling, or `destroy()` (every wait
-   * goes through `waitAlive`, so an aborted widget never wakes up again).
+   * The polling itself lives in `watchJob` — this is the card half, kept apart
+   * because a tile wants the second half without the first.
    */
   function trackJob(jobId: string, tid: string | undefined): void {
     const getJob = opts.getJob;
     if (!getJob || !jobId) return;
     if (tid) rememberJob(jobId, tid);
+    // The poll is started BEFORE the card guard below, deliberately: that guard
+    // protects the CARD from being drawn twice, and a job whose card is already
+    // up still needs its loop running (and its tiles fed) after a re-attach.
+    watchJob(jobId);
     // Idempotent per id, and it has to be: `reattachTrackedJobs` calls this
     // TWICE for the same job (once from browser storage, once when the server
     // listing resolves). The dedupe used to sit below the append, so the second
@@ -2502,57 +2660,6 @@ export function createAiChatWidget(
     log.appendChild(card);
     jobCards.set(jobId, card);
     scrollDown(true);
-    if (jobPolling.has(jobId)) return; // already being polled — the card is enough
-    jobPolling.add(jobId);
-    void (async () => {
-      const started = Date.now();
-      try {
-        for (;;) {
-          if (Date.now() - started >= JOB_POLL_MAX_MS) {
-            // Give up WATCHING, not on the job: it is still running server-side,
-            // and saying so is more honest than a spinner that never resolves.
-            const stalled = jobCards.get(jobId);
-            if (stalled) {
-              stalled.className = `${PREFIX}-job ${PREFIX}-job-done`;
-              stalled.textContent = L("jobUnreachable");
-            }
-            forgetJob(jobId);
-            return;
-          }
-          let view: WidgetJobView | null;
-          try {
-            view = await getJob(jobId);
-          } catch {
-            // A transient read failure is not a failed job — keep the spinner
-            // and try again on the next tick.
-            if (!(await waitAlive(JOB_POLL_MS))) return;
-            continue;
-          }
-          // A job the account can no longer read (deleted, or never existed) is
-          // not something to keep asking about.
-          if (!view) {
-            jobCards.get(jobId)?.remove();
-            jobCards.delete(jobId);
-            forgetJob(jobId);
-            return;
-          }
-          const live = jobCards.get(jobId);
-          if (live) paintJob(live, view);
-          if (
-            view.status === "done" ||
-            view.status === "failed" ||
-            view.status === "cancelled"
-          ) {
-            forgetJob(jobId);
-            scrollDown();
-            return;
-          }
-          if (!(await waitAlive(JOB_POLL_MS))) return;
-        }
-      } finally {
-        jobPolling.delete(jobId);
-      }
-    })();
   }
 
   /**
@@ -5897,6 +6004,59 @@ export function createAiChatWidget(
   /** One tile. The media box is drawn EMPTY-BUT-SIZED and filled in later, so
    *  the card doesn't reflow (and scroll out from under a reading user) when
    *  the pictures land. */
+  /** The badge class for a status — the known four are coloured, anything the
+   *  model invented gets the neutral one. */
+  function uiBadgeClass(status: string): string {
+    const known =
+      status === "pending" ||
+      status === "running" ||
+      status === "ready" ||
+      status === "failed";
+    return `${PREFIX}-ui-badge ${PREFIX}-ui-badge-${known ? status : "other"}`;
+  }
+
+  /**
+   * A job's coarse lifecycle as the tile vocabulary's own status.
+   *
+   * `cancelled` deliberately lands on `failed` rather than on its own badge:
+   * from the tile's point of view — "is there a clip here?" — a cancelled
+   * render and a failed one are the same answer, and the card-level job view
+   * is where the difference is spelled out.
+   */
+  function uiStatusForJob(status: WidgetJobView["status"]): UiStatus {
+    if (status === "done") return "ready";
+    if (status === "failed" || status === "cancelled") return "failed";
+    if (status === "queued") return "pending";
+    return "running";
+  }
+
+  /**
+   * Repaint one tile from a job poll — the thing that stops a composed card
+   * being a snapshot of the moment it was written.
+   *
+   * Only ever ADDS what it learns: media it did not have, and a status it can
+   * now state. It never clears a media id the model already gave, because a
+   * tile can legitimately show a reference still while the render it names is
+   * still running.
+   */
+  function paintUiTileLive(tile: HTMLElement, view: WidgetJobView): void {
+    const box = tile.querySelector<HTMLElement>(`.${PREFIX}-ui-media`);
+    if (!box) return;
+    const badge = tile.querySelector<HTMLElement>(`.${PREFIX}-ui-badge`);
+    if (badge) {
+      const s = uiStatusForJob(view.status);
+      badge.className = uiBadgeClass(s);
+      badge.textContent = uiStatusLabel(s);
+    }
+    const produced = view.resultMediaId;
+    if (!produced || box.dataset.mid === produced) return;
+    box.dataset.mid = produced;
+    // The clip has landed, so the box stops being a placeholder — one more
+    // batched resolve, scoped to this tile, and `fillUiMedia` does the rest
+    // (it queries `.…-ui-media` inside whatever element it is handed).
+    void fillUiMedia([produced], tile);
+  }
+
   function buildUiTile(it: UiItem): HTMLElement {
     const tile = el("div", `${PREFIX}-ui-tile`);
     const box = el("div", `${PREFIX}-ui-media`);
@@ -5908,22 +6068,20 @@ export function createAiChatWidget(
     const ph = el("span", `${PREFIX}-ui-media-ph`);
     ph.textContent = it.mediaId ? "" : L("uiMediaPending");
     box.appendChild(ph);
-    if (it.status) {
-      const badge = el(
-        "span",
-        `${PREFIX}-ui-badge ${PREFIX}-ui-badge-${
-          it.status === "pending" ||
-          it.status === "running" ||
-          it.status === "ready" ||
-          it.status === "failed"
-            ? it.status
-            : "other"
-        }`
-      );
-      badge.textContent = uiStatusLabel(it.status);
+    // A tile watching a job always gets a badge, even when the model named no
+    // status: the badge is where the job's progress is going to be written, and
+    // one added later would make the tile jump as it filled in.
+    const initialStatus =
+      it.status ?? (it.jobId ? ("running" as UiStatus) : undefined);
+    if (initialStatus) {
+      const badge = el("span", uiBadgeClass(initialStatus));
+      badge.textContent = uiStatusLabel(initialStatus);
       box.appendChild(badge);
     }
     tile.appendChild(box);
+    if (it.jobId) {
+      subscribeJob(it.jobId, tile, (view) => paintUiTileLive(tile, view));
+    }
     if (it.title) {
       const t = el("div", `${PREFIX}-ui-tile-title`);
       t.textContent = it.title;
