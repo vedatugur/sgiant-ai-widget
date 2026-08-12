@@ -122,11 +122,44 @@ export async function applyProposal(
           format: args.format,
           payload: args.payload,
         },
+        // The conversation that authored it. Without this the creation lands
+        // with no thread, and a later turn cannot find its storyboard.
+        ...(typeof args.threadId === "string"
+          ? { threadId: args.threadId }
+          : {}),
       }),
     });
     return targetId
       ? t("aiAssistant.apply.creationUpdated", "Creation updated ✓")
       : t("aiAssistant.apply.creationAdded", "Creation added to your studio ✓");
+  }
+  if (name === "save_storyboard") {
+    // The scene PLAN. The server matches on each scene's key, so applying a
+    // revised plan edits the scenes that changed and leaves rendered clips
+    // attached to the ones that did not.
+    const creationId =
+      typeof args.creationId === "string" ? args.creationId : "";
+    if (!creationId) throw new Error("missing creation id");
+    await api(`/accounts/${accountId}/studio/creations/${creationId}/scenes`, {
+      method: "PUT",
+      body: JSON.stringify({ scenes: args.scenes }),
+    });
+    return t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
+  }
+  if (name === "update_scene") {
+    const creationId =
+      typeof args.creationId === "string" ? args.creationId : "";
+    const key = typeof args.sceneKey === "string" ? args.sceneKey : "";
+    if (!creationId || !key) throw new Error("missing scene");
+    await api(
+      `/accounts/${accountId}/studio/creations/${creationId}/scenes/${encodeURIComponent(
+        key
+      )}`,
+      { method: "PATCH", body: JSON.stringify({ state: args.state }) }
+    );
+    return args.state === "rejected"
+      ? t("aiAssistant.apply.sceneRejected", "Scene dropped ✓")
+      : t("aiAssistant.apply.sceneApproved", "Scene approved ✓");
   }
   if (name === "add_scraped_media") {
     // threadId + auto-save intent ride at the body root, the rest of the args
