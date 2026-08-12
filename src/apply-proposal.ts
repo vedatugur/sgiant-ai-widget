@@ -237,10 +237,27 @@ export async function applyProposal(
   // reframe). One endpoint for all of them — the tool name is the op — so a
   // new op needs no change here.
   if (MEDIA_OP_TOOLS.includes(name)) {
-    await api(`/accounts/${accountId}/assets/media-op`, {
+    const res = await api<{
+      job?: { id?: string };
+      message?: string;
+    }>(`/accounts/${accountId}/assets/media-op`, {
       method: "POST",
       body: JSON.stringify({ ...args, op: name }),
     });
+    // A LONG op (restyle, animate, video upscale) answers 202 with a job: it is
+    // running, not finished. Saying "Done ✓" there would be a plain untruth —
+    // and it is the difference between a live card the user can watch and a
+    // silence they have to guess about. Short ops still answer with the asset.
+    if (res?.job?.id)
+      return {
+        message:
+          res.message ??
+          t("aiAssistant.apply.mediaOpQueued", {
+            defaultValue:
+              "Running now — it lands in your library when it's done",
+          }),
+        jobId: res.job.id,
+      };
     return args.threadId && !args.saveToLibrary
       ? t(
           "aiAssistant.apply.mediaOpSessionArtifact",
