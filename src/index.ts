@@ -39,6 +39,8 @@ import {
 import { isNavigationAction } from "./host-actions";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
 // for hosts that want to validate a spec before handing it over.
+import { parseJsonDirective } from "./directive";
+export { parseJsonDirective, type ParsedDirective } from "./directive";
 import {
   normalizeUiSpec,
   uiSpecMediaIds,
@@ -1262,57 +1264,6 @@ function isSafeFrameUrl(url: string): boolean {
     );
   } catch {
     return false;
-  }
-}
-
-/**
- * Generic `[[tag:{json}]]` directive extractor (first occurrence). Robust to the
- * model mis-counting brackets: it brace-matches the JSON object (string-aware,
- * so a `]]` or `}` inside a quoted value doesn't fool it), then consumes 0–2
- * trailing `]`. So `[[navigate:{…}]`, `…}]]` and `…}` all parse — otherwise a
- * single-`]` slip would leave the raw directive showing as text.
- */
-function parseJsonDirective<T>(
-  text: string,
-  tag: string
-): { spec: T; stripped: string; start: number; end: number } | null {
-  const open = `[[${tag}:`;
-  const start = text.indexOf(open);
-  if (start < 0) return null;
-  const braceStart = text.indexOf("{", start + open.length);
-  if (braceStart < 0) return null;
-  // Walk the JSON object, tracking string state, to find its true closing brace.
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  let end = -1;
-  for (let i = braceStart; i < text.length; i++) {
-    const ch = text[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === "\\") esc = true;
-      else if (ch === '"') inStr = false;
-    } else if (ch === '"') inStr = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-  if (end < 0) return null;
-  try {
-    const spec = JSON.parse(text.slice(braceStart, end + 1)) as T;
-    // Consume up to two trailing `]` (tolerate `]]`, `]`, or none).
-    let after = end + 1;
-    if (text[after] === "]") after++;
-    if (text[after] === "]") after++;
-    const stripped = (text.slice(0, start) + text.slice(after)).trim();
-    return { spec, stripped, start, end: after };
-  } catch {
-    return null;
   }
 }
 
