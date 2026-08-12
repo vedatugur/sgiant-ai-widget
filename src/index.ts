@@ -961,6 +961,8 @@ export const WIDGET_LABELS = {
   reportFailed: "Couldn't report — try later",
   // Signup CTA (anonymous surfaces)
   signupCta: "Sign up — it's free to start",
+  proposalUpscaleVideo: "Upscale this video?",
+  proposalAnimateImage: "Animate this image with that clip's motion?",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
   // OTHER status the model writes is shown in its own words, untranslated,
   // because only these four are ours to name.
@@ -4284,6 +4286,8 @@ export function createAiChatWidget(
     remove_background: L("proposalCutout"),
     outpaint_image: L("proposalOutpaint"),
     reframe_video: L("proposalReframe"),
+    upscale_video: L("proposalUpscaleVideo"),
+    animate_image: L("proposalAnimateImage"),
     organize_assets: L("proposalEditAsset"),
     edit_asset: L("proposalSaveFile"),
     create_asset: L("proposalCreateFile"),

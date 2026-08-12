@@ -35,6 +35,8 @@ export const MEDIA_OP_TOOLS: readonly string[] = [
   "remove_background",
   "outpaint_image",
   "reframe_video",
+  "upscale_video",
+  "animate_image",
 ];
 
 export interface ApplyProposalCtx {
