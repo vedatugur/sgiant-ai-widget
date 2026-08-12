@@ -33,6 +33,7 @@ export {
 // Used locally too (the block above only RE-exports for consumers): the
 // auto-navigate gate needs to know what counts as navigation.
 import {
+  CHAT_ATTACHMENT_MAX_AV_BYTES,
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
 } from "@sgiant/shared";
@@ -3264,7 +3265,7 @@ export function createAiChatWidget(
       const chip = el("span", `${PREFIX}-att ${PREFIX}-att-staged`);
       chip.title = `${a.filename} (${a.contentType})`;
       const label = el("span", "");
-      label.textContent = `${a.kind === "image" ? "🖼" : "📄"} ${a.filename}`;
+      label.textContent = `${attIcon(a.kind)} ${a.filename}`;
       const x = el("button", `${PREFIX}-att-x`) as HTMLButtonElement;
       x.type = "button";
       x.textContent = "×";
@@ -3282,6 +3283,16 @@ export function createAiChatWidget(
   // PDF — see @sgiant/shared chat-attachment-limits); an oversize image still
   // uploads but resolves as a skipped note the model sees.
   const MAX_ATT_BYTES = CHAT_ATTACHMENT_MAX_BYTES;
+  /** A clip or track gets a far bigger allowance than a document: a 30-second
+   *  1080p phone video is already past the document cap, so the everyday case
+   *  would be refused for being ordinary. Video/audio is referenced by id and
+   *  never sent to the model inline, so this bounds an upload, not a prompt. */
+  const attCap = (file: File): number =>
+    /^(video|audio)\//i.test(file.type)
+      ? CHAT_ATTACHMENT_MAX_AV_BYTES
+      : MAX_ATT_BYTES;
+  const capLabel = (bytes: number): string =>
+    `${Math.round(bytes / (1024 * 1024))} MB`;
   function attError(msg: string): void {
     const chip = el("span", `${PREFIX}-att ${PREFIX}-att-err`);
     chip.textContent = `⚠ ${msg}`;
@@ -3303,8 +3314,9 @@ export function createAiChatWidget(
         CHAT_ATTACHMENT_MAX_COUNT
       )) {
         if (stagedAtts.length >= CHAT_ATTACHMENT_MAX_COUNT) break;
-        if (file.size > MAX_ATT_BYTES) {
-          attError(`"${file.name}" is too large (max 25 MB)`);
+        const cap = attCap(file);
+        if (file.size > cap) {
+          attError(`"${file.name}" is too large (max ${capLabel(cap)})`);
           continue;
         }
         const fd = new FormData();
@@ -3349,7 +3361,7 @@ export function createAiChatWidget(
     fileInput.type = "file";
     fileInput.multiple = true;
     fileInput.accept =
-      "image/*,.svg,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml";
+      "image/*,video/*,audio/*,.svg,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml";
     fileInput.style.display = "none";
     fileInput.addEventListener(
       "change",
@@ -6455,6 +6467,15 @@ function parseLine(line: string): StreamFrame | null {
   }
 }
 
+/** Chip glyph per attachment kind — a clip showing the document icon would read
+ *  as "we did not understand your file". */
+function attIcon(kind: string): string {
+  if (kind === "image") return "🖼";
+  if (kind === "video") return "🎬";
+  if (kind === "audio") return "🎵";
+  return "📄";
+}
+
 function el(tag: string, cls: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = cls;
@@ -6553,7 +6574,7 @@ function addMsg(
     for (const a of attachments) {
       const chip = el("span", `${PREFIX}-att`);
       chip.title = `${a.filename} (${a.contentType})`;
-      chip.textContent = `${a.kind === "image" ? "🖼" : "📄"} ${a.filename}`;
+      chip.textContent = `${attIcon(a.kind)} ${a.filename}`;
       chips.appendChild(chip);
     }
     log.appendChild(chips);
