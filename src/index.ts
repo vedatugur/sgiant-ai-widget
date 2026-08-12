@@ -425,6 +425,14 @@ export interface WidgetJobView {
     kind?: string;
     message: string;
     at?: string;
+    /** The runner's MACHINE-readable note on this step. `code` is the one key
+     *  read here: it lets a step be shown in the reader's own language instead
+     *  of in the runner's English, which has no request locale to work from.
+     *
+     *  Nullable, not merely optional: the wire type sends an explicit `null`
+     *  for a step that carries no payload, and the host forwards the API's
+     *  events verbatim rather than mapping them one by one. */
+    data?: Record<string, unknown> | null;
   }>;
 }
 
@@ -914,6 +922,18 @@ export const WIDGET_LABELS = {
   /** Toggle under the flow tail that reveals the job's full activity feed. */
   jobFlowAll: "Show all {count} steps",
   jobUnreachable: "Still running in the background — check back shortly",
+  // Render STEPS. The runner writes its narration in English (it has no request
+  // locale), but each event also carries a machine `code`, so a Turkish chat can
+  // read the flow in Turkish instead of in the runner's English. An event whose
+  // code we have no label for falls back to the server's own sentence — which is
+  // why the set below can grow without the widget ever showing a blank line.
+  jobEvRenderStarted: "Render started",
+  jobEvStillRendering: "Still rendering at the provider…",
+  jobEvRenderReady: "Rendered and saved",
+  jobEvRenderFailed: "The render failed",
+  jobEvCancelled: "Cancelled",
+  jobEvCancelledBeforeStart: "Cancelled before it started",
+  jobEvInterrupted: "Interrupted by a restart — not retried automatically",
   // Proposal confirm cards
   proposalUpdateCreation: "Apply this update to the creation?",
   proposalAddCreation: "Add this creation to your studio?",
@@ -2210,35 +2230,18 @@ export function createAiChatWidget(
       const res = await opts.onApplyProposal!(name, genArgs);
       const jobId = res && typeof res === "object" ? res.jobId : undefined;
       const message = typeof res === "string" ? res : res?.message;
-      const getJob = opts.getMediaJob;
-      if (isVideo && jobId && getJob) {
-        const started = Date.now();
-        const MAX_MS = 10 * 60 * 1000; // stop babysitting a stuck render after 10m
-        for (;;) {
-          if (Date.now() - started >= MAX_MS) {
-            paintActivity(chip, L("stillRendering"), "ok");
-            break;
-          }
-          if (!(await waitAlive(4000))) return;
-          let st;
-          try {
-            st = await getJob(jobId);
-          } catch {
-            continue; // transient poll failure — keep the spinner, retry
-          }
-          if (st.status === "done") {
-            paintActivity(chip, L("videoReady"), "ok");
-            break;
-          }
-          if (st.status === "error") {
-            paintActivity(chip, st.error || L("videoFailed"), "error");
-            break;
-          }
-          if (st.status === "cancelled") {
-            paintActivity(chip, L("jobCancelled"), "error");
-            break;
-          }
-        }
+      if (isVideo && jobId && opts.getJob) {
+        // A render gets the SAME live card every other enqueued job gets, and
+        // for the same reasons: the private poll this replaced had no flow feed,
+        // no Cancel, and did not survive a refresh — so a client who reloaded
+        // saw a finished conversation with no sign a clip was being made. It
+        // also polled the render-detail endpoint by an id that is now the
+        // generic job's, which simply 404s.
+        //
+        // The chip resolves immediately and hands over to the card, rather than
+        // spinning alongside it saying the same thing in fewer words.
+        paintActivity(chip, message || L("videoQueued"), "ok");
+        trackJob(jobId, threadId);
       } else {
         paintActivity(
           chip,
@@ -2546,18 +2549,42 @@ export function createAiChatWidget(
     // The FLOW: the last few narration lines while running (the live feel),
     // the whole story behind a toggle once it is long. All server text —
     // escaped per line.
+    //
+    // A step is shown in the READER'S language when the runner tagged it with a
+    // code we have a label for, and in the runner's own English otherwise. That
+    // fallback is the point: a new step can be emitted by the server without a
+    // widget release, and it degrades to an English sentence rather than to a
+    // blank line or a raw key.
     const events = view.events ?? [];
+    const eventText = (e: {
+      message: string;
+      data?: Record<string, unknown> | null;
+    }): string => {
+      const code = e.data?.code;
+      if (typeof code !== "string" || !code) return e.message;
+      const key = `jobEv${code.charAt(0).toUpperCase()}${code.slice(1)}`;
+      // Membership is checked against the label BAG rather than by calling `L`
+      // and testing its answer: `L` indexes a record typed as total, so an
+      // unknown key yields `undefined` rather than anything recognisable, and a
+      // step we have no wording for must fall through to the server's sentence.
+      if (!(key in WIDGET_LABELS)) return e.message;
+      return L(key as keyof WidgetLabels) || e.message;
+    };
     const tailStart = terminal
       ? Math.max(0, events.length - 3)
       : Math.max(0, events.length - 5);
-    const flowLine = (e: { kind?: string; message: string }) =>
+    const flowLine = (e: {
+      kind?: string;
+      message: string;
+      data?: Record<string, unknown> | null;
+    }) =>
       `<li class="${PREFIX}-job-ev${
         e.kind === "problem"
           ? ` ${PREFIX}-job-ev-problem`
           : e.kind === "decision"
             ? ` ${PREFIX}-job-ev-decision`
             : ""
-      }">${escapeHtml(e.message)}</li>`;
+      }">${escapeHtml(eventText(e))}</li>`;
     const flow = events.length
       ? `<ul class="${PREFIX}-job-flow">${events
           .slice(tailStart)
