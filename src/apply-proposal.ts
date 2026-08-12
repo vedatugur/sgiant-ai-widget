@@ -38,6 +38,10 @@ export const MEDIA_OP_TOOLS: readonly string[] = [
   "upscale_video",
   "animate_image",
   "restyle_video",
+  // The audio lane. Both operate ON a clip and return a clip, so they are
+  // ordinary media ops on this path — nothing about the apply changes.
+  "dub_video",
+  "voice_change",
 ];
 
 export interface ApplyProposalCtx {

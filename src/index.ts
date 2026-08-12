@@ -6157,20 +6157,29 @@ export function createAiChatWidget(
         if (ph) ph.textContent = L("uiMediaMissing");
         continue;
       }
-      const isVideo = box.dataset.kind
-        ? box.dataset.kind === "video"
-        : looksLikeVideo(url);
+      // AUDIO must be declared, never guessed: our URLs are signed and carry no
+      // extension, so an mp3 left to inference is drawn as an <img> and reads as
+      // a broken tile.
+      const kind = box.dataset.kind
+        ? box.dataset.kind
+        : looksLikeVideo(url)
+          ? "video"
+          : "image";
+      const isVideo = kind === "video";
+      const isAudio = kind === "audio";
       const node = el(
-        isVideo ? "video" : "img",
+        isAudio ? "audio" : isVideo ? "video" : "img",
         `${PREFIX}-ui-media-el`
-      ) as HTMLImageElement & HTMLVideoElement;
+      ) as HTMLImageElement & HTMLVideoElement & HTMLAudioElement;
       node.src = url;
-      if (isVideo) {
+      if (isVideo || isAudio) {
         node.controls = true;
         node.preload = "metadata";
-        node.playsInline = true;
-        const poster = box.dataset.poster ? urls[box.dataset.poster] : "";
-        if (poster) node.poster = poster;
+        if (isVideo) {
+          node.playsInline = true;
+          const poster = box.dataset.poster ? urls[box.dataset.poster] : "";
+          if (poster) node.poster = poster;
+        }
       } else {
         node.loading = "lazy";
         node.alt = "";
@@ -7309,6 +7318,11 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-ui-a-story .${PREFIX}-ui-media{aspect-ratio:9/16}
 .${PREFIX}-ui-a-landscape .${PREFIX}-ui-media,.${PREFIX}-ui-a-wide .${PREFIX}-ui-media{aspect-ratio:16/9}
 .${PREFIX}-ui-media-el{width:100%;height:100%;object-fit:cover;display:block}
+/* An audio tile has nothing to LOOK at, so the box stops pretending to be a
+   picture: no forced aspect ratio, and the player sits at its natural height
+   instead of being stretched to fill a square. */
+.${PREFIX}-ui-media:has(> audio.${PREFIX}-ui-media-el){aspect-ratio:auto;padding:8px}
+audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
 .${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
 .${PREFIX}-ui-badge-ready{background:#16794a}

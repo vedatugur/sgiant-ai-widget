@@ -77,8 +77,10 @@ export interface UiItem {
   mediaId?: string;
   /** Still to show for a video tile before it plays. */
   posterMediaId?: string;
-  /** How to draw `mediaId`. Inferred by the widget when omitted. */
-  media?: "image" | "video";
+  /** How to draw `mediaId`. Inferred by the widget when omitted — but a signed
+   *  URL carries no extension, so AUDIO in particular must be declared or it
+   *  is drawn as a broken picture. */
+  media?: "image" | "video" | "audio";
   /** Drawn as a badge; a known one is also coloured. */
   status?: UiStatus;
   /**
@@ -300,7 +302,9 @@ function normalizeItem(v: unknown): UiItem | null {
   const posterMediaId = sanitizeMediaId(v.posterMediaId);
   const status = normalizeStatus(v.status);
   const media =
-    v.media === "video" || v.media === "image" ? v.media : undefined;
+    v.media === "video" || v.media === "image" || v.media === "audio"
+      ? v.media
+      : undefined;
   // Same opaque-token shape as a media id, and checked for the same reason: it
   // is put straight into a URL the widget then polls.
   const jobId = sanitizeMediaId(v.jobId);
