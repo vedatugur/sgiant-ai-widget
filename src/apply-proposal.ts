@@ -146,7 +146,14 @@ export async function applyProposal(
     if (!creationId) throw new Error("missing creation id");
     await api(`/accounts/${accountId}/studio/creations/${creationId}/scenes`, {
       method: "PUT",
-      body: JSON.stringify({ scenes: args.scenes }),
+      // The thread rides along so the server can claim this creation for the
+      // conversation — the next turn finds a storyboard BY thread.
+      body: JSON.stringify({
+        scenes: args.scenes,
+        ...(typeof args.threadId === "string"
+          ? { threadId: args.threadId }
+          : {}),
+      }),
     });
     return t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
   }
