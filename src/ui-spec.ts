@@ -21,8 +21,16 @@
  * pinning down.
  */
 
-/** How `items` are laid out. Unknown values fall back to a strip. */
-export type UiLayout = "strip" | "grid" | "list";
+/**
+ * How `items` are laid out. Unknown values fall back to a strip.
+ *
+ * "carousel" shows ONE item at a time with paging, which is the right shape for
+ * a set the client is judging rather than scanning: a reel's scenes want the
+ * space to be looked at properly, and a strip of six thumbnails invites
+ * approving what was never really seen. The other layouts remain right for
+ * picking from many (grid) or reading down a short list (list).
+ */
+export type UiLayout = "strip" | "grid" | "list" | "carousel";
 
 /**
  * The one action name the WIDGET answers itself: send `data.text` (falling back
@@ -317,7 +325,11 @@ export function normalizeUiSpec(input: unknown): UiSpec | null {
   const caption = clamp(input.caption);
   if (!items.length && !actions.length) return null;
   const layout: UiLayout =
-    input.layout === "grid" || input.layout === "list" ? input.layout : "strip";
+    input.layout === "grid" ||
+    input.layout === "list" ||
+    input.layout === "carousel"
+      ? input.layout
+      : "strip";
   const aspect = (
     typeof input.aspect === "string" && ASPECTS.includes(input.aspect)
       ? input.aspect

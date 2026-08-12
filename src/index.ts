@@ -977,6 +977,9 @@ export const WIDGET_LABELS = {
   /** A tile whose media id resolved to nothing (deleted, or not this account's).
    *  Said plainly, because a blank tile reads as a broken product. */
   uiMediaMissing: "Unavailable",
+  /** Carousel paging controls on a composed card. */
+  prev: "Previous",
+  next: "Next",
 } as const;
 
 /** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */
@@ -6000,6 +6003,75 @@ export function createAiChatWidget(
     }
   }
 
+  /**
+   * Wrap a tile row in paging: one visible at a time, arrows and dots overlaid.
+   *
+   * Overlaid rather than stacked beneath, for the reason the Studio player
+   * learned the hard way — controls that are flex siblings steal height from the
+   * media, so a square scene renders visibly smaller than the space it was
+   * given and reads as a lesser thing than it is.
+   */
+  function buildUiCarousel(items: HTMLElement, count: number): HTMLElement {
+    const wrap = el("div", `${PREFIX}-ui-carousel`);
+    const stage = el("div", `${PREFIX}-ui-carousel-stage`);
+    stage.appendChild(items);
+    wrap.appendChild(stage);
+
+    let index = 0;
+    const dots: HTMLElement[] = [];
+    const paint = (): void => {
+      items.style.transform = `translateX(-${index * 100}%)`;
+      dots.forEach((d, i) =>
+        d.classList.toggle(`${PREFIX}-ui-dot-on`, i === index)
+      );
+      counter.textContent = `${index + 1}/${count}`;
+    };
+    const go = (delta: number): void => {
+      index = (index + delta + count) % count;
+      paint();
+    };
+
+    const arrow = (side: "left" | "right"): HTMLElement => {
+      const b = el(
+        "button",
+        `${PREFIX}-ui-arrow ${PREFIX}-ui-arrow-${side}`
+      ) as HTMLButtonElement;
+      b.type = "button";
+      b.setAttribute("aria-label", side === "left" ? L("prev") : L("next"));
+      b.textContent = side === "left" ? "‹" : "›";
+      b.addEventListener("click", (e) => {
+        // The card sits inside a scrollable log and may sit inside other
+        // clickable chrome; paging must never reach either.
+        e.preventDefault();
+        e.stopPropagation();
+        go(side === "left" ? -1 : 1);
+      });
+      return b;
+    };
+    stage.append(arrow("left"), arrow("right"));
+
+    const counter = el("span", `${PREFIX}-ui-counter`);
+    stage.appendChild(counter);
+
+    const dotRow = el("div", `${PREFIX}-ui-dots`);
+    for (let i = 0; i < count; i++) {
+      const d = el("button", `${PREFIX}-ui-dot`) as HTMLButtonElement;
+      d.type = "button";
+      d.setAttribute("aria-label", `${i + 1}`);
+      d.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        index = i;
+        paint();
+      });
+      dots.push(d);
+      dotRow.appendChild(d);
+    }
+    stage.appendChild(dotRow);
+    paint();
+    return wrap;
+  }
+
   /** Draw a composed UI card in the log. */
   function renderUiCard(raw: unknown): void {
     const spec = normalizeUiSpec(raw);
@@ -6021,7 +6093,15 @@ export function createAiChatWidget(
         `${PREFIX}-ui-items ${PREFIX}-ui-${spec.layout} ${PREFIX}-ui-a-${spec.aspect}`
       );
       for (const it of spec.items) items.appendChild(buildUiTile(it));
-      card.appendChild(items);
+      // A CAROUSEL shows one item at a time, because the client is judging each
+      // one rather than scanning a set: six thumbnails in a row invites
+      // approving what was never really looked at. Paging is added around the
+      // same tiles, so nothing about how a tile is built changes.
+      if (spec.layout === "carousel" && spec.items.length > 1) {
+        card.appendChild(buildUiCarousel(items, spec.items.length));
+      } else {
+        card.appendChild(items);
+      }
     }
     if (spec.actions.length) {
       const row = el("div", `${PREFIX}-ui-actions`);
@@ -7022,6 +7102,19 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    point of showing them. Snap points keep the scroll landing on whole tiles. */
 .${PREFIX}-ui-strip{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .${PREFIX}-ui-strip>.${PREFIX}-ui-tile{flex:0 0 132px;scroll-snap-align:start}
+/* Carousel: one item at a time. The track is the same tile row, translated. */
+.${PREFIX}-ui-carousel{position:relative}
+.${PREFIX}-ui-carousel-stage{position:relative;overflow:hidden;border-radius:10px}
+.${PREFIX}-ui-carousel .${PREFIX}-ui-items{display:flex;gap:0;transition:transform .25s ease;overflow:visible}
+.${PREFIX}-ui-carousel .${PREFIX}-ui-tile{flex:0 0 100%;min-width:100%}
+.${PREFIX}-ui-arrow{position:absolute;top:38%;z-index:2;display:flex;height:30px;width:30px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.${PREFIX}-ui-arrow:hover{background:rgba(0,0,0,.7)}
+.${PREFIX}-ui-arrow-left{left:6px}
+.${PREFIX}-ui-arrow-right{right:6px}
+.${PREFIX}-ui-counter{position:absolute;right:8px;top:8px;z-index:2;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;font-weight:700}
+.${PREFIX}-ui-dots{position:absolute;left:0;right:0;bottom:6px;z-index:2;display:flex;justify-content:center;gap:5px}
+.${PREFIX}-ui-dot{height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer;transition:width .15s}
+.${PREFIX}-ui-dot-on{width:16px;background:#fff}
 .${PREFIX}-ui-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
 .${PREFIX}-ui-list{display:flex;flex-direction:column;gap:8px}
 .${PREFIX}-ui-list>.${PREFIX}-ui-tile{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:start}
