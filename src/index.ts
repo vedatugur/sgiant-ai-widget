@@ -963,6 +963,7 @@ export const WIDGET_LABELS = {
   signupCta: "Sign up — it's free to start",
   proposalUpscaleVideo: "Upscale this video?",
   proposalAnimateImage: "Animate this image with that clip's motion?",
+  proposalRestyleVideo: "Restyle this video?",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
   // OTHER status the model writes is shown in its own words, untranslated,
   // because only these four are ours to name.
@@ -4288,6 +4289,7 @@ export function createAiChatWidget(
     reframe_video: L("proposalReframe"),
     upscale_video: L("proposalUpscaleVideo"),
     animate_image: L("proposalAnimateImage"),
+    restyle_video: L("proposalRestyleVideo"),
     organize_assets: L("proposalEditAsset"),
     edit_asset: L("proposalSaveFile"),
     create_asset: L("proposalCreateFile"),

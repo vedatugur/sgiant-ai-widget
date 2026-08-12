@@ -37,6 +37,7 @@ export const MEDIA_OP_TOOLS: readonly string[] = [
   "reframe_video",
   "upscale_video",
   "animate_image",
+  "restyle_video",
 ];
 
 export interface ApplyProposalCtx {
