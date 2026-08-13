@@ -138,24 +138,36 @@ export async function applyProposal(
       : t("aiAssistant.apply.creationAdded", "Creation added to your studio ✓");
   }
   if (name === "save_storyboard") {
-    // The scene PLAN. The server matches on each scene's key, so applying a
-    // revised plan edits the scenes that changed and leaves rendered clips
-    // attached to the ones that did not.
-    const creationId =
-      typeof args.creationId === "string" ? args.creationId : "";
-    if (!creationId) throw new Error("missing creation id");
-    await api(`/accounts/${accountId}/studio/creations/${creationId}/scenes`, {
-      method: "PUT",
-      // The thread rides along so the server can claim this creation for the
-      // conversation — the next turn finds a storyboard BY thread.
-      body: JSON.stringify({
-        scenes: args.scenes,
-        ...(typeof args.threadId === "string"
-          ? { threadId: args.threadId }
-          : {}),
-      }),
-    });
-    return t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
+    // The scene PLAN. ONE endpoint for both cases: with a creationId it edits
+    // that piece's plan (matched on each scene's key, so rendered clips stay
+    // attached); without one it CREATES the piece and plans it in the same
+    // call — a storyboard precedes the media it plans, so it must not require
+    // a creation that only exists once media does.
+    const res = await api<{ creationId?: string; created?: boolean }>(
+      `/accounts/${accountId}/studio/storyboard`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          scenes: args.scenes,
+          ...(typeof args.creationId === "string"
+            ? { creationId: args.creationId }
+            : {}),
+          ...(typeof args.format === "string" ? { format: args.format } : {}),
+          ...(typeof args.title === "string" ? { title: args.title } : {}),
+          // The thread rides along so the server can claim this creation for
+          // the conversation — the next turn finds a storyboard BY thread.
+          ...(typeof args.threadId === "string"
+            ? { threadId: args.threadId }
+            : {}),
+        }),
+      }
+    );
+    return res?.created
+      ? t(
+          "aiAssistant.apply.storyboardCreated",
+          "Scene plan saved — new piece created ✓"
+        )
+      : t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
   }
   if (name === "update_scene") {
     const creationId =
