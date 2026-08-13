@@ -84,17 +84,47 @@ function normalizePath(path: string): string {
   return p;
 }
 
-/** Find the manifest entry that best describes the current path — the entry
- *  whose `path` is the longest suffix of the (normalized) current path. */
+/**
+ * Find the manifest entry that best describes the current path — the entry
+ * whose `path` is the longest suffix of the (normalized) current path.
+ *
+ * A segment written as `:name` matches ANY one segment, so a detail page can be
+ * declared once ("/studio/creations/:creationId") instead of being
+ * undescribable. Without this a concrete `/studio/creations/<uuid>` matched
+ * nothing at all — not even the list page above it, since the uuid is a further
+ * segment and the comparison was a plain suffix test — so the assistant silently
+ * lost all knowledge of which page the user was standing on.
+ *
+ * Matching is done per SEGMENT rather than by string, because a suffix test
+ * cannot tell a parameter from a literal. The longest match still wins, which
+ * keeps a specific entry ahead of a general one.
+ */
 export function matchManifest(
   path: string,
   manifest: PageManifestEntry[]
 ): PageManifestEntry | undefined {
-  const norm = normalizePath(path);
+  const segs = (p: string): string[] => p.split("/").filter(Boolean);
+  const pathSegs = segs(normalizePath(path));
   let best: PageManifestEntry | undefined;
+  let bestLen = -1;
   for (const e of manifest) {
-    if (norm === e.path || norm.endsWith(e.path)) {
-      if (!best || e.path.length > best.path.length) best = e;
+    const entrySegs = segs(e.path);
+    // The root entry ("/") describes only the root.
+    if (!entrySegs.length) {
+      if (!pathSegs.length && bestLen < 0) {
+        best = e;
+        bestLen = 0;
+      }
+      continue;
+    }
+    if (entrySegs.length > pathSegs.length) continue;
+    const off = pathSegs.length - entrySegs.length;
+    const hit = entrySegs.every(
+      (seg, i) => seg.startsWith(":") || seg === pathSegs[off + i]
+    );
+    if (hit && entrySegs.length > bestLen) {
+      best = e;
+      bestLen = entrySegs.length;
     }
   }
   return best;
