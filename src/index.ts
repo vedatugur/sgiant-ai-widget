@@ -7345,16 +7345,25 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-ui-strip{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .${PREFIX}-ui-strip>.${PREFIX}-ui-tile{flex:0 0 132px;scroll-snap-align:start}
 /* Carousel: one item at a time. The track is the same tile row, translated. */
-.${PREFIX}-ui-carousel{position:relative}
+/* ONE number governs the carousel's geometry, because the controls have to be
+   anchored to the MEDIA and nothing else knows how tall that is.
+   Two real defects came from not having it: a 9:16 scene box computed from the
+   panel width was 558px tall in a 368px panel — one empty scene taller than the
+   whole visible chat, with the paging pushed off screen — and the dots, pinned
+   to the card's BOTTOM, painted over the caption instead of over the picture. */
+.${PREFIX}-ui-carousel{position:relative;--aiw-cmedia:min(38vh,300px)}
+/* Height leads, width follows from the aspect — so a portrait scene stays
+   portrait instead of being letterboxed or cropped to fit a cap. */
+.${PREFIX}-ui-carousel .${PREFIX}-ui-media{height:var(--aiw-cmedia);width:auto;max-width:100%;margin:0 auto}
 .${PREFIX}-ui-carousel-stage{position:relative;overflow:hidden;border-radius:10px}
 .${PREFIX}-ui-carousel .${PREFIX}-ui-items{display:flex;gap:0;transition:transform .25s ease;overflow:visible}
 .${PREFIX}-ui-carousel .${PREFIX}-ui-tile{flex:0 0 100%;min-width:100%}
-.${PREFIX}-ui-arrow{position:absolute;top:38%;z-index:2;display:flex;height:30px;width:30px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.${PREFIX}-ui-arrow{position:absolute;top:calc(var(--aiw-cmedia) / 2 - 15px);z-index:2;display:flex;height:30px;width:30px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font-size:15px;line-height:1;cursor:pointer}
 .${PREFIX}-ui-arrow:hover{background:rgba(0,0,0,.7)}
 .${PREFIX}-ui-arrow-left{left:6px}
 .${PREFIX}-ui-arrow-right{right:6px}
 .${PREFIX}-ui-counter{position:absolute;right:8px;top:8px;z-index:2;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;font-weight:700}
-.${PREFIX}-ui-dots{position:absolute;left:0;right:0;bottom:6px;z-index:2;display:flex;justify-content:center;gap:5px}
+.${PREFIX}-ui-dots{position:absolute;left:0;right:0;top:calc(var(--aiw-cmedia) - 14px);bottom:auto;z-index:2;display:flex;justify-content:center;gap:5px}
 .${PREFIX}-ui-dot{height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer;transition:width .15s}
 .${PREFIX}-ui-dot-on{width:16px;background:#fff}
 .${PREFIX}-ui-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
