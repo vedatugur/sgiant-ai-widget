@@ -172,6 +172,25 @@ export async function applyProposal(
       ? t("aiAssistant.apply.sceneRejected", "Scene dropped ✓")
       : t("aiAssistant.apply.sceneApproved", "Scene approved ✓");
   }
+  if (name === "generate_audio") {
+    // Enqueued like a video: audio renders for minutes at the vendor, so the
+    // reply carries the GENERIC job id and the chat draws a live card.
+    const res = await api<{
+      job?: { id?: string };
+      message?: string;
+    }>(`/accounts/${accountId}/assets/generate-audio`, {
+      method: "POST",
+      body: JSON.stringify(args),
+    });
+    return {
+      message:
+        res?.message ??
+        t("aiAssistant.apply.audioQueued", {
+          defaultValue: "Generating — it lands in your library when it's done",
+        }),
+      ...(res?.job?.id ? { jobId: res.job.id } : {}),
+    };
+  }
   if (name === "add_scraped_media") {
     // threadId + auto-save intent ride at the body root, the rest of the args
     // are the item itself.

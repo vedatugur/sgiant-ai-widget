@@ -927,6 +927,9 @@ export const WIDGET_LABELS = {
   // read the flow in Turkish instead of in the runner's English. An event whose
   // code we have no label for falls back to the server's own sentence — which is
   // why the set below can grow without the widget ever showing a blank line.
+  generatingAudio: "Generating audio…",
+  audioQueued: "Generating — it lands in your assets shortly",
+  proposalGenAudio: "Generate this audio? (renders in the background)",
   jobEvRenderStarted: "Render started",
   jobEvStillRendering: "Still rendering at the provider…",
   jobEvRenderReady: "Rendered and saved",
@@ -2189,7 +2192,11 @@ export function createAiChatWidget(
   // watches generation as a step (spinner → ✓/✗), the same as a read tool. For
   // video (an async render that takes minutes) poll the job so the chip resolves
   // on REAL completion instead of the chat going silent until the clip appears.
-  const MEDIA_GEN_TOOLS = new Set(["generate_image", "generate_video"]);
+  const MEDIA_GEN_TOOLS = new Set([
+    "generate_image",
+    "generate_video",
+    "generate_audio",
+  ]);
   /**
    * Sleep, but tied to the widget's lifetime: resolves `true` after `ms`, or
    * `false` the moment `destroy()` aborts. Every polling loop waits through this
@@ -2217,9 +2224,17 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): Promise<void> {
-    const isVideo = name === "generate_video";
+    // ENQUEUED vs INLINE, not video vs image. Audio renders in the background
+    // exactly as video does, so it takes the same live card; only a still comes
+    // back inside the turn. Branching on "is it video" would have left audio
+    // with an image's copy and no card at all.
+    const enqueued = name === "generate_video" || name === "generate_audio";
     const chip = addActivityChip(
-      isVideo ? L("renderingVideo") : L("generatingImage"),
+      name === "generate_audio"
+        ? L("generatingAudio")
+        : name === "generate_video"
+          ? L("renderingVideo")
+          : L("generatingImage"),
       "running"
     );
     scrollDown(true);
@@ -2230,7 +2245,7 @@ export function createAiChatWidget(
       const res = await opts.onApplyProposal!(name, genArgs);
       const jobId = res && typeof res === "object" ? res.jobId : undefined;
       const message = typeof res === "string" ? res : res?.message;
-      if (isVideo && jobId && opts.getJob) {
+      if (enqueued && jobId && opts.getJob) {
         // A render gets the SAME live card every other enqueued job gets, and
         // for the same reasons: the private poll this replaced had no flow feed,
         // no Cancel, and did not survive a refresh — so a client who reloaded
@@ -2240,12 +2255,22 @@ export function createAiChatWidget(
         //
         // The chip resolves immediately and hands over to the card, rather than
         // spinning alongside it saying the same thing in fewer words.
-        paintActivity(chip, message || L("videoQueued"), "ok");
+        paintActivity(
+          chip,
+          message ||
+            (name === "generate_audio" ? L("audioQueued") : L("videoQueued")),
+          "ok"
+        );
         trackJob(jobId, threadId);
       } else {
         paintActivity(
           chip,
-          message || (isVideo ? L("videoQueued") : L("imageAdded")),
+          message ||
+            (name === "generate_audio"
+              ? L("audioQueued")
+              : name === "generate_video"
+                ? L("videoQueued")
+                : L("imageAdded")),
           "ok"
         );
       }
@@ -4420,6 +4445,7 @@ export function createAiChatWidget(
     add_scraped_media: L("proposalAddImage"),
     generate_image: L("proposalGenImage"),
     generate_video: L("proposalGenVideo"),
+    generate_audio: L("proposalGenAudio"),
     upscale_image: L("proposalUpscale"),
     remove_background: L("proposalCutout"),
     outpaint_image: L("proposalOutpaint"),
