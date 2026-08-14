@@ -3097,33 +3097,55 @@ export function createAiChatWidget(
     }
   }
 
-  if (history.length) {
-    // Restore a prior conversation (survives refresh) — text only at first.
-    for (const m of history)
-      if (m.role === "assistant") addAssistantMessage(m.content);
-      else addMsg(log, m.role, m.content, m.attachments);
-  } else if (opts.greeting) {
-    addAssistantMessage(opts.greeting);
-  }
-  // A background job this thread started may still be running from BEFORE the
-  // refresh — put its live card back immediately, off the restored thread id,
-  // without waiting for the (optional, async) full thread fetch below.
-  reattachTrackedJobs(threadId);
-  // Persisted history is TEXT-ONLY (data widgets aren't stored in localStorage),
-  // so on refresh the charts/tables were lost. If we have the thread id + a
-  // loader, re-fetch the full thread and re-render WITH its widgets — matching
-  // reopen-from-history. Async + best-effort; the text restore above is the
-  // instant fallback.
-  if (threadId && opts.loadThread) {
-    const tid = threadId;
-    void opts
-      .loadThread(tid)
-      .then((items) => {
-        if (items.length) renderThreadItems(items);
-      })
-      .catch(() => {
-        /* keep the text-only restore */
-      });
+  /**
+   * Paint the opening view: a restored conversation, or the greeting.
+   *
+   * DEFINED HERE, CALLED AT THE END OF SETUP — and that is the whole point.
+   * Restoring runs the ordinary render path, and those renderers read widget
+   * state (`advanced`, and whatever a future card reaches for) declared with
+   * `let` further down this same scope. Running the restore inline, where it
+   * used to be, therefore read a binding in its temporal dead zone the moment a
+   * restored message carried a `[[navigate]]` directive: renderNavigate touched
+   * `advanced` ~700 lines before its declaration executed.
+   *
+   * The blast radius was the whole app, not the widget. The throw escaped the
+   * factory, React's error boundary caught it, and ui-admin rendered "Something
+   * went wrong" on EVERY route. Worse, the trigger was persisted: the offending
+   * transcript sat in localStorage, so the crash survived every reload and the
+   * only way out was clearing site data. Using the assistant broke the app.
+   *
+   * A render is not startup work. Do it once the state it renders against
+   * exists.
+   */
+  function paintOpeningView(): void {
+    if (history.length) {
+      // Restore a prior conversation (survives refresh) — text only at first.
+      for (const m of history)
+        if (m.role === "assistant") addAssistantMessage(m.content);
+        else addMsg(log, m.role, m.content, m.attachments);
+    } else if (opts.greeting) {
+      addAssistantMessage(opts.greeting);
+    }
+    // A background job this thread started may still be running from BEFORE the
+    // refresh — put its live card back immediately, off the restored thread id,
+    // without waiting for the (optional, async) full thread fetch below.
+    reattachTrackedJobs(threadId);
+    // Persisted history is TEXT-ONLY (data widgets aren't stored in
+    // localStorage), so on refresh the charts/tables were lost. If we have the
+    // thread id + a loader, re-fetch the full thread and re-render WITH its
+    // widgets — matching reopen-from-history. Async + best-effort; the text
+    // restore above is the instant fallback.
+    if (threadId && opts.loadThread) {
+      const tid = threadId;
+      void opts
+        .loadThread(tid)
+        .then((items) => {
+          if (items.length) renderThreadItems(items);
+        })
+        .catch(() => {
+          /* keep the text-only restore */
+        });
+    }
   }
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
@@ -6784,6 +6806,11 @@ export function createAiChatWidget(
         /* a missed refresh just means the old manual reload */
       });
   });
+
+  // Every `let` in this scope is now initialized, so the opening view can be
+  // painted against real state rather than a temporal dead zone. Keep this the
+  // LAST thing setup does.
+  paintOpeningView();
 
   return {
     open,
