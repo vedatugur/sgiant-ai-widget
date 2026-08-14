@@ -12,7 +12,14 @@
 
 /** Query keys each domain's data lives under (all account-scoped: `[key, accountId]`). */
 export const AI_DOMAIN_KEYS: Record<string, string[]> = {
-  creations: ["studio-creations", "studio-status"],
+  // `studio-creation` (singular) is the ONE-creation detail page, keyed
+  // `[key, accountId, creationId]`; React Query matches by PREFIX, so the
+  // `[key, accountId]` this file emits covers whichever creation is open.
+  // Without it, a render started from the chat side panel was invisible on the
+  // very page the client was watching until they reloaded by hand — the detail
+  // page polls only while it can SEE a queued render, and this invalidation is
+  // how it first learns there is one.
+  creations: ["studio-creations", "studio-creation", "studio-status"],
   brand: ["ai-brand-profile", "brand-versions", "studio-status"],
   assets: ["asset-media", "asset-folders", "asset-usage", "assets"],
   account: ["accounts-me", "account-products-activated", "account-settings"],

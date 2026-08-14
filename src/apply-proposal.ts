@@ -184,25 +184,13 @@ export async function applyProposal(
       ? t("aiAssistant.apply.sceneRejected", "Scene dropped ✓")
       : t("aiAssistant.apply.sceneApproved", "Scene approved ✓");
   }
-  if (name === "generate_audio") {
-    // Enqueued like a video: audio renders for minutes at the vendor, so the
-    // reply carries the GENERIC job id and the chat draws a live card.
-    const res = await api<{
-      job?: { id?: string };
-      message?: string;
-    }>(`/accounts/${accountId}/assets/generate-audio`, {
-      method: "POST",
-      body: JSON.stringify(args),
-    });
-    return {
-      message:
-        res?.message ??
-        t("aiAssistant.apply.audioQueued", {
-          defaultValue: "Generating — it lands in your library when it's done",
-        }),
-      ...(res?.job?.id ? { jobId: res.job.id } : {}),
-    };
-  }
+  // NOTE: a `generate_audio` branch lived here until 2026-08-14 (D1). The tool,
+  // the `/assets/generate-audio` route and the `higgsfield-audio` provider entry
+  // were all removed together — its only provider refuses audio by design, so
+  // every Apply created a billable job row for a render that could not run. The
+  // branch was left unreachable rather than deleted, which is worse than either
+  // state: it POSTed to a route that now 404s, so anything that DID reach it
+  // would report a network failure instead of "that tool no longer exists".
   if (name === "add_scraped_media") {
     // threadId + auto-save intent ride at the body root, the rest of the args
     // are the item itself.

@@ -927,9 +927,6 @@ export const WIDGET_LABELS = {
   // read the flow in Turkish instead of in the runner's English. An event whose
   // code we have no label for falls back to the server's own sentence — which is
   // why the set below can grow without the widget ever showing a blank line.
-  generatingAudio: "Generating audio…",
-  audioQueued: "Generating — it lands in your assets shortly",
-  proposalGenAudio: "Generate this audio? (renders in the background)",
   jobEvRenderStarted: "Render started",
   jobEvStillRendering: "Still rendering at the provider…",
   jobEvRenderReady: "Rendered and saved",
@@ -2192,11 +2189,11 @@ export function createAiChatWidget(
   // watches generation as a step (spinner → ✓/✗), the same as a read tool. For
   // video (an async render that takes minutes) poll the job so the chip resolves
   // on REAL completion instead of the chat going silent until the clip appears.
-  const MEDIA_GEN_TOOLS = new Set([
-    "generate_image",
-    "generate_video",
-    "generate_audio",
-  ]);
+  // `generate_audio` was here until 2026-08-14 (D1) — the tool, its route and
+  // the higgsfield-audio provider entry went together. A reel gets its sound
+  // from a video model that declares `generatesAudio` (see list_media_models),
+  // not from a separate lane.
+  const MEDIA_GEN_TOOLS = new Set(["generate_image", "generate_video"]);
   /**
    * Sleep, but tied to the widget's lifetime: resolves `true` after `ms`, or
    * `false` the moment `destroy()` aborts. Every polling loop waits through this
@@ -2224,17 +2221,12 @@ export function createAiChatWidget(
     name: string,
     args: Record<string, unknown>
   ): Promise<void> {
-    // ENQUEUED vs INLINE, not video vs image. Audio renders in the background
-    // exactly as video does, so it takes the same live card; only a still comes
-    // back inside the turn. Branching on "is it video" would have left audio
-    // with an image's copy and no card at all.
-    const enqueued = name === "generate_video" || name === "generate_audio";
+    // ENQUEUED vs INLINE. A video renders for minutes in the background and so
+    // takes a live card; a still comes back inside the turn. (Audio was the
+    // other enqueued lane and is gone — D1, 2026-08-14.)
+    const enqueued = name === "generate_video";
     const chip = addActivityChip(
-      name === "generate_audio"
-        ? L("generatingAudio")
-        : name === "generate_video"
-          ? L("renderingVideo")
-          : L("generatingImage"),
+      name === "generate_video" ? L("renderingVideo") : L("generatingImage"),
       "running"
     );
     scrollDown(true);
@@ -2255,22 +2247,13 @@ export function createAiChatWidget(
         //
         // The chip resolves immediately and hands over to the card, rather than
         // spinning alongside it saying the same thing in fewer words.
-        paintActivity(
-          chip,
-          message ||
-            (name === "generate_audio" ? L("audioQueued") : L("videoQueued")),
-          "ok"
-        );
+        paintActivity(chip, message || L("videoQueued"), "ok");
         trackJob(jobId, threadId);
       } else {
         paintActivity(
           chip,
           message ||
-            (name === "generate_audio"
-              ? L("audioQueued")
-              : name === "generate_video"
-                ? L("videoQueued")
-                : L("imageAdded")),
+            (name === "generate_video" ? L("videoQueued") : L("imageAdded")),
           "ok"
         );
       }
@@ -4467,7 +4450,6 @@ export function createAiChatWidget(
     add_scraped_media: L("proposalAddImage"),
     generate_image: L("proposalGenImage"),
     generate_video: L("proposalGenVideo"),
-    generate_audio: L("proposalGenAudio"),
     upscale_image: L("proposalUpscale"),
     remove_background: L("proposalCutout"),
     outpaint_image: L("proposalOutpaint"),
