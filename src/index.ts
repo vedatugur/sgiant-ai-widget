@@ -947,6 +947,12 @@ export const WIDGET_LABELS = {
   proposalReframe:
     "Reframe this video to a new shape? (uses your provider key)",
   proposalEditAsset: "Apply this change to your assets?",
+  // Storyboard proposal card — the plan is drawn as shots, not a paragraph.
+  sceneFromSources: "{{n}} of your photos",
+  sceneDrop: "Drop",
+  sceneKeep: "Keep",
+  scenePlanNote:
+    "{{n}} shots. Applying saves the plan — nothing renders and nothing is charged yet.",
   proposalSaveFile: "Save these changes to the file?",
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
@@ -5037,11 +5043,84 @@ export function createAiChatWidget(
         node: built.node,
       });
     }
-    const summary = proposalSummary(name, args);
-    if (summary) {
-      const s = el("div", `${PREFIX}-proposal-summary`);
-      s.textContent = summary;
-      wrap.appendChild(s);
+    /**
+     * A STORYBOARD IS A LIST OF SHOTS, so draw it as one.
+     *
+     * `proposalSummary` returns a STRING, so a four-scene reel arrived as a
+     * paragraph with the whole plan flattened into it — titles, prompts and
+     * keys run together, each prompt cut mid-word. It is the one decision that
+     * matters most (it is what the renders are bought from) and it was the
+     * least readable card in the widget.
+     *
+     * Dropped scenes are removed from what APPLY sends, so the client shapes
+     * the plan here rather than saving a shot they have already decided against
+     * and undoing it somewhere else. Everything about the plan therefore
+     * happens in the chat, which is where they are.
+     */
+    const scenePlan =
+      name === "save_storyboard" && Array.isArray(args.scenes)
+        ? (args.scenes as Array<Record<string, unknown>>)
+        : null;
+    /** Keys the client dropped on this card; `apply` filters them out. */
+    const droppedScenes = new Set<number>();
+    if (scenePlan?.length) {
+      const list = el("div", `${PREFIX}-scene-list`);
+      scenePlan.forEach((sc, i) => {
+        const row = el("div", `${PREFIX}-scene-row`);
+        const num = el("span", `${PREFIX}-scene-num`);
+        num.textContent = String(i + 1);
+        const body = el("div", `${PREFIX}-scene-body`);
+        const h = el("div", `${PREFIX}-scene-title`);
+        h.textContent =
+          (typeof sc.title === "string" && sc.title) ||
+          (typeof sc.key === "string" ? sc.key : `Shot ${i + 1}`);
+        const p = el("div", `${PREFIX}-scene-prompt`);
+        p.textContent = typeof sc.prompt === "string" ? sc.prompt : "";
+        const meta = el("div", `${PREFIX}-scene-meta`);
+        const srcs = Array.isArray(sc.sourceMediaIds)
+          ? sc.sourceMediaIds.length
+          : 0;
+        meta.textContent = [
+          typeof sc.key === "string" ? sc.key : "",
+          // Naming the source count is the honest signal that this shot is
+          // built on the client's OWN photo rather than invented.
+          srcs > 0 ? L("sceneFromSources").replace("{{n}}", String(srcs)) : "",
+          typeof sc.durationS === "number" ? `${sc.durationS}s` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        body.appendChild(h);
+        if (p.textContent) body.appendChild(p);
+        body.appendChild(meta);
+        const drop = el("button", `${PREFIX}-scene-drop`) as HTMLButtonElement;
+        drop.type = "button";
+        drop.textContent = L("sceneDrop");
+        drop.addEventListener("click", () => {
+          const off = droppedScenes.has(i);
+          if (off) droppedScenes.delete(i);
+          else droppedScenes.add(i);
+          row.classList.toggle(`${PREFIX}-scene-dropped`, !off);
+          drop.textContent = off ? L("sceneDrop") : L("sceneKeep");
+        });
+        row.appendChild(num);
+        row.appendChild(body);
+        row.appendChild(drop);
+        list.appendChild(row);
+      });
+      wrap.appendChild(list);
+      const note = el("div", `${PREFIX}-proposal-summary`);
+      note.textContent = L("scenePlanNote").replace(
+        "{{n}}",
+        String(scenePlan.length)
+      );
+      wrap.appendChild(note);
+    } else {
+      const summary = proposalSummary(name, args);
+      if (summary) {
+        const s = el("div", `${PREFIX}-proposal-summary`);
+        s.textContent = summary;
+        wrap.appendChild(s);
+      }
     }
     // Shown when Apply is REFUSED because a field the assistant marked required
     // was left blank. Applying anyway (which is what dropping the empty value
@@ -5070,6 +5149,12 @@ export function createAiChatWidget(
       // entire point of showing them the field. An emptied OPTIONAL field means
       // "you choose", so it is dropped rather than sent as "".
       const edited: Record<string, unknown> = { ...args };
+      // A shot dropped on the card is a shot that never reaches the plan. The
+      // alternative — save all four, then go and delete one — spends the
+      // client's attention on undoing something they already decided.
+      if (scenePlan && droppedScenes.size) {
+        edited.scenes = scenePlan.filter((_, i) => !droppedScenes.has(i));
+      }
       const missing: HTMLElement[] = [];
       for (const f of edits) {
         f.node.classList.remove(`${PREFIX}-field-invalid`);
@@ -7469,6 +7554,21 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-proposal-edit{display:flex;flex-direction:column;gap:4px}
 .${PREFIX}-proposal-edit-label{font-size:11.5px;font-weight:600;color:var(--aiw-text-2)}
 .${PREFIX}-proposal-summary{font-size:12.5px;color:var(--aiw-text-2);white-space:pre-wrap;line-height:1.45}
+/* Storyboard plan inside a confirm card: one row per shot, so the thing the
+   renders are bought from is READ rather than skimmed as a paragraph. */
+.${PREFIX}-scene-list{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+.${PREFIX}-scene-row{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border:1px solid var(--aiw-line);border-radius:10px;background:var(--aiw-bg-2)}
+.${PREFIX}-scene-row.${PREFIX}-scene-dropped{opacity:.45}
+.${PREFIX}-scene-row.${PREFIX}-scene-dropped .${PREFIX}-scene-title{text-decoration:line-through}
+.${PREFIX}-scene-num{flex:none;width:19px;height:19px;border-radius:50%;background:var(--aiw-accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.${PREFIX}-scene-body{min-width:0;flex:1}
+.${PREFIX}-scene-title{font-size:12.5px;font-weight:600;line-height:1.3}
+/* Two lines of the prompt: enough to judge the shot, not so much that four of
+   them bury the buttons under the fold. */
+.${PREFIX}-scene-prompt{font-size:11.5px;color:var(--aiw-text-2);line-height:1.4;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.${PREFIX}-scene-meta{font-size:10.5px;color:var(--aiw-text-3,var(--aiw-text-2));opacity:.8;margin-top:3px}
+.${PREFIX}-scene-drop{flex:none;align-self:center;background:none;border:1px solid var(--aiw-line);color:var(--aiw-text-2);border-radius:7px;padding:3px 8px;font-size:11px;cursor:pointer}
+.${PREFIX}-scene-drop:hover{background:var(--aiw-bg-3,var(--aiw-bg-2));color:var(--aiw-text-1)}
 .${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:#10b981;display:inline-flex;align-items:center;gap:6px}
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
