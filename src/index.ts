@@ -2102,7 +2102,7 @@ export function createAiChatWidget(
     }
   }
   // One process-step chip (spinner while running → check / cross when done).
-  // `agent` is the AI role that ran the step (Vega/Nova/…) — shown as a small
+  // `agent` is the AI role that ran the step (Vega/AYCA/…) — shown as a small
   // badge so the user sees WHICH agent did WHAT.
   // A model id → a compact label for the flow chip ("claude-sonnet-4-6" →
   // "sonnet-4-6"; "managed" stays). Keeps the badge short.
@@ -4891,7 +4891,7 @@ export function createAiChatWidget(
       read: () => string;
       node: HTMLElement;
     }> = [];
-    // Show the acting agent (e.g. Nova) so the user sees WHO proposed this.
+    // Show the acting agent (e.g. Vega) so the user sees WHO proposed this.
     if (agent) {
       const badge = el("span", `${PREFIX}-act-agent`);
       badge.textContent = agent;
