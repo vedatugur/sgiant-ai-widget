@@ -761,7 +761,18 @@ export interface AiChatWidgetOptions {
      *  is scoped to — which is not always the account the assistant reasoned
      *  about, and on a platform page is not an account at all. */
     opts?: { accountId?: string }
-  ) => Promise<string | void | { message?: string; jobId?: string }>;
+  ) => Promise<
+    | string
+    | void
+    | {
+        message?: string;
+        jobId?: string;
+        /** A still produced inside the turn — painted inline in the chat. */
+        mediaId?: string;
+        /** The storyboard scene the still attached to as its preview. */
+        sceneKey?: string;
+      }
+  >;
   /**
    * OBSERVE the human's answer to a `question` frame — analytics, or resolving
    * the same question on another surface (a critical one also pushed to
@@ -953,6 +964,13 @@ export const WIDGET_LABELS = {
   sceneKeep: "Keep",
   scenePlanNote:
     "{{n}} shots. Applying saves the plan — nothing renders and nothing is charged yet.",
+  proposalSaveStoryboard: "Save this scene plan?",
+  // A scene decision card — one shot, kept or dropped. Its summary must speak
+  // in the plan's words (scene number, keep/drop), never the raw args: the
+  // generic dump would ask the client to approve a UUID.
+  proposalUpdateScene: "Record your decision on this shot?",
+  sceneDecisionApproved: "Scene {{key}} — keep it",
+  sceneDecisionRejected: "Scene {{key}} — drop it",
   proposalSaveFile: "Save these changes to the file?",
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
@@ -2223,6 +2241,30 @@ export function createAiChatWidget(
       alive.signal.addEventListener("abort", onAbort, { once: true });
     });
   }
+  /**
+   * Paint a just-generated asset INTO the conversation. The apply already had
+   * the media id and dropped it, so a client who paid for a scene preview got
+   * a "✓" and had to walk to the Studio to see the picture they were being
+   * asked to approve. The result belongs where the decision is being made.
+   */
+  function buildInlineMedia(
+    mediaId: string,
+    kind?: "image" | "video"
+  ): HTMLElement {
+    const card = el("div", `${PREFIX}-inline-media`);
+    const box = el("div", `${PREFIX}-ui-media`);
+    box.dataset.mid = mediaId;
+    // No declared kind → `fillUiMedia` sniffs the resolved URL, the same
+    // fallback the live ui-tiles rely on for finished renders.
+    if (kind) box.dataset.kind = kind;
+    box.appendChild(el("span", `${PREFIX}-ui-media-ph`));
+    card.appendChild(box);
+    void fillUiMedia([mediaId], card);
+    return card;
+  }
+  function paintInlineResult(mediaId: string, kind: "image" | "video"): void {
+    log.appendChild(buildInlineMedia(mediaId, kind));
+  }
   async function applyMediaGen(
     name: string,
     args: Record<string, unknown>
@@ -2262,6 +2304,14 @@ export function createAiChatWidget(
             (name === "generate_video" ? L("videoQueued") : L("imageAdded")),
           "ok"
         );
+        // An inline generation came back WITH its asset — show it here, where
+        // the client is deciding, instead of sending them to the Studio to
+        // find out what they just paid for.
+        const mediaId =
+          res && typeof res === "object" && typeof res.mediaId === "string"
+            ? res.mediaId
+            : undefined;
+        if (mediaId) paintInlineResult(mediaId, "image");
       }
       scrollDown(true);
     } catch (err) {
@@ -2626,8 +2676,16 @@ export function createAiChatWidget(
         ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
         : "") +
       flow;
+    // Finished WITH the asset itself — the clip PLAYS here, where the client
+    // has been watching it render. Before this, the card's only affordance was
+    // a navigate button: every single render ejected the client to the Studio
+    // to see what they had just watched being made.
+    if (view.status === "done" && view.resultMediaId) {
+      card.appendChild(buildInlineMedia(view.resultMediaId));
+    }
     // Finished WITH something to look at — the notification's "here's the
-    // folder" without leaving the conversation.
+    // folder" without leaving the conversation. Kept as the secondary link
+    // under the inline media: the creation page is still where the piece lives.
     if (view.status === "done" && isSafeRelPath(view.resultPath)) {
       const path = view.resultPath;
       const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
@@ -4470,12 +4528,26 @@ export function createAiChatWidget(
     save_artifact_to_assets: L("proposalSaveArtifact"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
     edit_brand: L("proposalEditBrand"),
+    save_storyboard: L("proposalSaveStoryboard"),
+    update_scene: L("proposalUpdateScene"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
     name: string,
     args: Record<string, unknown>
   ): string {
+    // A scene decision, in the plan's own words. Without this branch the card
+    // falls to the generic arg dump and asks the client to approve
+    // `creationId: <uuid> / sceneKey: s2 / state: rejected` — a machine's
+    // sentence for the most human decision in the flow.
+    if (name === "update_scene") {
+      const key = typeof args.sceneKey === "string" ? args.sceneKey : "";
+      return L(
+        args.state === "rejected"
+          ? "sceneDecisionRejected"
+          : "sceneDecisionApproved"
+      ).replace("{{key}}", key);
+    }
     // Generic staff platform write (#72): show WHAT will be sent WHERE so the
     // admin approves the real action, not a vague "apply". For a write that
     // carries a text body (e.g. an issue comment) surface that text in full —
@@ -5065,6 +5137,10 @@ export function createAiChatWidget(
     const droppedScenes = new Set<number>();
     if (scenePlan?.length) {
       const list = el("div", `${PREFIX}-scene-list`);
+      /** Every source asset named by the plan — resolved in ONE batched call
+       *  after the rows are built, so the client approves a reel looking at
+       *  the actual photos each shot is built from, not at a count of them. */
+      const planSourceIds: string[] = [];
       scenePlan.forEach((sc, i) => {
         const row = el("div", `${PREFIX}-scene-row`);
         const num = el("span", `${PREFIX}-scene-num`);
@@ -5092,6 +5168,24 @@ export function createAiChatWidget(
         body.appendChild(h);
         if (p.textContent) body.appendChild(p);
         body.appendChild(meta);
+        // The photos themselves, not just their count. Kind is left to the URL
+        // sniffer — a source can be a still or footage.
+        const srcIds = Array.isArray(sc.sourceMediaIds)
+          ? (sc.sourceMediaIds as unknown[]).filter(
+              (x): x is string => typeof x === "string" && !!x
+            )
+          : [];
+        if (srcIds.length) {
+          const strip = el("div", `${PREFIX}-scene-srcs`);
+          for (const id of srcIds.slice(0, 4)) {
+            const box = el("div", `${PREFIX}-ui-media`);
+            box.dataset.mid = id;
+            box.appendChild(el("span", `${PREFIX}-ui-media-ph`));
+            strip.appendChild(box);
+            planSourceIds.push(id);
+          }
+          body.appendChild(strip);
+        }
         const drop = el("button", `${PREFIX}-scene-drop`) as HTMLButtonElement;
         drop.type = "button";
         drop.textContent = L("sceneDrop");
@@ -5108,6 +5202,9 @@ export function createAiChatWidget(
         list.appendChild(row);
       });
       wrap.appendChild(list);
+      if (planSourceIds.length) {
+        void fillUiMedia([...new Set(planSourceIds)], list);
+      }
       const note = el("div", `${PREFIX}-proposal-summary`);
       note.textContent = L("scenePlanNote").replace(
         "{{n}}",
@@ -5201,7 +5298,10 @@ export function createAiChatWidget(
       if (MEDIA_GEN_TOOLS.has(name)) {
         disposePreview?.();
         wrap.remove();
-        await applyMediaGen(name, args);
+        // `edited`, not `args`: the card's editable fields (the prompt above
+        // all) were collected into `edited` — applying the original args here
+        // rendered, and billed, a prompt the client had just corrected.
+        await applyMediaGen(name, edited);
         return;
       }
       try {
@@ -7501,6 +7601,11 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-ui-media:has(> audio.${PREFIX}-ui-media-el){aspect-ratio:auto;padding:8px}
 audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
+.${PREFIX}-inline-media{margin:6px 0 6px 0;max-width:220px}
+.${PREFIX}-scene-srcs{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.${PREFIX}-scene-srcs .${PREFIX}-ui-media{width:44px;height:44px;aspect-ratio:1;border-radius:6px;flex:none}
+.${PREFIX}-inline-media .${PREFIX}-ui-media{aspect-ratio:auto;min-height:80px}
+.${PREFIX}-inline-media .${PREFIX}-ui-media-el{height:auto;max-height:300px;object-fit:contain}
 .${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
 .${PREFIX}-ui-badge-ready{background:#16794a}
 .${PREFIX}-ui-badge-running{background:var(--aiw-accent);color:var(--aiw-accent-contrast)}

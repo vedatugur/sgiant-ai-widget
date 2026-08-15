@@ -64,13 +64,27 @@ export interface ApplyProposalCtx {
  * Apply one confirm-gated proposal. Returns the user-visible success message,
  * or `{ message, jobId }` for enqueue-and-return tools (ingest_site,
  * generate_report, generate_video) so the chat can show a LIVE job card and
- * resolve its process chip on real completion.
+ * resolve its process chip on real completion. An inline generation
+ * (generate_image) instead returns `{ message, mediaId, sceneKey? }` so the
+ * chat can PAINT the result where the client is — the 201 already carried it,
+ * and throwing it away meant a paid-for still was only visible by leaving the
+ * conversation.
  */
 export async function applyProposal(
   ctx: ApplyProposalCtx,
   name: string,
   args: Record<string, unknown>
-): Promise<string | { message?: string; jobId?: string }> {
+): Promise<
+  | string
+  | {
+      message?: string;
+      jobId?: string;
+      /** A still produced inside the turn — the chat shows it inline. */
+      mediaId?: string;
+      /** Set when the still attached to a storyboard scene as its preview. */
+      sceneKey?: string;
+    }
+> {
   const { api, accountId, t } = ctx;
   // On the staff plane a platform page has NO ambient account. Every
   // account-scoped apply below needs one — refuse honestly instead of firing
@@ -329,20 +343,41 @@ export async function applyProposal(
       : t("aiAssistant.apply.mediaOpDone", "Done — added to your assets ✓");
   }
   if (name === "generate_image") {
-    await api(`/accounts/${accountId}/assets/generate-image`, {
-      method: "POST",
-      body: JSON.stringify(args),
-    });
-    // Honest copy: a session-scoped generation is NOT in the library.
-    return args.threadId && !args.saveToLibrary
-      ? t(
-          "aiAssistant.apply.imageSessionArtifact",
-          "Image generated — in this chat's files (Save to keep it) ✓"
-        )
-      : t(
-          "aiAssistant.apply.imageGenerated",
-          "Image generated and added to your assets ✓"
-        );
+    // The 201 carries the asset and — when a sceneKey was named — whether it
+    // attached to that scene as its preview. `scenePreview` is absent for a
+    // standalone image, true/false for a scene-targeted one.
+    const res = await api<{ media?: { id?: string }; scenePreview?: boolean }>(
+      `/accounts/${accountId}/assets/generate-image`,
+      { method: "POST", body: JSON.stringify(args) }
+    );
+    const sceneKey = typeof args.sceneKey === "string" ? args.sceneKey : "";
+    // Honest copy: name the scene the still now previews; say plainly when the
+    // attach missed; and a session-scoped generation is NOT in the library.
+    const message =
+      res?.scenePreview && sceneKey
+        ? t("aiAssistant.apply.scenePreviewAttached", {
+            key: sceneKey,
+            defaultValue: `Still ready — attached to scene ${sceneKey} as its preview ✓`,
+          })
+        : res?.scenePreview === false && sceneKey
+          ? t("aiAssistant.apply.scenePreviewMissed", {
+              key: sceneKey,
+              defaultValue: `Image generated — but it couldn't be attached to scene ${sceneKey}`,
+            })
+          : args.threadId && !args.saveToLibrary
+            ? t(
+                "aiAssistant.apply.imageSessionArtifact",
+                "Image generated — in this chat's files (Save to keep it) ✓"
+              )
+            : t(
+                "aiAssistant.apply.imageGenerated",
+                "Image generated and added to your assets ✓"
+              );
+    return {
+      message,
+      ...(res?.media?.id ? { mediaId: res.media.id } : {}),
+      ...(res?.scenePreview && sceneKey ? { sceneKey } : {}),
+    };
   }
   if (name === "generate_video") {
     // Async: enqueues a render job. Return the job id so the chat can poll it
