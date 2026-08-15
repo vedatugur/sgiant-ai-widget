@@ -148,7 +148,16 @@ export type LoadedThreadItem =
       agent?: string;
       model?: string;
     }
-  | { kind: "creation"; name?: string; format?: string; payload: unknown };
+  | { kind: "creation"; name?: string; format?: string; payload: unknown }
+  /** An UNAPPLIED confirm-gated proposal (a saved scene plan above all) —
+   *  replayed as an Apply-CAPABLE card, because a plan the client has not
+   *  decided on yet must survive a reload as a decision, not as a memory. */
+  | {
+      kind: "proposal";
+      name: string;
+      args: Record<string, unknown>;
+      status: string;
+    };
 
 /** The message variant of a replay item (carries the branch metadata). */
 type ReplayMessageItem = Extract<
@@ -273,6 +282,9 @@ export function buildThreadReplay(payload: {
     kind: string;
     messageId?: string | null;
     payload?: unknown;
+    /** proposed | applied | discarded — what tells a replayed proposal card
+     *  whether Apply is still a live decision. */
+    status?: string;
     createdAt?: string;
   }>;
   activePath?: string[];
@@ -341,6 +353,24 @@ export function buildThreadReplay(payload: {
           status: p.status ?? "ok",
           agent: p.agent,
           model: p.model,
+        },
+      });
+    } else if (a.kind === "proposal") {
+      // An unapplied confirm-gated proposal (G3). Only a still-PROPOSED one
+      // replays — an applied plan lives on as the creation itself, and
+      // re-offering Apply for it would be a decision the client already made.
+      const p = (a.payload ?? {}) as {
+        name?: string;
+        args?: Record<string, unknown>;
+      };
+      if (!p.name || !p.args || a.status !== "proposed") continue;
+      items.push({
+        t: a.createdAt ?? "",
+        item: {
+          kind: "proposal",
+          name: p.name,
+          args: p.args,
+          status: a.status,
         },
       });
     } else if (a.kind === "creation") {
@@ -2903,6 +2933,11 @@ export function createAiChatWidget(
         addActivityChip(it.label, it.status, it.agent, it.model);
       } else if ("kind" in it && it.kind === "creation") {
         renderCreationCard(it.name, it.payload);
+      } else if ("kind" in it && it.kind === "proposal") {
+        // A plan the client never applied — replayed as a LIVE card, Apply
+        // and all. This is the difference between "the plan survived the
+        // reload" and "the plan is a memory in the transcript".
+        renderProposal(it.name, it.args);
       } else if ("role" in it) {
         // The message's first DOM node — the anchor an edit/regenerate rewrites
         // the transcript FROM (bubble, or attachment row before it).
@@ -4307,7 +4342,10 @@ export function createAiChatWidget(
   }
   async function loadPastThread(
     id: string,
-    overlay: HTMLElement
+    /** The History overlay when opened from the list; absent when a HOST
+     *  surface re-enters a conversation directly (a creation's "Continue in
+     *  chat"), which has no overlay to close and no list to write errors to. */
+    overlay?: HTMLElement
   ): Promise<void> {
     if (!opts.loadThread) return;
     try {
@@ -4320,10 +4358,15 @@ export function createAiChatWidget(
       syncBusy();
       saveState();
       void refreshArtifacts();
-      overlay.remove();
+      overlay?.remove();
     } catch {
-      overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
-        "Couldn't open that conversation.";
+      if (overlay) {
+        overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
+          "Couldn't open that conversation.";
+      } else {
+        // No overlay to report into — say it in the conversation itself.
+        addActivityChip(L("historyLoadFailed"), "error");
+      }
     }
   }
 
@@ -4335,8 +4378,19 @@ export function createAiChatWidget(
         prompt?: string;
         newChat?: boolean;
         advanced?: boolean;
+        /** Re-enter an EXISTING conversation — a creation's "Continue in
+         *  chat" lands the client back in the thread that planned it, with
+         *  the storyboard grounding intact. Wins over prompt/newChat: the
+         *  point is the conversation that already exists. */
+        threadId?: string;
       }>
     ).detail;
+    if (detail?.threadId) {
+      open();
+      void loadPastThread(detail.threadId);
+      if (detail?.advanced) openAdvanced();
+      return;
+    }
     open(detail?.prompt, detail?.newChat);
     // Let a host entry point (e.g. the AI Hub "Open assistant" button) jump
     // straight into advanced view.
