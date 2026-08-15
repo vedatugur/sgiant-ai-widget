@@ -767,6 +767,8 @@ export interface AiChatWidgetOptions {
     | {
         message?: string;
         jobId?: string;
+        /** A batch enqueue (render_scenes) — one live job card per entry. */
+        jobIds?: string[];
         /** A still produced inside the turn — painted inline in the chat. */
         mediaId?: string;
         /** The storyboard scene the still attached to as its preview. */
@@ -965,6 +967,9 @@ export const WIDGET_LABELS = {
   scenePlanNote:
     "{{n}} shots. Applying saves the plan — nothing renders and nothing is charged yet.",
   proposalSaveStoryboard: "Save this scene plan?",
+  proposalRenderScenes: "Render the shots? (spends credits)",
+  renderScenesAll: "Every shot still missing its clip",
+  renderScenesSome: "Shots: {{keys}}",
   // A scene decision card — one shot, kept or dropped. Its summary must speak
   // in the plan's words (scene number, keep/drop), never the raw args: the
   // generic dump would ask the client to approve a UUID.
@@ -4530,6 +4535,7 @@ export function createAiChatWidget(
     edit_brand: L("proposalEditBrand"),
     save_storyboard: L("proposalSaveStoryboard"),
     update_scene: L("proposalUpdateScene"),
+    render_scenes: L("proposalRenderScenes"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
@@ -4547,6 +4553,17 @@ export function createAiChatWidget(
           ? "sceneDecisionRejected"
           : "sceneDecisionApproved"
       ).replace("{{key}}", key);
+    }
+    if (name === "render_scenes") {
+      // Say WHICH shots one approval buys — never the raw creation UUID.
+      const keys = Array.isArray(args.sceneKeys)
+        ? (args.sceneKeys as unknown[]).filter(
+            (k): k is string => typeof k === "string" && !!k
+          )
+        : [];
+      return keys.length
+        ? L("renderScenesSome").replace("{{keys}}", keys.join(", "))
+        : L("renderScenesAll");
     }
     // Generic staff platform write (#72): show WHAT will be sent WHERE so the
     // admin approves the real action, not a vague "apply". For a write that
@@ -5329,6 +5346,13 @@ export function createAiChatWidget(
           `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
         wrap.appendChild(ok);
         if (jobId) trackJob(jobId, threadId);
+        // A batch enqueue (render_scenes): one live card per shot, so the
+        // client watches all of them stream from the single approval.
+        const jobIds =
+          res && typeof res === "object" && Array.isArray(res.jobIds)
+            ? res.jobIds
+            : [];
+        for (const id of jobIds) if (id !== jobId) trackJob(id, threadId);
       } catch {
         apply.disabled = false;
         apply.textContent = L("tryAgain");

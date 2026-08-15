@@ -79,6 +79,8 @@ export async function applyProposal(
   | {
       message?: string;
       jobId?: string;
+      /** A batch enqueue (render_scenes) — one live job card per entry. */
+      jobIds?: string[];
       /** A still produced inside the turn — the chat shows it inline. */
       mediaId?: string;
       /** Set when the still attached to a storyboard scene as its preview. */
@@ -182,6 +184,44 @@ export async function applyProposal(
           "Scene plan saved — new piece created ✓"
         )
       : t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
+  }
+  if (name === "render_scenes") {
+    // ONE decision, N renders. The route fans the saved plan out into
+    // per-scene jobs in a single transaction; every returned id buys a live
+    // card, so the client watches all the shots render without having
+    // approved anything more than once.
+    const creationId =
+      typeof args.creationId === "string" ? args.creationId : "";
+    if (!creationId) throw new Error("missing creation id");
+    const res = await api<{
+      jobs?: Array<{ id?: string; sceneKey?: string }>;
+      message?: string;
+    }>(`/accounts/${accountId}/studio/creations/${creationId}/scenes/render`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...(typeof args.provider === "string"
+          ? { provider: args.provider }
+          : {}),
+        ...(typeof args.model === "string" ? { model: args.model } : {}),
+        ...(Array.isArray(args.sceneKeys) ? { sceneKeys: args.sceneKeys } : {}),
+        ...(args.params && typeof args.params === "object"
+          ? { params: args.params }
+          : {}),
+        ...(typeof args.threadId === "string"
+          ? { threadId: args.threadId }
+          : {}),
+      }),
+    });
+    const jobIds = (res?.jobs ?? [])
+      .map((j) => j?.id)
+      .filter((id): id is string => typeof id === "string" && !!id);
+    return {
+      message: t("aiAssistant.apply.scenesRendering", {
+        count: jobIds.length,
+        defaultValue: `Rendering ${jobIds.length} shots — each lands on its scene, and the piece joins itself when the last one finishes ✓`,
+      }),
+      ...(jobIds.length ? { jobIds } : {}),
+    };
   }
   if (name === "update_scene") {
     const creationId =
