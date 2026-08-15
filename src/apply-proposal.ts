@@ -24,25 +24,7 @@ import {
   applyAssetSave,
   applyAssetShare,
   applyBrandProfile,
-  applyEditBrand,
 } from "@sgiant/assets";
-
-/** Paid Higgsfield ops on an existing asset. The tool name IS the `op` the
- *  media-op endpoint dispatches on, so this list is the only thing to touch
- *  when a new one is added. */
-export const MEDIA_OP_TOOLS: readonly string[] = [
-  "upscale_image",
-  "remove_background",
-  "outpaint_image",
-  "reframe_video",
-  "upscale_video",
-  "animate_image",
-  "restyle_video",
-  // The audio lane. Both operate ON a clip and return a clip, so they are
-  // ordinary media ops on this path — nothing about the apply changes.
-  "dub_video",
-  "voice_change",
-];
 
 export interface ApplyProposalCtx {
   /** The host's Clerk-authed JSON fetcher (already based at the right API origin). */
@@ -63,30 +45,15 @@ export interface ApplyProposalCtx {
 /**
  * Apply one confirm-gated proposal. Returns the user-visible success message,
  * or `{ message, jobId }` for enqueue-and-return tools (ingest_site,
- * generate_report, generate_video) so the chat can show a LIVE job card and
- * resolve its process chip on real completion. An inline generation
- * (generate_image) instead returns `{ message, mediaId, sceneKey? }` so the
- * chat can PAINT the result where the client is — the 201 already carried it,
- * and throwing it away meant a paid-for still was only visible by leaving the
- * conversation.
+ * generate_report) so the chat can show a LIVE job card and resolve its
+ * process chip on real completion. The media-generation and creation branches
+ * left with the Studio, 2026-08-15.
  */
 export async function applyProposal(
   ctx: ApplyProposalCtx,
   name: string,
   args: Record<string, unknown>
-): Promise<
-  | string
-  | {
-      message?: string;
-      jobId?: string;
-      /** A batch enqueue (render_scenes) — one live job card per entry. */
-      jobIds?: string[];
-      /** A still produced inside the turn — the chat shows it inline. */
-      mediaId?: string;
-      /** Set when the still attached to a storyboard scene as its preview. */
-      sceneKey?: string;
-    }
-> {
+): Promise<string | { message?: string; jobId?: string }> {
   const { api, accountId, t } = ctx;
   // On the staff plane a platform page has NO ambient account. Every
   // account-scoped apply below needs one — refuse honestly instead of firing
@@ -114,129 +81,6 @@ export async function applyProposal(
       ...(args.body !== undefined ? { body: JSON.stringify(args.body) } : {}),
     });
     return t("aiAssistant.apply.writeApplied", "Applied ✓");
-  }
-  if (name === "update_creation") {
-    const id = String(args.id ?? "");
-    if (!id) throw new Error("missing creation id");
-    await api(`/accounts/${accountId}/studio/creations/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        ...(typeof args.title === "string" ? { title: args.title } : {}),
-        ...(typeof args.status === "string" ? { status: args.status } : {}),
-      }),
-    });
-    return t("aiAssistant.apply.creationUpdated", "Creation updated ✓");
-  }
-  if (name === "render_creation") {
-    // Close the authoring loop: the AI assembled a complete media manifest; the
-    // server validates it (format, sanitiser, every mediaId must resolve) and
-    // saves it as a creation. When the AI passes an `id`, the same endpoint
-    // UPDATES that existing creation in place (refine, not dupe).
-    const targetId = typeof args.id === "string" ? args.id : undefined;
-    await api(`/accounts/${accountId}/studio/creations/import`, {
-      method: "POST",
-      body: JSON.stringify({
-        creation: {
-          ...(targetId ? { id: targetId } : {}),
-          name: typeof args.name === "string" ? args.name : undefined,
-          format: args.format,
-          payload: args.payload,
-        },
-        // The conversation that authored it. Without this the creation lands
-        // with no thread, and a later turn cannot find its storyboard.
-        ...(typeof args.threadId === "string"
-          ? { threadId: args.threadId }
-          : {}),
-      }),
-    });
-    return targetId
-      ? t("aiAssistant.apply.creationUpdated", "Creation updated ✓")
-      : t("aiAssistant.apply.creationAdded", "Creation added to your studio ✓");
-  }
-  if (name === "save_storyboard") {
-    // The scene PLAN. ONE endpoint for both cases: with a creationId it edits
-    // that piece's plan (matched on each scene's key, so rendered clips stay
-    // attached); without one it CREATES the piece and plans it in the same
-    // call — a storyboard precedes the media it plans, so it must not require
-    // a creation that only exists once media does.
-    const res = await api<{ creationId?: string; created?: boolean }>(
-      `/accounts/${accountId}/studio/storyboard`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          scenes: args.scenes,
-          ...(typeof args.creationId === "string"
-            ? { creationId: args.creationId }
-            : {}),
-          ...(typeof args.format === "string" ? { format: args.format } : {}),
-          ...(typeof args.title === "string" ? { title: args.title } : {}),
-          // The thread rides along so the server can claim this creation for
-          // the conversation — the next turn finds a storyboard BY thread.
-          ...(typeof args.threadId === "string"
-            ? { threadId: args.threadId }
-            : {}),
-        }),
-      }
-    );
-    return res?.created
-      ? t(
-          "aiAssistant.apply.storyboardCreated",
-          "Scene plan saved — new piece created ✓"
-        )
-      : t("aiAssistant.apply.storyboardSaved", "Scene plan saved ✓");
-  }
-  if (name === "render_scenes") {
-    // ONE decision, N renders. The route fans the saved plan out into
-    // per-scene jobs in a single transaction; every returned id buys a live
-    // card, so the client watches all the shots render without having
-    // approved anything more than once.
-    const creationId =
-      typeof args.creationId === "string" ? args.creationId : "";
-    if (!creationId) throw new Error("missing creation id");
-    const res = await api<{
-      jobs?: Array<{ id?: string; sceneKey?: string }>;
-      message?: string;
-    }>(`/accounts/${accountId}/studio/creations/${creationId}/scenes/render`, {
-      method: "POST",
-      body: JSON.stringify({
-        ...(typeof args.provider === "string"
-          ? { provider: args.provider }
-          : {}),
-        ...(typeof args.model === "string" ? { model: args.model } : {}),
-        ...(Array.isArray(args.sceneKeys) ? { sceneKeys: args.sceneKeys } : {}),
-        ...(args.params && typeof args.params === "object"
-          ? { params: args.params }
-          : {}),
-        ...(typeof args.threadId === "string"
-          ? { threadId: args.threadId }
-          : {}),
-      }),
-    });
-    const jobIds = (res?.jobs ?? [])
-      .map((j) => j?.id)
-      .filter((id): id is string => typeof id === "string" && !!id);
-    return {
-      message: t("aiAssistant.apply.scenesRendering", {
-        count: jobIds.length,
-        defaultValue: `Rendering ${jobIds.length} shots — each lands on its scene, and the piece joins itself when the last one finishes ✓`,
-      }),
-      ...(jobIds.length ? { jobIds } : {}),
-    };
-  }
-  if (name === "update_scene") {
-    const creationId =
-      typeof args.creationId === "string" ? args.creationId : "";
-    const key = typeof args.sceneKey === "string" ? args.sceneKey : "";
-    if (!creationId || !key) throw new Error("missing scene");
-    await api(
-      `/accounts/${accountId}/studio/creations/${creationId}/scenes/${encodeURIComponent(
-        key
-      )}`,
-      { method: "PATCH", body: JSON.stringify({ state: args.state }) }
-    );
-    return args.state === "rejected"
-      ? t("aiAssistant.apply.sceneRejected", "Scene dropped ✓")
-      : t("aiAssistant.apply.sceneApproved", "Scene approved ✓");
   }
   // NOTE: a `generate_audio` branch lived here until 2026-08-14 (D1). The tool,
   // the `/assets/generate-audio` route and the `higgsfield-audio` provider entry
@@ -353,87 +197,6 @@ export async function applyProposal(
   // Paid vendor ops on an existing asset (upscale / cut-out / expand /
   // reframe). One endpoint for all of them — the tool name is the op — so a
   // new op needs no change here.
-  if (MEDIA_OP_TOOLS.includes(name)) {
-    const res = await api<{
-      job?: { id?: string };
-      message?: string;
-    }>(`/accounts/${accountId}/assets/media-op`, {
-      method: "POST",
-      body: JSON.stringify({ ...args, op: name }),
-    });
-    // A LONG op (restyle, animate, video upscale) answers 202 with a job: it is
-    // running, not finished. Saying "Done ✓" there would be a plain untruth —
-    // and it is the difference between a live card the user can watch and a
-    // silence they have to guess about. Short ops still answer with the asset.
-    if (res?.job?.id)
-      return {
-        message:
-          res.message ??
-          t("aiAssistant.apply.mediaOpQueued", {
-            defaultValue:
-              "Running now — it lands in your library when it's done",
-          }),
-        jobId: res.job.id,
-      };
-    return args.threadId && !args.saveToLibrary
-      ? t(
-          "aiAssistant.apply.mediaOpSessionArtifact",
-          "Done — in this chat's files (Save to keep it) ✓"
-        )
-      : t("aiAssistant.apply.mediaOpDone", "Done — added to your assets ✓");
-  }
-  if (name === "generate_image") {
-    // The 201 carries the asset and — when a sceneKey was named — whether it
-    // attached to that scene as its preview. `scenePreview` is absent for a
-    // standalone image, true/false for a scene-targeted one.
-    const res = await api<{ media?: { id?: string }; scenePreview?: boolean }>(
-      `/accounts/${accountId}/assets/generate-image`,
-      { method: "POST", body: JSON.stringify(args) }
-    );
-    const sceneKey = typeof args.sceneKey === "string" ? args.sceneKey : "";
-    // Honest copy: name the scene the still now previews; say plainly when the
-    // attach missed; and a session-scoped generation is NOT in the library.
-    const message =
-      res?.scenePreview && sceneKey
-        ? t("aiAssistant.apply.scenePreviewAttached", {
-            key: sceneKey,
-            defaultValue: `Still ready — attached to scene ${sceneKey} as its preview ✓`,
-          })
-        : res?.scenePreview === false && sceneKey
-          ? t("aiAssistant.apply.scenePreviewMissed", {
-              key: sceneKey,
-              defaultValue: `Image generated — but it couldn't be attached to scene ${sceneKey}`,
-            })
-          : args.threadId && !args.saveToLibrary
-            ? t(
-                "aiAssistant.apply.imageSessionArtifact",
-                "Image generated — in this chat's files (Save to keep it) ✓"
-              )
-            : t(
-                "aiAssistant.apply.imageGenerated",
-                "Image generated and added to your assets ✓"
-              );
-    return {
-      message,
-      ...(res?.media?.id ? { mediaId: res.media.id } : {}),
-      ...(res?.scenePreview && sceneKey ? { sceneKey } : {}),
-    };
-  }
-  if (name === "generate_video") {
-    // Async: enqueues a render job. Return the job id so the chat can poll it
-    // and resolve the "Rendering video…" chip on real completion.
-    const res = await api<{ job?: { id?: string } } | undefined>(
-      `/accounts/${accountId}/assets/generate-video`,
-      { method: "POST", body: JSON.stringify(args) }
-    );
-    return {
-      message: t(
-        "aiAssistant.apply.videoRendering",
-        "Your video is rendering — it'll appear in your assets shortly ✓"
-      ),
-      jobId: res?.job?.id,
-    };
-  }
   if (name === "organize_assets")
     return applyAssetOrganize(api, accountId, args);
   if (name === "manage_folders") return applyFolderManage(api, accountId, args);
@@ -444,6 +207,5 @@ export async function applyProposal(
   if (name === "create_asset") return applyAssetCreate(api, accountId, args);
   if (name === "update_brand_profile")
     return applyBrandProfile(api, accountId, args);
-  if (name === "edit_brand") return applyEditBrand(api, accountId, args);
   throw new Error(`Unsupported action: ${name}`);
 }

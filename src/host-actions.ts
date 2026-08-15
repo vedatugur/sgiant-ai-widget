@@ -174,7 +174,6 @@ export function makePageContext(
 export const STANDARD_ACTION_PATHS: Record<string, string> = {
   "open-dashboards": "/dashboards",
   "open-dashboard-builder": "/dashboards/new/edit",
-  "open-studio": "/studio",
   "open-billing": "/billing",
   "open-assets": "/assets",
 };
@@ -183,7 +182,6 @@ export const STANDARD_ACTION_PATHS: Record<string, string> = {
 const STANDARD_ACTION_DONE: Record<string, string> = {
   "open-dashboards": "Opened dashboards",
   "open-dashboard-builder": "Opened the dashboard builder",
-  "open-studio": "Opened Studio",
   "open-billing": "Opened billing",
   "open-assets": "Opened assets",
 };
@@ -214,7 +212,6 @@ export function isNavigationAction(name: string): boolean {
 const STANDARD_ACTION_ALREADY: Record<string, string> = {
   "open-dashboards": "Already on dashboards",
   "open-dashboard-builder": "Already in the dashboard builder",
-  "open-studio": "Already in Studio",
   "open-billing": "Already on billing",
   "open-assets": "Already on assets",
 };

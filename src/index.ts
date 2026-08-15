@@ -99,11 +99,7 @@ export {
 // THE single tool-name → endpoint mapping for applying a confirm-gated write
 // proposal — every host (org/admin widget adapters, the full-page panel
 // client) calls this instead of keeping its own copy.
-export {
-  applyProposal,
-  MEDIA_OP_TOOLS,
-  type ApplyProposalCtx,
-} from "./apply-proposal";
+export { applyProposal, type ApplyProposalCtx } from "./apply-proposal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 
@@ -147,18 +143,7 @@ export type LoadedThreadItem =
       status: string;
       agent?: string;
       model?: string;
-    }
-  | { kind: "creation"; name?: string; format?: string; payload: unknown }
-  /** An UNAPPLIED confirm-gated proposal (a saved scene plan above all) —
-   *  replayed as an Apply-CAPABLE card, because a plan the client has not
-   *  decided on yet must survive a reload as a decision, not as a memory. */
-  | {
-      kind: "proposal";
-      name: string;
-      args: Record<string, unknown>;
-      status: string;
     };
-
 /** The message variant of a replay item (carries the branch metadata). */
 type ReplayMessageItem = Extract<
   LoadedThreadItem,
@@ -355,43 +340,9 @@ export function buildThreadReplay(payload: {
           model: p.model,
         },
       });
-    } else if (a.kind === "proposal") {
-      // An unapplied confirm-gated proposal (G3). Only a still-PROPOSED one
-      // replays — an applied plan lives on as the creation itself, and
-      // re-offering Apply for it would be a decision the client already made.
-      const p = (a.payload ?? {}) as {
-        name?: string;
-        args?: Record<string, unknown>;
-      };
-      if (!p.name || !p.args || a.status !== "proposed") continue;
-      items.push({
-        t: a.createdAt ?? "",
-        item: {
-          kind: "proposal",
-          name: p.name,
-          args: p.args,
-          status: a.status,
-        },
-      });
-    } else if (a.kind === "creation") {
-      // A creation the AI designed in this thread — replays the .sgiant preview
-      // (clickable → lightbox) on reopen, so past reels/posts stay visible.
-      const p = (a.payload ?? {}) as {
-        name?: string;
-        format?: string;
-        payload?: unknown;
-      };
-      if (!p.payload) continue;
-      items.push({
-        t: a.createdAt ?? "",
-        item: {
-          kind: "creation",
-          name: p.name,
-          format: p.format,
-          payload: p.payload,
-        },
-      });
     }
+    // `creation` / `proposal` artifact kinds left with the Studio (2026-08-15);
+    // rows from old threads are simply not replayed.
   }
   items.sort((x, y) => x.t.localeCompare(y.t));
   return items.map((s) => s.item);
@@ -753,16 +704,7 @@ export interface AiChatWidgetOptions {
     spec: unknown,
     rows: unknown,
     comparisonRows?: unknown
-  ) => (() => void) | void;
-  /**
-   * Render a `.sgiant` creation PAYLOAD as a live visual preview — the SAME
-   * SgiantPlayer the Studio uses. Wired by the in-app host (mounts a React
-   * root); used in the `render_creation` proposal card so the user SEES the
-   * design before they apply it. Returns a disposer (unmount). Omit on external
-   * embeds (no React) → the card falls back to its text summary.
-   */
-  renderCreation?: (host: HTMLElement, payload: unknown) => (() => void) | void;
-  /**
+  ) => (() => void) | void; /**
    * Resolve library media ids to URLs the browser can load, for `[[ui:…]]`
    * cards. Called ONCE per card with every id it needs; return a map (omit an
    * id that can't be resolved — the tile then says so rather than sitting
@@ -791,20 +733,7 @@ export interface AiChatWidgetOptions {
      *  is scoped to — which is not always the account the assistant reasoned
      *  about, and on a platform page is not an account at all. */
     opts?: { accountId?: string }
-  ) => Promise<
-    | string
-    | void
-    | {
-        message?: string;
-        jobId?: string;
-        /** A batch enqueue (render_scenes) — one live job card per entry. */
-        jobIds?: string[];
-        /** A still produced inside the turn — painted inline in the chat. */
-        mediaId?: string;
-        /** The storyboard scene the still attached to as its preview. */
-        sceneKey?: string;
-      }
-  >;
+  ) => Promise<string | void | { message?: string; jobId?: string }>;
   /**
    * OBSERVE the human's answer to a `question` frame — analytics, or resolving
    * the same question on another surface (a critical one also pushed to
@@ -2252,7 +2181,6 @@ export function createAiChatWidget(
   // the higgsfield-audio provider entry went together. A reel gets its sound
   // from a video model that declares `generatesAudio` (see list_media_models),
   // not from a separate lane.
-  const MEDIA_GEN_TOOLS = new Set(["generate_image", "generate_video"]);
   /**
    * Sleep, but tied to the widget's lifetime: resolves `true` after `ms`, or
    * `false` the moment `destroy()` aborts. Every polling loop waits through this
@@ -2275,88 +2203,6 @@ export function createAiChatWidget(
       };
       alive.signal.addEventListener("abort", onAbort, { once: true });
     });
-  }
-  /**
-   * Paint a just-generated asset INTO the conversation. The apply already had
-   * the media id and dropped it, so a client who paid for a scene preview got
-   * a "✓" and had to walk to the Studio to see the picture they were being
-   * asked to approve. The result belongs where the decision is being made.
-   */
-  function buildInlineMedia(
-    mediaId: string,
-    kind?: "image" | "video"
-  ): HTMLElement {
-    const card = el("div", `${PREFIX}-inline-media`);
-    const box = el("div", `${PREFIX}-ui-media`);
-    box.dataset.mid = mediaId;
-    // No declared kind → `fillUiMedia` sniffs the resolved URL, the same
-    // fallback the live ui-tiles rely on for finished renders.
-    if (kind) box.dataset.kind = kind;
-    box.appendChild(el("span", `${PREFIX}-ui-media-ph`));
-    card.appendChild(box);
-    void fillUiMedia([mediaId], card);
-    return card;
-  }
-  function paintInlineResult(mediaId: string, kind: "image" | "video"): void {
-    log.appendChild(buildInlineMedia(mediaId, kind));
-  }
-  async function applyMediaGen(
-    name: string,
-    args: Record<string, unknown>
-  ): Promise<void> {
-    // ENQUEUED vs INLINE. A video renders for minutes in the background and so
-    // takes a live card; a still comes back inside the turn. (Audio was the
-    // other enqueued lane and is gone — D1, 2026-08-14.)
-    const enqueued = name === "generate_video";
-    const chip = addActivityChip(
-      name === "generate_video" ? L("renderingVideo") : L("generatingImage"),
-      "running"
-    );
-    scrollDown(true);
-    try {
-      // Carry the originating thread so the api can persist this generation onto
-      // the conversation (history replay + admin viewer), not just the live chip.
-      const genArgs = threadId ? { ...args, threadId } : args;
-      const res = await opts.onApplyProposal!(name, genArgs);
-      const jobId = res && typeof res === "object" ? res.jobId : undefined;
-      const message = typeof res === "string" ? res : res?.message;
-      if (enqueued && jobId && opts.getJob) {
-        // A render gets the SAME live card every other enqueued job gets, and
-        // for the same reasons: the private poll this replaced had no flow feed,
-        // no Cancel, and did not survive a refresh — so a client who reloaded
-        // saw a finished conversation with no sign a clip was being made. It
-        // also polled the render-detail endpoint by an id that is now the
-        // generic job's, which simply 404s.
-        //
-        // The chip resolves immediately and hands over to the card, rather than
-        // spinning alongside it saying the same thing in fewer words.
-        paintActivity(chip, message || L("videoQueued"), "ok");
-        trackJob(jobId, threadId);
-      } else {
-        paintActivity(
-          chip,
-          message ||
-            (name === "generate_video" ? L("videoQueued") : L("imageAdded")),
-          "ok"
-        );
-        // An inline generation came back WITH its asset — show it here, where
-        // the client is deciding, instead of sending them to the Studio to
-        // find out what they just paid for.
-        const mediaId =
-          res && typeof res === "object" && typeof res.mediaId === "string"
-            ? res.mediaId
-            : undefined;
-        if (mediaId) paintInlineResult(mediaId, "image");
-      }
-      scrollDown(true);
-    } catch (err) {
-      paintActivity(
-        chip,
-        (err as Error)?.message || L("generationFailed"),
-        "error"
-      );
-      scrollDown(true);
-    }
   }
   // ── Live background jobs ────────────────────────────────────────────────────
   //
@@ -2711,16 +2557,8 @@ export function createAiChatWidget(
         ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
         : "") +
       flow;
-    // Finished WITH the asset itself — the clip PLAYS here, where the client
-    // has been watching it render. Before this, the card's only affordance was
-    // a navigate button: every single render ejected the client to the Studio
-    // to see what they had just watched being made.
-    if (view.status === "done" && view.resultMediaId) {
-      card.appendChild(buildInlineMedia(view.resultMediaId));
-    }
     // Finished WITH something to look at — the notification's "here's the
-    // folder" without leaving the conversation. Kept as the secondary link
-    // under the inline media: the creation page is still where the piece lives.
+    // folder" without leaving the conversation.
     if (view.status === "done" && isSafeRelPath(view.resultPath)) {
       const path = view.resultPath;
       const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
@@ -2931,13 +2769,6 @@ export function createAiChatWidget(
       } else if ("kind" in it && it.kind === "activity") {
         // Replay a persisted process step (static, already finished) + its agent.
         addActivityChip(it.label, it.status, it.agent, it.model);
-      } else if ("kind" in it && it.kind === "creation") {
-        renderCreationCard(it.name, it.payload);
-      } else if ("kind" in it && it.kind === "proposal") {
-        // A plan the client never applied — replayed as a LIVE card, Apply
-        // and all. This is the difference between "the plan survived the
-        // reload" and "the plan is a memory in the transcript".
-        renderProposal(it.name, it.args);
       } else if ("role" in it) {
         // The message's first DOM node — the anchor an edit/regenerate rewrites
         // the transcript FROM (bubble, or attachment row before it).
@@ -4568,18 +4399,7 @@ export function createAiChatWidget(
 
   // Confirm cards for write-tool proposals (the AI proposes; the USER applies).
   const PROPOSAL_LABELS: Record<string, string> = {
-    update_creation: L("proposalUpdateCreation"),
-    render_creation: L("proposalAddCreation"),
     add_scraped_media: L("proposalAddImage"),
-    generate_image: L("proposalGenImage"),
-    generate_video: L("proposalGenVideo"),
-    upscale_image: L("proposalUpscale"),
-    remove_background: L("proposalCutout"),
-    outpaint_image: L("proposalOutpaint"),
-    reframe_video: L("proposalReframe"),
-    upscale_video: L("proposalUpscaleVideo"),
-    animate_image: L("proposalAnimateImage"),
-    restyle_video: L("proposalRestyleVideo"),
     organize_assets: L("proposalEditAsset"),
     edit_asset: L("proposalSaveFile"),
     create_asset: L("proposalCreateFile"),
@@ -4587,38 +4407,12 @@ export function createAiChatWidget(
     save_artifact_to_assets: L("proposalSaveArtifact"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
     edit_brand: L("proposalEditBrand"),
-    save_storyboard: L("proposalSaveStoryboard"),
-    update_scene: L("proposalUpdateScene"),
-    render_scenes: L("proposalRenderScenes"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
     name: string,
     args: Record<string, unknown>
   ): string {
-    // A scene decision, in the plan's own words. Without this branch the card
-    // falls to the generic arg dump and asks the client to approve
-    // `creationId: <uuid> / sceneKey: s2 / state: rejected` — a machine's
-    // sentence for the most human decision in the flow.
-    if (name === "update_scene") {
-      const key = typeof args.sceneKey === "string" ? args.sceneKey : "";
-      return L(
-        args.state === "rejected"
-          ? "sceneDecisionRejected"
-          : "sceneDecisionApproved"
-      ).replace("{{key}}", key);
-    }
-    if (name === "render_scenes") {
-      // Say WHICH shots one approval buys — never the raw creation UUID.
-      const keys = Array.isArray(args.sceneKeys)
-        ? (args.sceneKeys as unknown[]).filter(
-            (k): k is string => typeof k === "string" && !!k
-          )
-        : [];
-      return keys.length
-        ? L("renderScenesSome").replace("{{keys}}", keys.join(", "))
-        : L("renderScenesAll");
-    }
     // Generic staff platform write (#72): show WHAT will be sent WHERE so the
     // admin approves the real action, not a vague "apply". For a write that
     // carries a text body (e.g. an issue comment) surface that text in full —
@@ -5108,20 +4902,7 @@ export function createAiChatWidget(
       document.createTextNode(PROPOSAL_LABELS[name] ?? "Apply this change?")
     );
     wrap.appendChild(title);
-    // Live `.sgiant` preview — for render_creation, show the actual design (the
-    // host mounts SgiantPlayer) so the user sees what they're about to add.
     let disposePreview: (() => void) | undefined;
-    if (
-      name === "render_creation" &&
-      opts.renderCreation &&
-      args.payload &&
-      typeof args.payload === "object"
-    ) {
-      const previewHost = el("div", `${PREFIX}-creation-preview`);
-      wrap.appendChild(previewHost);
-      const d = opts.renderCreation(previewHost, args.payload);
-      if (d) disposePreview = d;
-    }
     // Scraped-media import — PREVIEW the actual image/video (loaded from its
     // source URL, NOT saved) before the user clicks Apply.
     if (name === "add_scraped_media") {
@@ -5186,109 +4967,11 @@ export function createAiChatWidget(
         node: built.node,
       });
     }
-    /**
-     * A STORYBOARD IS A LIST OF SHOTS, so draw it as one.
-     *
-     * `proposalSummary` returns a STRING, so a four-scene reel arrived as a
-     * paragraph with the whole plan flattened into it — titles, prompts and
-     * keys run together, each prompt cut mid-word. It is the one decision that
-     * matters most (it is what the renders are bought from) and it was the
-     * least readable card in the widget.
-     *
-     * Dropped scenes are removed from what APPLY sends, so the client shapes
-     * the plan here rather than saving a shot they have already decided against
-     * and undoing it somewhere else. Everything about the plan therefore
-     * happens in the chat, which is where they are.
-     */
-    const scenePlan =
-      name === "save_storyboard" && Array.isArray(args.scenes)
-        ? (args.scenes as Array<Record<string, unknown>>)
-        : null;
-    /** Keys the client dropped on this card; `apply` filters them out. */
-    const droppedScenes = new Set<number>();
-    if (scenePlan?.length) {
-      const list = el("div", `${PREFIX}-scene-list`);
-      /** Every source asset named by the plan — resolved in ONE batched call
-       *  after the rows are built, so the client approves a reel looking at
-       *  the actual photos each shot is built from, not at a count of them. */
-      const planSourceIds: string[] = [];
-      scenePlan.forEach((sc, i) => {
-        const row = el("div", `${PREFIX}-scene-row`);
-        const num = el("span", `${PREFIX}-scene-num`);
-        num.textContent = String(i + 1);
-        const body = el("div", `${PREFIX}-scene-body`);
-        const h = el("div", `${PREFIX}-scene-title`);
-        h.textContent =
-          (typeof sc.title === "string" && sc.title) ||
-          (typeof sc.key === "string" ? sc.key : `Shot ${i + 1}`);
-        const p = el("div", `${PREFIX}-scene-prompt`);
-        p.textContent = typeof sc.prompt === "string" ? sc.prompt : "";
-        const meta = el("div", `${PREFIX}-scene-meta`);
-        const srcs = Array.isArray(sc.sourceMediaIds)
-          ? sc.sourceMediaIds.length
-          : 0;
-        meta.textContent = [
-          typeof sc.key === "string" ? sc.key : "",
-          // Naming the source count is the honest signal that this shot is
-          // built on the client's OWN photo rather than invented.
-          srcs > 0 ? L("sceneFromSources").replace("{{n}}", String(srcs)) : "",
-          typeof sc.durationS === "number" ? `${sc.durationS}s` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        body.appendChild(h);
-        if (p.textContent) body.appendChild(p);
-        body.appendChild(meta);
-        // The photos themselves, not just their count. Kind is left to the URL
-        // sniffer — a source can be a still or footage.
-        const srcIds = Array.isArray(sc.sourceMediaIds)
-          ? (sc.sourceMediaIds as unknown[]).filter(
-              (x): x is string => typeof x === "string" && !!x
-            )
-          : [];
-        if (srcIds.length) {
-          const strip = el("div", `${PREFIX}-scene-srcs`);
-          for (const id of srcIds.slice(0, 4)) {
-            const box = el("div", `${PREFIX}-ui-media`);
-            box.dataset.mid = id;
-            box.appendChild(el("span", `${PREFIX}-ui-media-ph`));
-            strip.appendChild(box);
-            planSourceIds.push(id);
-          }
-          body.appendChild(strip);
-        }
-        const drop = el("button", `${PREFIX}-scene-drop`) as HTMLButtonElement;
-        drop.type = "button";
-        drop.textContent = L("sceneDrop");
-        drop.addEventListener("click", () => {
-          const off = droppedScenes.has(i);
-          if (off) droppedScenes.delete(i);
-          else droppedScenes.add(i);
-          row.classList.toggle(`${PREFIX}-scene-dropped`, !off);
-          drop.textContent = off ? L("sceneDrop") : L("sceneKeep");
-        });
-        row.appendChild(num);
-        row.appendChild(body);
-        row.appendChild(drop);
-        list.appendChild(row);
-      });
-      wrap.appendChild(list);
-      if (planSourceIds.length) {
-        void fillUiMedia([...new Set(planSourceIds)], list);
-      }
-      const note = el("div", `${PREFIX}-proposal-summary`);
-      note.textContent = L("scenePlanNote").replace(
-        "{{n}}",
-        String(scenePlan.length)
-      );
-      wrap.appendChild(note);
-    } else {
-      const summary = proposalSummary(name, args);
-      if (summary) {
-        const s = el("div", `${PREFIX}-proposal-summary`);
-        s.textContent = summary;
-        wrap.appendChild(s);
-      }
+    const summary = proposalSummary(name, args);
+    if (summary) {
+      const s = el("div", `${PREFIX}-proposal-summary`);
+      s.textContent = summary;
+      wrap.appendChild(s);
     }
     // Shown when Apply is REFUSED because a field the assistant marked required
     // was left blank. Applying anyway (which is what dropping the empty value
@@ -5317,12 +5000,6 @@ export function createAiChatWidget(
       // entire point of showing them the field. An emptied OPTIONAL field means
       // "you choose", so it is dropped rather than sent as "".
       const edited: Record<string, unknown> = { ...args };
-      // A shot dropped on the card is a shot that never reaches the plan. The
-      // alternative — save all four, then go and delete one — spends the
-      // client's attention on undoing something they already decided.
-      if (scenePlan && droppedScenes.size) {
-        edited.scenes = scenePlan.filter((_, i) => !droppedScenes.has(i));
-      }
       const missing: HTMLElement[] = [];
       for (const f of edits) {
         f.node.classList.remove(`${PREFIX}-field-invalid`);
@@ -5364,17 +5041,6 @@ export function createAiChatWidget(
       editErr.style.display = "none";
       apply.disabled = true;
       apply.textContent = L("applying");
-      // Media generation gets a live process chip (running → ✓/✗, video polled)
-      // instead of a static "done" line — swap the card for the chip on click.
-      if (MEDIA_GEN_TOOLS.has(name)) {
-        disposePreview?.();
-        wrap.remove();
-        // `edited`, not `args`: the card's editable fields (the prompt above
-        // all) were collected into `edited` — applying the original args here
-        // rendered, and billed, a prompt the client had just corrected.
-        await applyMediaGen(name, edited);
-        return;
-      }
       try {
         // Carry the originating thread on EVERY apply — session-scoped asset
         // writes (scraped imports, generations) use it to keep chat debris
@@ -5400,13 +5066,6 @@ export function createAiChatWidget(
           `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
         wrap.appendChild(ok);
         if (jobId) trackJob(jobId, threadId);
-        // A batch enqueue (render_scenes): one live card per shot, so the
-        // client watches all of them stream from the single approval.
-        const jobIds =
-          res && typeof res === "object" && Array.isArray(res.jobIds)
-            ? res.jobIds
-            : [];
-        for (const id of jobIds) if (id !== jobId) trackJob(id, threadId);
       } catch {
         apply.disabled = false;
         apply.textContent = L("tryAgain");
@@ -6653,22 +6312,6 @@ export function createAiChatWidget(
   /** Replay a past creation in the log — the host mounts the real .sgiant
    *  preview (clickable → lightbox), so reopening a thread shows the reels/posts
    *  the AI designed, not just the text around them. */
-  function renderCreationCard(
-    name: string | undefined,
-    payload: unknown
-  ): void {
-    if (!opts.renderCreation || !payload || typeof payload !== "object") return;
-    const card = el("div", `${PREFIX}-proposal ${PREFIX}-creation-card`);
-    const title = el("div", `${PREFIX}-proposal-title`);
-    title.textContent = name ? `Creation · ${name}` : "Creation";
-    card.appendChild(title);
-    const host = el("div", `${PREFIX}-creation-preview`);
-    card.appendChild(host);
-    log.appendChild(card);
-    const dispose = opts.renderCreation(host, payload);
-    if (dispose) richDisposers.push(dispose);
-    scrollDown(true);
-  }
 
   function renderServerWidget(
     spec: { title?: string; chartType?: string } | undefined,
@@ -7679,11 +7322,6 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-ui-media:has(> audio.${PREFIX}-ui-media-el){aspect-ratio:auto;padding:8px}
 audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
-.${PREFIX}-inline-media{margin:6px 0 6px 0;max-width:220px}
-.${PREFIX}-scene-srcs{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
-.${PREFIX}-scene-srcs .${PREFIX}-ui-media{width:44px;height:44px;aspect-ratio:1;border-radius:6px;flex:none}
-.${PREFIX}-inline-media .${PREFIX}-ui-media{aspect-ratio:auto;min-height:80px}
-.${PREFIX}-inline-media .${PREFIX}-ui-media-el{height:auto;max-height:300px;object-fit:contain}
 .${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
 .${PREFIX}-ui-badge-ready{background:#16794a}
 .${PREFIX}-ui-badge-running{background:var(--aiw-accent);color:var(--aiw-accent-contrast)}
@@ -7739,19 +7377,8 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-proposal-summary{font-size:12.5px;color:var(--aiw-text-2);white-space:pre-wrap;line-height:1.45}
 /* Storyboard plan inside a confirm card: one row per shot, so the thing the
    renders are bought from is READ rather than skimmed as a paragraph. */
-.${PREFIX}-scene-list{display:flex;flex-direction:column;gap:8px;margin:6px 0}
-.${PREFIX}-scene-row{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border:1px solid var(--aiw-line);border-radius:10px;background:var(--aiw-bg-2)}
-.${PREFIX}-scene-row.${PREFIX}-scene-dropped{opacity:.45}
-.${PREFIX}-scene-row.${PREFIX}-scene-dropped .${PREFIX}-scene-title{text-decoration:line-through}
-.${PREFIX}-scene-num{flex:none;width:19px;height:19px;border-radius:50%;background:var(--aiw-accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
-.${PREFIX}-scene-body{min-width:0;flex:1}
-.${PREFIX}-scene-title{font-size:12.5px;font-weight:600;line-height:1.3}
 /* Two lines of the prompt: enough to judge the shot, not so much that four of
    them bury the buttons under the fold. */
-.${PREFIX}-scene-prompt{font-size:11.5px;color:var(--aiw-text-2);line-height:1.4;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.${PREFIX}-scene-meta{font-size:10.5px;color:var(--aiw-text-3,var(--aiw-text-2));opacity:.8;margin-top:3px}
-.${PREFIX}-scene-drop{flex:none;align-self:center;background:none;border:1px solid var(--aiw-line);color:var(--aiw-text-2);border-radius:7px;padding:3px 8px;font-size:11px;cursor:pointer}
-.${PREFIX}-scene-drop:hover{background:var(--aiw-bg-3,var(--aiw-bg-2));color:var(--aiw-text-1)}
 .${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:#10b981;display:inline-flex;align-items:center;gap:6px}
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
