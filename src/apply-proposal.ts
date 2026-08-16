@@ -193,9 +193,8 @@ export async function applyProposal(
       ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
     };
   }
-  // Paid vendor ops on an existing asset (upscale / cut-out / expand /
-  // reframe). One endpoint for all of them — the tool name is the op — so a
-  // new op needs no change here.
+  // Asset-library housekeeping tools — each maps straight onto its own
+  // library endpoint.
   if (name === "organize_assets")
     return applyAssetOrganize(api, accountId, args);
   if (name === "manage_folders") return applyFolderManage(api, accountId, args);

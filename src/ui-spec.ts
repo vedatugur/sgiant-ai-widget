@@ -113,15 +113,15 @@ export interface UiSpec {
 }
 
 /**
- * The shape tiles are drawn in — the SAME format keywords the rest of the
- * platform uses for generated media (`MediaGenInput.aspect`), so a card that
- * previews a 9:16 reel and the model that renders it are talking about one
- * thing.
+ * The shape tiles are drawn in — named format keywords ("square" 1:1,
+ * "portrait" 4:5, "story" 9:16, "landscape" 4:3, "wide" 16:9) rather than
+ * raw ratios, so the model describes a card in the same vocabulary the
+ * social platforms use.
  *
- * Card-level rather than per-tile: the scenes of a reel share a format, and a
- * strip whose tiles were each a different shape would read as a mistake. It
- * matters because a portrait reel previewed in square tiles shows the client a
- * crop of what they are approving, and they approve it anyway.
+ * Card-level rather than per-tile: the items of one card share a format, and
+ * a strip whose tiles were each a different shape would read as a mistake. It
+ * matters because portrait media previewed in square tiles shows the client a
+ * crop of what they are looking at, and they approve it anyway.
  */
 export type UiAspect = "square" | "portrait" | "story" | "landscape" | "wide";
 

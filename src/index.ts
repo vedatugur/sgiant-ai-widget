@@ -349,7 +349,7 @@ export function buildThreadReplay(payload: {
  * A background job as the CHAT needs to draw it.
  *
  * Deliberately the GENERIC job shape (`JobSummary`'s status + done-of-total
- * progress) rather than anything a site import or a video render owns: the
+ * progress) rather than anything a site import or a report build owns: the
  * platform is heading toward AI-defined job types, and a card that switched on
  * the type would have to be rewritten for each of them. The host maps the API's
  * `JobRecord` onto this — which is a structural widening, not a translation.
@@ -382,11 +382,11 @@ export interface WidgetJobView {
   resultPath?: string | null;
   /**
    * The MEDIA this job produced, by id — what lets a `[[ui:…]]` tile that was
-   * drawn empty ("Scene 2, rendering") fill itself in with the actual clip the
-   * moment the render lands, instead of asking the client to go and look.
+   * drawn empty fill itself in with the actual asset the moment the job
+   * finishes, instead of asking the client to go and look.
    *
    * An id and not a URL, for the same reason everywhere else in this file: ours
-   * are signed and short-lived, and a render runs for minutes. The widget
+   * are signed and short-lived, and a job runs for minutes. The widget
    * resolves it through the same batched `resolveMediaUrls` every other tile
    * uses. Omitted by every job type that produces no single asset.
    */
@@ -774,7 +774,7 @@ export interface AiChatWidgetOptions {
    * runner actually stops. Omit to hide the button.
    */
   cancelJob?: (jobId: string) => Promise<void>;
-  /** This thread's UNSAVED session artifacts (media generated/scraped in the
+  /** This thread's UNSAVED session artifacts (media scraped or imported in the
    *  conversation, hidden from the library until saved) — drives the artifact
    *  strip above the composer. Omit on hosts without asset storage. */
   listSessionArtifacts?: (threadId: string) => Promise<
@@ -848,20 +848,10 @@ export const WIDGET_LABELS = {
   removeAttachment: "Remove {file}",
   attachFile: "Attach a file",
   attachFileHint: "Attach images, PDFs or documents",
-  // Media-generation activity chips
-  renderingVideo: "Rendering video…",
-  generatingImage: "Generating image…",
-  stillRendering: "Still rendering — it'll appear in your assets shortly",
-  videoReady: "Video ready — added to your assets",
-  videoFailed: "Video render failed",
-  videoQueued: "Video queued — rendering in the background",
-  imageAdded: "Image added to your assets",
-  generationFailed: "Generation failed",
   // Live background-job card — a job the chat started and now watches. The
   // titles are per known TYPE, with a neutral fallback for a type this build
   // has never heard of (an AI-defined job type must still render).
   jobTitleSiteIngest: "Importing the website",
-  jobTitleMedia: "Rendering media",
   jobTitleCoder: "Working on a code task",
   jobTitleReport: "Generating the report",
   jobTitleFallback: "Background job",
@@ -2379,7 +2369,6 @@ export function createAiChatWidget(
   function jobTitle(view: WidgetJobView): string {
     if (view.title) return view.title;
     if (view.type === "site_ingest") return L("jobTitleSiteIngest");
-    if (view.type === "media") return L("jobTitleMedia");
     if (view.type === "coder") return L("jobTitleCoder");
     if (view.type === "report") return L("jobTitleReport");
     return L("jobTitleFallback");
@@ -3225,7 +3214,7 @@ export function createAiChatWidget(
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
 
-  // Session artifacts — media generated/scraped in THIS conversation, hidden
+  // Session artifacts — media scraped or imported in THIS conversation, hidden
   // from the library until saved. A slim chip strip above the composer with a
   // per-item Save action (promotes via save_artifact_to_assets). Best-effort:
   // hosts without the lister never see it.
@@ -4948,9 +4937,9 @@ export function createAiChatWidget(
       apply.textContent = L("applying");
       try {
         // Carry the originating thread on EVERY apply — session-scoped asset
-        // writes (scraped imports, generations) use it to keep chat debris
-        // out of the library until explicitly saved. Tools that don't care
-        // simply ignore the extra key.
+        // writes (scraped imports) use it to keep chat debris out of the
+        // library until explicitly saved. Tools that don't care simply
+        // ignore the extra key.
         const res = await opts.onApplyProposal!(
           name,
           threadId ? { ...edited, threadId } : edited,
