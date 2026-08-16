@@ -1,12 +1,12 @@
 /**
  * Embeddable AI chatbox widget — framework-agnostic vanilla DOM, so it drops
- * into the analytics app, the marketing studio, OR an external site with one
- * call. It POSTs to a streaming chat endpoint and renders the reply live.
+ * into the analytics app OR an external site with one call. It POSTs to a
+ * streaming chat endpoint and renders the reply live.
  *
  * Transport is intentionally tolerant: it reads a streamed body and accepts
  * BOTH shapes this platform emits —
- *   - analytics SSE  : `data: {"type":"assistant_delta","text":"…"}`
- *   - studio NDJSON  : `{"d":"…"}`
+ *   - SSE    : `data: {"type":"assistant_delta","text":"…"}`
+ *   - NDJSON : `{"d":"…"}`
  * plus `{type:"thread",threadId}` / `{type:"error"}` / `{type:"done"}`.
  *
  * SECURITY: the widget never holds long-lived secrets — the host supplies a
@@ -105,9 +105,8 @@ import { renderMarkdown } from "./markdown";
 
 /**
  * The window event that opens the assistant panel. Owned here, next to the
- * `openEventName` option that consumes it, so a nav link, a Studio toolbar
- * button and the widget host can never drift onto different strings and
- * silently produce a dead button.
+ * `openEventName` option that consumes it, so a nav link and the widget host
+ * can never drift onto different strings and silently produce a dead button.
  */
 export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 
@@ -341,8 +340,6 @@ export function buildThreadReplay(payload: {
         },
       });
     }
-    // `creation` / `proposal` artifact kinds left with the Studio (2026-08-15);
-    // rows from old threads are simply not replayed.
   }
   items.sort((x, y) => x.t.localeCompare(y.t));
   return items.map((s) => s.item);
@@ -719,7 +716,7 @@ export interface AiChatWidgetOptions {
    */
   resolveMediaUrls?: (ids: string[]) => Promise<Record<string, string>>;
   /**
-   * Apply a confirm-gated WRITE-tool proposal (e.g. `update_creation`). The AI
+   * Apply a confirm-gated WRITE-tool proposal (e.g. `organize_assets`). The AI
    * never mutates directly — it proposes; the widget shows a card and THIS runs
    * only when the user clicks Apply (a Clerk-authed action in the host). Map the
    * tool name → a real, access-checked API call. Return a string to show as the
@@ -746,17 +743,6 @@ export interface AiChatWidgetOptions {
     optionIds?: string[];
     text?: string;
   }) => void;
-  /**
-   * Poll one async media render job (video). `generate_video` enqueues a job and
-   * returns immediately; the widget polls this so the "Rendering video…" process
-   * chip resolves on REAL completion (the clip is actually ready) instead of the
-   * chat going silent until it appears in the library. Omit → the chip falls back
-   * to a "queued" state right after Apply.
-   */
-  getMediaJob?: (jobId: string) => Promise<{
-    status: "queued" | "processing" | "done" | "error" | "cancelled";
-    error?: string | null;
-  }>;
   /**
    * Read ONE background job, GENERICALLY. Wire it to the type-agnostic job read
    * (`GET /accounts/:id/jobs/:jobId`) — never to a per-type endpoint, because
@@ -854,7 +840,6 @@ export const WIDGET_LABELS = {
   // Status bar (Copilot role + credits)
   roleTalk: "Talk",
   roleAnalytics: "Analytics",
-  roleCreation: "Creation",
   creditsSuffix: " credits",
   // Composer
   askAnything: "Ask {name} anything…",
@@ -899,42 +884,12 @@ export const WIDGET_LABELS = {
   // read the flow in Turkish instead of in the runner's English. An event whose
   // code we have no label for falls back to the server's own sentence — which is
   // why the set below can grow without the widget ever showing a blank line.
-  jobEvRenderStarted: "Render started",
-  jobEvStillRendering: "Still rendering at the provider…",
-  jobEvRenderReady: "Rendered and saved",
-  jobEvRenderFailed: "The render failed",
   jobEvCancelled: "Cancelled",
   jobEvCancelledBeforeStart: "Cancelled before it started",
   jobEvInterrupted: "Interrupted by a restart — not retried automatically",
   // Proposal confirm cards
-  proposalUpdateCreation: "Apply this update to the creation?",
-  proposalAddCreation: "Add this creation to your studio?",
   proposalAddImage: "Add this image to your assets?",
-  proposalGenImage: "Generate this image? (uses your provider key)",
-  proposalGenVideo: "Generate this video? (renders in the background)",
-  proposalUpscale: "Upscale this image? (uses your provider key)",
-  proposalCutout: "Remove this image's background?",
-  proposalOutpaint:
-    "Expand this image beyond its frame? (uses your provider key)",
-  proposalReframe:
-    "Reframe this video to a new shape? (uses your provider key)",
   proposalEditAsset: "Apply this change to your assets?",
-  // Storyboard proposal card — the plan is drawn as shots, not a paragraph.
-  sceneFromSources: "{{n}} of your photos",
-  sceneDrop: "Drop",
-  sceneKeep: "Keep",
-  scenePlanNote:
-    "{{n}} shots. Applying saves the plan — nothing renders and nothing is charged yet.",
-  proposalSaveStoryboard: "Save this scene plan?",
-  proposalRenderScenes: "Render the shots? (spends credits)",
-  renderScenesAll: "Every shot still missing its clip",
-  renderScenesSome: "Shots: {{keys}}",
-  // A scene decision card — one shot, kept or dropped. Its summary must speak
-  // in the plan's words (scene number, keep/drop), never the raw args: the
-  // generic dump would ask the client to approve a UUID.
-  proposalUpdateScene: "Record your decision on this shot?",
-  sceneDecisionApproved: "Scene {{key}} — keep it",
-  sceneDecisionRejected: "Scene {{key}} — drop it",
   proposalSaveFile: "Save these changes to the file?",
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
@@ -981,9 +936,6 @@ export const WIDGET_LABELS = {
   reportFailed: "Couldn't report — try later",
   // Signup CTA (anonymous surfaces)
   signupCta: "Sign up — it's free to start",
-  proposalUpscaleVideo: "Upscale this video?",
-  proposalAnimateImage: "Animate this image with that clip's motion?",
-  proposalRestyleVideo: "Restyle this video?",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
   // OTHER status the model writes is shown in its own words, untranslated,
   // because only these four are ours to name.
@@ -2172,15 +2124,6 @@ export function createAiChatWidget(
     liveActivity.set(callId, chip);
     scrollDown();
   }
-  // Media generation (image/video) is applied AFTER the turn, so the server never
-  // emits an `activity` frame for it. Drive a live process chip here so the user
-  // watches generation as a step (spinner → ✓/✗), the same as a read tool. For
-  // video (an async render that takes minutes) poll the job so the chip resolves
-  // on REAL completion instead of the chat going silent until the clip appears.
-  // `generate_audio` was here until 2026-08-14 (D1) — the tool, its route and
-  // the higgsfield-audio provider entry went together. A reel gets its sound
-  // from a video model that declares `generatesAudio` (see list_media_models),
-  // not from a separate lane.
   /**
    * Sleep, but tied to the widget's lifetime: resolves `true` after `ms`, or
    * `false` the moment `destroy()` aborts. Every polling loop waits through this
@@ -2737,8 +2680,8 @@ export function createAiChatWidget(
     items: LoadedThreadItem[],
     tid: string | undefined = threadId
   ): void {
-    // A `question` card is NOT persisted server-side (unlike a creation or a
-    // data widget), and this re-render runs at the END of every turn — which is
+    // A `question` card is NOT persisted server-side (unlike a data widget),
+    // and this re-render runs at the END of every turn — which is
     // exactly when `ask_user` has just drawn one. Rebuilding purely from the
     // transcript would erase the decision the assistant is waiting on: the card
     // flashed in and vanished a moment later, so ask_user was dead on the
@@ -3147,16 +3090,14 @@ export function createAiChatWidget(
   const ROLE_NAMES: Record<string, string> = {
     talk: L("roleTalk"),
     analytics: L("roleAnalytics"),
-    creation: L("roleCreation"),
   };
   // Which role an in-app ACTION belongs to, so the badge reflects the live task.
   const ACTION_ROLE: Record<string, string> = {
     "open-dashboards": "analytics",
     "open-dashboard-builder": "analytics",
-    "open-studio": "creation",
   };
   // Which role a live TOOL (activity step) belongs to — flips the badge from
-  // Talk to Analytics/Creation as the agent actually queries data / builds.
+  // Talk to Analytics as the agent actually queries data / builds.
   const TOOL_ROLE: Record<string, string> = {
     run_stats_query: "analytics",
     render_chart: "analytics",
@@ -4174,8 +4115,8 @@ export function createAiChatWidget(
   async function loadPastThread(
     id: string,
     /** The History overlay when opened from the list; absent when a HOST
-     *  surface re-enters a conversation directly (a creation's "Continue in
-     *  chat"), which has no overlay to close and no list to write errors to. */
+     *  surface re-enters a conversation directly, which has no overlay to
+     *  close and no list to write errors to. */
     overlay?: HTMLElement
   ): Promise<void> {
     if (!opts.loadThread) return;
@@ -4209,10 +4150,9 @@ export function createAiChatWidget(
         prompt?: string;
         newChat?: boolean;
         advanced?: boolean;
-        /** Re-enter an EXISTING conversation — a creation's "Continue in
-         *  chat" lands the client back in the thread that planned it, with
-         *  the storyboard grounding intact. Wins over prompt/newChat: the
-         *  point is the conversation that already exists. */
+        /** Re-enter an EXISTING conversation — a host surface lands the
+         *  client back in the thread it came from. Wins over prompt/newChat:
+         *  the point is the conversation that already exists. */
         threadId?: string;
       }>
     ).detail;
@@ -4460,40 +4400,6 @@ export function createAiChatWidget(
         }
       }
       return parts.join(" · ");
-    }
-    if (name === "generate_image" || name === "generate_video") {
-      // No media to preview — it doesn't exist until Apply. Show the prompt +
-      // aspect (+ duration for video) so the user knows what they're generating.
-      const parts: string[] = [];
-      if (typeof args.prompt === "string")
-        parts.push(`“${String(args.prompt).slice(0, 140)}”`);
-      if (typeof args.aspect === "string") parts.push(String(args.aspect));
-      if (name === "generate_video" && typeof args.durationS === "number")
-        parts.push(`${args.durationS}s`);
-      return parts.join(" · ");
-    }
-    if (name === "render_creation") {
-      const parts: string[] = [];
-      if (typeof args.name === "string") parts.push(`“${args.name}”`);
-      if (typeof args.format === "string") parts.push(String(args.format));
-      // A creation is a media MANIFEST — count its items. A legacy scene
-      // payload (an older proposal replayed from a transcript) still summarises
-      // by scene count so old cards don't go blank.
-      const payload = args.payload as
-        | { items?: unknown[]; scenes?: unknown[] }
-        | undefined;
-      const items = Array.isArray(payload?.items) ? payload.items.length : 0;
-      const scenes = Array.isArray(payload?.scenes) ? payload.scenes.length : 0;
-      if (items) parts.push(`${items} item${items === 1 ? "" : "s"}`);
-      else if (scenes) parts.push(`${scenes} scene${scenes === 1 ? "" : "s"}`);
-      return parts.join(" · ");
-    }
-    if (name === "update_creation") {
-      const parts: string[] = [];
-      if (typeof args.title === "string") parts.push(`Title → “${args.title}”`);
-      if (typeof args.status === "string")
-        parts.push(`Status → ${args.status}`);
-      return parts.join("\n");
     }
     if (name === "organize_assets") {
       const ids = Array.isArray(args.mediaIds) ? args.mediaIds.length : 0;
@@ -4871,10 +4777,9 @@ export function createAiChatWidget(
   ): void {
     // `-pending` marks a card that is still AWAITING the user, and it is what
     // the end-of-turn reload checks. The reload used to look for `-proposal`,
-    // which also matches a replayed creation card and an already-applied card
-    // (the success path empties the node but keeps the class) — so one Apply,
-    // or any creation in the thread, disabled the reload for the whole session
-    // and with it every edit/regenerate/branch control.
+    // which also matches an already-applied card (the success path empties the
+    // node but keeps the class) — so one Apply disabled the reload for the
+    // whole session and with it every edit/regenerate/branch control.
     const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
     const title = el("div", `${PREFIX}-proposal-title`);
     /**
@@ -5632,8 +5537,8 @@ export function createAiChatWidget(
     // fork turn (edit / regenerate) also needs this to land the rewritten tree.
     // Only when branching is wired (setActiveLeaf) — otherwise the streamed view
     // is already canonical and reloading would just cause a needless re-render.
-    // A live, un-applied WRITE PROPOSAL card is ephemeral — it is NOT persisted
-    // as a thread artifact (unlike a creation), so a full renderThreadItems()
+    // A live, un-applied WRITE PROPOSAL card is ephemeral — it is NOT
+    // persisted as a thread artifact, so a full renderThreadItems()
     // reload (which does `log.innerHTML = ""`) would silently WIPE it: the
     // agent proposes, the card flashes in, the end-of-turn reload deletes it,
     // and the admin never gets to click Apply. When a proposal card is on
@@ -6200,10 +6105,9 @@ export function createAiChatWidget(
   /**
    * Wrap a tile row in paging: one visible at a time, arrows and dots overlaid.
    *
-   * Overlaid rather than stacked beneath, for the reason the Studio player
-   * learned the hard way — controls that are flex siblings steal height from the
-   * media, so a square scene renders visibly smaller than the space it was
-   * given and reads as a lesser thing than it is.
+   * Overlaid rather than stacked beneath — controls that are flex siblings
+   * steal height from the media, so a square tile renders visibly smaller
+   * than the space it was given and reads as a lesser thing than it is.
    */
   function buildUiCarousel(items: HTMLElement, count: number): HTMLElement {
     const wrap = el("div", `${PREFIX}-ui-carousel`);
@@ -6309,10 +6213,6 @@ export function createAiChatWidget(
 
   /** Map an analytics render_chart frame (spec + StatsQueryRow[]) to an inline
    *  widget. kpi → a stat; everything else → a table of the returned rows. */
-  /** Replay a past creation in the log — the host mounts the real .sgiant
-   *  preview (clickable → lightbox), so reopening a thread shows the reels/posts
-   *  the AI designed, not just the text around them. */
-
   function renderServerWidget(
     spec: { title?: string; chartType?: string } | undefined,
     rows: unknown,
@@ -6539,8 +6439,8 @@ export function createAiChatWidget(
   }
 
   function renderAction(spec: ActionSpec): void {
-    // Reflect the acting capability in the status badge (e.g. open-dashboards →
-    // Analytics, open-studio → Creation); plain navigation stays Talk.
+    // Reflect the acting capability in the status badge (e.g. open-dashboards
+    // → Analytics); plain navigation stays Talk.
     if (ACTION_ROLE[spec.name]) setRole(ACTION_ROLE[spec.name]);
     const wrap = el("div", `${PREFIX}-nav`);
     // State-changing UI control (fill / click) is ALWAYS confirm-gated: force a
@@ -6550,8 +6450,8 @@ export function createAiChatWidget(
     if (isOperateAction(spec.name) && !spec.confirm) {
       spec = { ...spec, confirm: operateConfirmText(spec) };
     }
-    // Auto-navigate: a confirm-LESS action is pure navigation (open-studio,
-    // open-dashboards, …) — run it immediately. Anything with `confirm` (changes
+    // Auto-navigate: a confirm-LESS action is pure navigation
+    // (open-dashboards, …) — run it immediately. Anything with `confirm` (changes
     // state / costs credits) ALWAYS asks, even in auto mode. Advanced mode
     // auto-runs pure navigation unconditionally (it only moves the iframe).
     if (
@@ -7347,7 +7247,6 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-preview-dots i:nth-child(3){background:#28c840}
 .${PREFIX}-preview-title{font-size:12px;font-weight:600;color:var(--aiw-muted)}
 .${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:var(--aiw-surface)}
-.${PREFIX}-creation-preview{display:flex;justify-content:center;border-radius:12px;overflow:hidden}
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2)}
 .${PREFIX}-proposal-media-holder{position:relative}
 .${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:var(--aiw-accent-contrast);font-size:11px;font-weight:600}

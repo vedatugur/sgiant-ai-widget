@@ -28,7 +28,7 @@ export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
  */
 export interface PageManifestEntry {
   /** Language-/account-neutral path the model uses to navigate (e.g. "/network",
-   *  or an org suffix like "/studio"). */
+   *  or an org suffix like "/assets"). */
   path: string;
   /** Human title shown to the user / used by the model. */
   title: string;
@@ -37,7 +37,7 @@ export interface PageManifestEntry {
   /** Key sections/areas on the page (so Copilot can describe its structure). */
   sections?: string[];
   /** Allow-listed action name(s) that open/operate this page, when the host
-   *  prefers a named action over a raw path (e.g. org's "open-studio"). */
+   *  prefers a named action over a raw path (e.g. org's "open-dashboards"). */
   action?: string;
   /** A few page-aware shortcut questions surfaced as clickable chips in the
    *  assistant widget while the conversation is empty — the smart "where do I
@@ -88,12 +88,12 @@ function normalizePath(path: string): string {
  * Find the manifest entry that best describes the current path — the entry
  * whose `path` is the longest suffix of the (normalized) current path.
  *
- * A segment written as `:name` matches ANY one segment, so a detail page can be
- * declared once ("/studio/creations/:creationId") instead of being
- * undescribable. Without this a concrete `/studio/creations/<uuid>` matched
- * nothing at all — not even the list page above it, since the uuid is a further
- * segment and the comparison was a plain suffix test — so the assistant silently
- * lost all knowledge of which page the user was standing on.
+ * A segment written as `:name` matches ANY one segment, so a detail page can
+ * be declared once ("/reports/:reportId") instead of being undescribable.
+ * Without this a concrete `/reports/<uuid>` matched nothing at all — not even
+ * the list page above it, since the uuid is a further segment and the
+ * comparison was a plain suffix test — so the assistant silently lost all
+ * knowledge of which page the user was standing on.
  *
  * Matching is done per SEGMENT rather than by string, because a suffix test
  * cannot tell a parameter from a literal. The longest match still wins, which

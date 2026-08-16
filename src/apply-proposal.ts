@@ -46,8 +46,7 @@ export interface ApplyProposalCtx {
  * Apply one confirm-gated proposal. Returns the user-visible success message,
  * or `{ message, jobId }` for enqueue-and-return tools (ingest_site,
  * generate_report) so the chat can show a LIVE job card and resolve its
- * process chip on real completion. The media-generation and creation branches
- * left with the Studio, 2026-08-15.
+ * process chip on real completion.
  */
 export async function applyProposal(
   ctx: ApplyProposalCtx,

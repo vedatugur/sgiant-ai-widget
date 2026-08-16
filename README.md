@@ -2,8 +2,8 @@
 
 Framework-agnostic embeddable AI chatbox. One call mounts a floating chat bubble
 
-- streaming panel into any page — the analytics app, the marketing studio, or an
-  external customer site.
+- streaming panel into any page — the analytics app, or an external customer
+  site.
 
 ```ts
 import { createAiChatWidget } from "@sgiant/ai-widget";
@@ -85,8 +85,8 @@ lightweight chart lib.
 POSTs `{ accountId, threadId, content }` and reads a streamed body, tolerating
 both shapes the platform emits:
 
-- analytics SSE — `data: {"type":"assistant_delta","text":"…"}`
-- studio NDJSON — `{"d":"…"}`
+- SSE — `data: {"type":"assistant_delta","text":"…"}`
+- NDJSON — `{"d":"…"}`
 
 plus `{type:"thread",threadId}`, `{type:"error",message}`, `{type:"done"}`.
 

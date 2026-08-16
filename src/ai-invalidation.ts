@@ -12,27 +12,15 @@
 
 /** Query keys each domain's data lives under (all account-scoped: `[key, accountId]`). */
 export const AI_DOMAIN_KEYS: Record<string, string[]> = {
-  // `studio-creation` (singular) is the ONE-creation detail page, keyed
-  // `[key, accountId, creationId]`; React Query matches by PREFIX, so the
-  // `[key, accountId]` this file emits covers whichever creation is open.
-  // Without it, a render started from the chat side panel was invisible on the
-  // very page the client was watching until they reloaded by hand — the detail
-  // page polls only while it can SEE a queued render, and this invalidation is
-  // how it first learns there is one.
-  creations: ["studio-creations", "studio-creation", "studio-status"],
-  brand: ["ai-brand-profile", "brand-versions", "studio-status"],
+  brand: ["ai-brand-profile", "brand-versions"],
   assets: ["asset-media", "asset-folders", "asset-usage", "assets"],
   account: ["accounts-me", "account-products-activated", "account-settings"],
 };
 
 /** Which domains each apply-proposal name touches (for scoped invalidation). */
 export const AI_ACTION_DOMAINS: Record<string, string[]> = {
-  update_creation: ["creations"],
-  render_creation: ["creations"],
   add_scraped_media: ["assets"],
   ingest_website: ["assets"],
-  generate_image: ["assets"],
-  generate_video: ["assets"],
   organize_assets: ["assets"],
   manage_folders: ["assets"],
   set_account_settings: ["account"],
@@ -40,8 +28,8 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   create_asset: ["assets"],
   share_asset: ["assets"],
   save_artifact_to_assets: ["assets"],
-  update_brand_profile: ["brand", "creations"],
-  edit_brand: ["brand", "creations"],
+  update_brand_profile: ["brand"],
+  edit_brand: ["brand"],
 };
 
 /** Minimal shape of a React Query client — avoids a hard dep on @tanstack here. */
