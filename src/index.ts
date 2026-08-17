@@ -912,7 +912,6 @@ export const WIDGET_LABELS = {
   artifactsTitle: "This chat's files:",
   artifactSave: "Save",
   artifactSaving: "Saving…",
-  proposalUpdateBrandProfile: "Update your brand profile?",
   proposalApiRequest: "Apply this platform action?",
   apply: "Apply",
   dismiss: "Dismiss",
@@ -4420,7 +4419,6 @@ export function createAiChatWidget(
     create_asset: L("proposalCreateFile"),
     share_asset: L("proposalShareAsset"),
     save_artifact_to_assets: L("proposalSaveArtifact"),
-    update_brand_profile: L("proposalUpdateBrandProfile"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
@@ -4543,27 +4541,6 @@ export function createAiChatWidget(
       return `New file: ${filename}${folder}\n${preview}${
         content.length > 200 ? "…" : ""
       }`;
-    }
-    if (name === "update_brand_profile") {
-      const lines: string[] = [];
-      const scalar = (k: string, label: string) => {
-        if (typeof args[k] === "string" && args[k])
-          lines.push(`${label}: ${args[k]}`);
-      };
-      const list = (k: string, label: string) => {
-        if (Array.isArray(args[k]) && args[k].length)
-          lines.push(`${label}: ${(args[k] as unknown[]).join(", ")}`);
-      };
-      scalar("summary", "Brief");
-      scalar("audience", "Audience");
-      scalar("voice", "Voice");
-      scalar("positioning", "Positioning");
-      list("facts", "Facts");
-      list("dos", "Always");
-      list("donts", "Never");
-      list("preferredFormats", "Formats");
-      list("winningPatterns", "Patterns");
-      return lines.join("\n");
     }
     // A report is one small card with minutes of consequences — say what will
     // happen, not just the raw args.

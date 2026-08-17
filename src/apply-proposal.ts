@@ -24,7 +24,6 @@ import {
   applyAssetCreate,
   applyAssetSave,
   applyAssetShare,
-  applyBrandProfile,
 } from "@sgiant/assets";
 
 export interface ApplyProposalCtx {
@@ -189,7 +188,5 @@ export async function applyProposal(
     return applyAssetSave(api, accountId, args);
   if (name === "edit_asset") return applyAssetEdit(api, accountId, args);
   if (name === "create_asset") return applyAssetCreate(api, accountId, args);
-  if (name === "update_brand_profile")
-    return applyBrandProfile(api, accountId, args);
   throw new Error(`Unsupported action: ${name}`);
 }

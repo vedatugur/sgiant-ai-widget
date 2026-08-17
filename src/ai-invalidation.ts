@@ -32,7 +32,6 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   share_asset: ["assets"],
   save_artifact_to_assets: ["assets"],
   generate_report: ["reports"],
-  update_brand_profile: ["brand"],
 };
 
 /** Minimal shape of a React Query client — avoids a hard dep on @tanstack here. */
