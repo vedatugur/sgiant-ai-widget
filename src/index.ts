@@ -142,6 +142,12 @@ export type LoadedThreadItem =
       status: string;
       agent?: string;
       model?: string;
+      /** The REPORT this step produced, if any.
+       *
+       *  An ID and not a path: `buildThreadReplay` is a pure function with no
+       *  host context, and the widget runs in three shells with different route
+       *  shapes. The renderer turns it into a path via `opts.reportHref`. */
+      reportId?: string;
     };
 /** The message variant of a replay item (carries the branch metadata). */
 type ReplayMessageItem = Extract<
@@ -327,8 +333,15 @@ export function buildThreadReplay(payload: {
         status?: string;
         agent?: string;
         model?: string;
+        reportId?: string;
       };
       if (!p.label) continue;
+      // The report id was persisted on the artifact and DROPPED here, so a
+      // finished report replayed as a chip you could read and not open.
+      const reportId =
+        p.status !== "error" && typeof p.reportId === "string" && p.reportId
+          ? p.reportId
+          : undefined;
       items.push({
         t: a.createdAt ?? "",
         item: {
@@ -337,6 +350,7 @@ export function buildThreadReplay(payload: {
           status: p.status ?? "ok",
           agent: p.agent,
           model: p.model,
+          ...(reportId ? { reportId } : {}),
         },
       });
     }
@@ -909,6 +923,18 @@ export const WIDGET_LABELS = {
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
   proposalSaveArtifact: "Save this to your asset library?",
+  // The generate_report confirm card. These were four hardcoded English lines
+  // in `proposalSummary` — on a card the user reads before spending minutes of
+  // model time, in a widget whose whole contract is that visible copy lives
+  // here so it can be translated.
+  reportCardTitle: "Title: {title}",
+  reportCardPeriod: "Period: {from} → {to}",
+  reportCardAllAccounts: "Covers EVERY account (platform-wide data).",
+  reportCardNAccounts: "Covers {count} accounts' data.",
+  reportCardOutcome:
+    "Opens as a live page you can watch build. Its figures are frozen at build time; download a PDF from the page whenever you want one.",
+  reportCardBackground:
+    "Runs in the background — a notification arrives when it's ready.",
   artifactsTitle: "This chat's files:",
   artifactSave: "Save",
   artifactSaving: "Saving…",
@@ -2114,10 +2140,30 @@ export function createAiChatWidget(
     label: string,
     status: string,
     agent?: string,
-    model?: string
+    model?: string,
+    href?: string
   ): HTMLElement {
     const chip = el("div", `${PREFIX}-activity`);
     paintActivity(chip, label, status, agent, model);
+    // A produced REPORT gets a way in. Through the same dispatchAction +
+    // isSafeRelPath guard the job card uses — the path came from a host
+    // callback, but it still crosses into a navigation, and there is exactly
+    // one gate for that in this file.
+    if (isSafeRelPath(href)) {
+      const path = href;
+      const btn = el("button", `${PREFIX}-act-open`) as HTMLButtonElement;
+      btn.type = "button";
+      btn.innerHTML = `<span>${escapeHtml(L("openReport"))}</span> <span aria-hidden="true">→</span>`;
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await dispatchAction("navigate", { path });
+        } catch {
+          btn.disabled = false;
+        }
+      });
+      chip.appendChild(btn);
+    }
     log.appendChild(chip);
     return chip;
   }
@@ -2785,7 +2831,13 @@ export function createAiChatWidget(
         );
       } else if ("kind" in it && it.kind === "activity") {
         // Replay a persisted process step (static, already finished) + its agent.
-        addActivityChip(it.label, it.status, it.agent, it.model);
+        addActivityChip(
+          it.label,
+          it.status,
+          it.agent,
+          it.model,
+          it.reportId ? opts.reportHref?.(it.reportId) : undefined
+        );
       } else if ("role" in it) {
         // The message's first DOM node — the anchor an edit/regenerate rewrites
         // the transcript FROM (bubble, or attachment row before it).
@@ -4547,26 +4599,31 @@ export function createAiChatWidget(
     if (name === "generate_report") {
       const lines = [String(args.request ?? "")];
       if (typeof args.title === "string" && args.title)
-        lines.push(`Title: ${args.title}`);
+        lines.push(L("reportCardTitle", { title: String(args.title) }));
       lines.push(
-        `Period: ${String(args.dateFrom ?? "?")} → ${String(args.dateTo ?? "?")}`
+        L("reportCardPeriod", {
+          from: String(args.dateFrom ?? "?"),
+          to: String(args.dateTo ?? "?"),
+        })
       );
       // Staff-plane scope: the one fact that distinguishes a fleet report
       // from a single-account one belongs ON the card being approved.
       if (args.allAccounts === true) {
-        lines.push("Covers EVERY account (platform-wide data).");
+        lines.push(L("reportCardAllAccounts"));
       } else if (
         Array.isArray(args.subjectAccountIds) &&
         args.subjectAccountIds.length > 0
       ) {
-        lines.push(`Covers ${args.subjectAccountIds.length} accounts' data.`);
+        lines.push(
+          L("reportCardNAccounts", { count: args.subjectAccountIds.length })
+        );
       }
-      lines.push(
-        `Lands as a PDF in Assets → ${String(args.folderName ?? "") || "Reports"}.`
-      );
-      lines.push(
-        "Runs in the background — a notification arrives when it's ready."
-      );
+      // NOT "lands as a PDF in Assets → <folder>". It does not land anywhere:
+      // the deliverable is a page, and `folderName` only pre-picks the shelf
+      // for a PDF the client may later choose to save. Promising a file on the
+      // card the user APPROVES is the worst place to get this wrong.
+      lines.push(L("reportCardOutcome"));
+      lines.push(L("reportCardBackground"));
       return lines.filter(Boolean).join("\n");
     }
     return Object.entries(args)
