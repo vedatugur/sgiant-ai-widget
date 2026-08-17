@@ -888,7 +888,6 @@ export const WIDGET_LABELS = {
   artifactSave: "Save",
   artifactSaving: "Saving…",
   proposalUpdateBrandProfile: "Update your brand profile?",
-  proposalEditBrand: "Update your brand?",
   proposalApiRequest: "Apply this platform action?",
   apply: "Apply",
   dismiss: "Dismiss",
@@ -4335,7 +4334,6 @@ export function createAiChatWidget(
     share_asset: L("proposalShareAsset"),
     save_artifact_to_assets: L("proposalSaveArtifact"),
     update_brand_profile: L("proposalUpdateBrandProfile"),
-    edit_brand: L("proposalEditBrand"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
   };
   function proposalSummary(
@@ -4478,37 +4476,6 @@ export function createAiChatWidget(
       list("donts", "Never");
       list("preferredFormats", "Formats");
       list("winningPatterns", "Patterns");
-      return lines.join("\n");
-    }
-    if (name === "edit_brand") {
-      const lines: string[] = [];
-      const scalar = (k: string, label: string) => {
-        if (typeof args[k] === "string" && args[k])
-          lines.push(`${label}: ${args[k]}`);
-      };
-      scalar("name", "Name");
-      scalar("tagline", "Tagline");
-      scalar("voice", "Voice");
-      scalar("audience", "Audience");
-      const colours = [
-        typeof args.primary === "string" ? `primary ${args.primary}` : "",
-        typeof args.accent === "string" ? `accent ${args.accent}` : "",
-      ].filter(Boolean);
-      if (colours.length) lines.push(`Colours: ${colours.join(", ")}`);
-      const fonts = [
-        typeof args.fontDisplay === "string" ? String(args.fontDisplay) : "",
-        typeof args.fontSans === "string" ? String(args.fontSans) : "",
-      ].filter(Boolean);
-      if (fonts.length) lines.push(`Fonts: ${fonts.join(" / ")}`);
-      if (
-        (typeof args.logoMediaId === "string" && args.logoMediaId) ||
-        (typeof args.logoSymbolMediaId === "string" && args.logoSymbolMediaId)
-      )
-        lines.push("+ brand logo");
-      if (Array.isArray(args.keyPhrases) && args.keyPhrases.length)
-        lines.push(`Phrases: ${(args.keyPhrases as unknown[]).join(", ")}`);
-      if (typeof args.showcaseHtml === "string" && args.showcaseHtml.trim())
-        lines.push("+ a visual showcase preview");
       return lines.join("\n");
     }
     // A whole-site import is ONE argument with enormous consequences. Dumping
