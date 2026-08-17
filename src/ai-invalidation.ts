@@ -15,6 +15,9 @@ export const AI_DOMAIN_KEYS: Record<string, string[]> = {
   brand: ["ai-brand-profile", "brand-versions"],
   assets: ["asset-media", "asset-folders", "asset-usage", "assets"],
   account: ["accounts-me", "account-products-activated", "account-settings"],
+  // A finished report must appear in the list without a manual refresh — the
+  // whole point of enqueueing from chat is that the user does not go looking.
+  reports: ["reports", "admin-reports", "report"],
 };
 
 /** Which domains each apply-proposal name touches (for scoped invalidation). */
@@ -28,6 +31,7 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   create_asset: ["assets"],
   share_asset: ["assets"],
   save_artifact_to_assets: ["assets"],
+  generate_report: ["reports"],
   update_brand_profile: ["brand"],
 };
 
