@@ -924,7 +924,7 @@ export const WIDGET_LABELS = {
   reported: "Reported ✓ — our team will look into it",
   reportFailed: "Couldn't report — try later",
   // Signup CTA (anonymous surfaces)
-  signupCta: "Sign up — it's free to start",
+  signupCta: "Sign up — 14 days free",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
   // OTHER status the model writes is shown in its own words, untranslated,
   // because only these four are ours to name.
