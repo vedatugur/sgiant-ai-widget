@@ -160,7 +160,6 @@ export async function applyProposal(
     // wrong job starting — but a report no longer produces a file at all, in
     // either format. It produces a page.
     const started = await api<{
-      job?: { jobId?: string | null };
       report?: { id?: string | null };
     }>(`/accounts/${accountId}/reports/generate`, {
       method: "POST",
@@ -174,10 +173,9 @@ export async function applyProposal(
       message: t("aiAssistant.apply.reportStartedLive", {
         defaultValue: "Writing the report — watch it build ✓",
       }),
-      ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
-      // The report's own id, so the card can offer the PAGE rather than only a
-      // progress bar. The generic job id stays alongside it until the card's
-      // poller is repointed — see chat-types' ApplyProposalResult.
+      // The report's own id — the ONLY id a report has now. The generic job
+      // id used to ride alongside it for the card's poller; the card tracks
+      // reports directly, and the enqueue no longer creates a job row at all.
       ...(started?.report?.id ? { reportId: started.report.id } : {}),
     };
   }
