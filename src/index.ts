@@ -722,6 +722,12 @@ export interface AiChatWidgetOptions {
    * tool name → a real, access-checked API call. Return a string to show as the
    * success note; throw to let the user retry. Omit to hide write proposals.
    */
+  /**
+   * Where a report lives in THIS app. The widget runs in three shells with
+   * different route shapes, so it cannot build the URL itself — and guessing
+   * one would produce a link that 404s in two of them.
+   */
+  reportHref?: (reportId: string) => string;
   onApplyProposal?: (
     name: string,
     args: Record<string, unknown>,
@@ -730,7 +736,9 @@ export interface AiChatWidgetOptions {
      *  is scoped to — which is not always the account the assistant reasoned
      *  about, and on a platform page is not an account at all. */
     opts?: { accountId?: string }
-  ) => Promise<string | void | { message?: string; jobId?: string }>;
+  ) => Promise<
+    string | void | { message?: string; jobId?: string; reportId?: string }
+  >;
   /**
    * OBSERVE the human's answer to a `question` frame — analytics, or resolving
    * the same question on another surface (a critical one also pushed to
@@ -892,6 +900,7 @@ export const WIDGET_LABELS = {
   dismiss: "Dismiss",
   applying: "Applying…",
   applied: "Applied",
+  openReport: "Open the report",
   tryAgain: "Try again",
   // History panel
   close: "Close",
@@ -4907,6 +4916,20 @@ export function createAiChatWidget(
           `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
         wrap.appendChild(ok);
         if (jobId) trackJob(jobId, threadId);
+        // A REPORT is a document, not just a task: once it exists it has a
+        // page, and the useful thing to hand the user is a way in. The card's
+        // POLLER is deliberately left on the generic job read — that contract
+        // ("never a per-type endpoint", see getJob's doc) is what keeps one
+        // poller serving every kind of tracked work.
+        const reportId =
+          res && typeof res === "object" ? res.reportId : undefined;
+        const href = reportId ? opts.reportHref?.(reportId) : undefined;
+        if (href) {
+          const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;
+          open.href = href;
+          open.textContent = L("openReport");
+          ok.appendChild(open);
+        }
       } catch {
         apply.disabled = false;
         apply.textContent = L("tryAgain");
