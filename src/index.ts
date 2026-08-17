@@ -764,6 +764,20 @@ export interface AiChatWidgetOptions {
    */
   getJob?: (jobId: string) => Promise<WidgetJobView | null>;
   /**
+   * Read ONE report. The single deliberate exception to `getJob`'s "never a
+   * per-type endpoint" rule, and it is worth stating why.
+   *
+   * A report stopped being a `job` row: it owns its lifecycle, its narration
+   * and its stage vocabulary outright, and after the contract migration there
+   * is no generic row to read. That is not a fourth job type wanting its own
+   * poller — it is a second SOURCE of tracked work, which is why the fan-out
+   * below is untouched and only the READ dispatches. One poll loop still
+   * serves every card and every tile.
+   *
+   * Omit it and a report card simply never polls.
+   */
+  getReport?: (reportId: string) => Promise<WidgetJobView | null>;
+  /**
    * Jobs still RUNNING for a thread, asked of the server on reopen.
    *
    * The widget also remembers its own jobs in browser storage, which is fast
@@ -782,6 +796,10 @@ export interface AiChatWidgetOptions {
    * runner actually stops. Omit to hide the button.
    */
   cancelJob?: (jobId: string) => Promise<void>;
+  /** Cancel a running/queued REPORT — the same cooperative contract as
+   *  `cancelJob`, against the report's own route. Omit to hide the button on
+   *  report cards. */
+  cancelReport?: (reportId: string) => Promise<void>;
   /** This thread's UNSAVED session artifacts (media scraped or imported in the
    *  conversation, hidden from the library until saved) — drives the artifact
    *  strip above the composer. Omit on hosts without asset storage. */
@@ -2164,9 +2182,40 @@ export function createAiChatWidget(
    *  spinning forever. */
   const JOB_POLL_MAX_MS = 30 * 60 * 1000;
 
-  /** One job this conversation is watching, as remembered across a refresh. */
+  /**
+   * WHICH SOURCE a piece of tracked work lives in.
+   *
+   * Everything below used to key on a bare id, which was correct while `job`
+   * was the only source. It is not any more: a report is its own row in its own
+   * table, so a report id and a job id are two namespaces, and one map keyed on
+   * the raw string quietly assumes they cannot collide. They are both UUIDs, so
+   * a collision is vanishingly unlikely and would be almost impossible to
+   * diagnose — the cheap fix is to stop assuming.
+   */
+  type WorkKind = "job" | "report";
+  interface WorkRef {
+    kind: WorkKind;
+    id: string;
+  }
+  /** The map key for one piece of tracked work. The ONLY place the two
+   *  namespaces are joined, so they can never be conflated by accident. */
+  const refKey = (ref: WorkRef): string => `${ref.kind}:${ref.id}`;
+  /** A view carries its generic `type`; that is what tells re-attach which
+   *  source a listed row came from. */
+  const refOf = (view: { id?: string; type?: string }): WorkRef | null =>
+    view.id
+      ? { kind: view.type === "report" ? "report" : "job", id: view.id }
+      : null;
+
+  /** One piece of work this conversation is watching, as remembered across a
+   *  refresh. */
   interface TrackedJob {
     jobId: string;
+    /** Which source `jobId` belongs to. OPTIONAL on read: entries written
+     *  before reports left the job model have no `kind`, and they are all
+     *  generic jobs — so a missing value reads as "job" rather than dropping a
+     *  card someone is watching. */
+    kind?: WorkKind;
     /** The thread the job was started FROM — a job only re-attaches to its own
      *  conversation, never to whichever thread happens to be open. */
     threadId: string;
@@ -2220,10 +2269,11 @@ export function createAiChatWidget(
    * here rather than on a timer — a detached node is the definition of a
    * subscriber with nothing left to paint.
    */
-  function emitJob(jobId: string, view: WidgetJobView): void {
-    const card = jobCards.get(jobId);
+  function emitJob(ref: WorkRef, view: WidgetJobView): void {
+    const key = refKey(ref);
+    const card = jobCards.get(key);
     if (card) paintJob(card, view);
-    const subs = jobWatchers.get(jobId);
+    const subs = jobWatchers.get(key);
     if (!subs) return;
     for (const sub of subs) {
       if (!sub.node.isConnected) {
@@ -2240,7 +2290,7 @@ export function createAiChatWidget(
         // that throws is a drawing bug, not a reason to stall the job.
       }
     }
-    if (!subs.size) jobWatchers.delete(jobId);
+    if (!subs.size) jobWatchers.delete(key);
   }
 
   /**
@@ -2251,11 +2301,15 @@ export function createAiChatWidget(
    * Stops on: a terminal status, the safety ceiling, or `destroy()` (every wait
    * goes through `waitAlive`, so an aborted widget never wakes up again).
    */
-  function watchJob(jobId: string): void {
-    const getJob = opts.getJob;
-    if (!getJob || !jobId) return;
-    if (jobPolling.has(jobId)) return;
-    jobPolling.add(jobId);
+  function watchJob(ref: WorkRef): void {
+    // THE ONLY DISPATCH. A report reads from its own endpoint because it no
+    // longer has a generic row; everything after this line is source-agnostic,
+    // which is what keeps one loop serving both.
+    const read = ref.kind === "report" ? opts.getReport : opts.getJob;
+    if (!read || !ref.id) return;
+    const key = refKey(ref);
+    if (jobPolling.has(key)) return;
+    jobPolling.add(key);
     void (async () => {
       const started = Date.now();
       try {
@@ -2263,17 +2317,17 @@ export function createAiChatWidget(
           if (Date.now() - started >= JOB_POLL_MAX_MS) {
             // Give up WATCHING, not on the job: it is still running server-side,
             // and saying so is more honest than a spinner that never resolves.
-            const stalled = jobCards.get(jobId);
+            const stalled = jobCards.get(key);
             if (stalled) {
               stalled.className = `${PREFIX}-job ${PREFIX}-job-done`;
               stalled.textContent = L("jobUnreachable");
             }
-            forgetJob(jobId);
+            forgetJob(ref);
             return;
           }
           let view: WidgetJobView | null;
           try {
-            view = await getJob(jobId);
+            view = await read(ref.id);
           } catch {
             // A transient read failure is not a failed job — keep the spinner
             // and try again on the next tick.
@@ -2283,27 +2337,27 @@ export function createAiChatWidget(
           // A job the account can no longer read (deleted, or never existed) is
           // not something to keep asking about.
           if (!view) {
-            jobCards.get(jobId)?.remove();
-            jobCards.delete(jobId);
-            jobWatchers.delete(jobId);
-            forgetJob(jobId);
+            jobCards.get(key)?.remove();
+            jobCards.delete(key);
+            jobWatchers.delete(key);
+            forgetJob(ref);
             return;
           }
-          emitJob(jobId, view);
+          emitJob(ref, view);
           if (
             view.status === "done" ||
             view.status === "failed" ||
             view.status === "cancelled"
           ) {
-            forgetJob(jobId);
-            jobWatchers.delete(jobId);
+            forgetJob(ref);
+            jobWatchers.delete(key);
             scrollDown();
             return;
           }
           if (!(await waitAlive(JOB_POLL_MS))) return;
         }
       } finally {
-        jobPolling.delete(jobId);
+        jobPolling.delete(key);
       }
     })();
   }
@@ -2315,18 +2369,20 @@ export function createAiChatWidget(
    * that held it is gone.
    */
   function subscribeJob(
-    jobId: string,
+    ref: WorkRef,
     node: HTMLElement,
     paint: (view: WidgetJobView) => void
   ): void {
-    if (!opts.getJob || !jobId) return;
-    let subs = jobWatchers.get(jobId);
+    const read = ref.kind === "report" ? opts.getReport : opts.getJob;
+    if (!read || !ref.id) return;
+    const key = refKey(ref);
+    let subs = jobWatchers.get(key);
     if (!subs) {
       subs = new Set();
-      jobWatchers.set(jobId, subs);
+      jobWatchers.set(key, subs);
     }
     subs.add({ node, paint, seen: false });
-    watchJob(jobId);
+    watchJob(ref);
   }
 
   function loadTrackedJobs(): TrackedJob[] {
@@ -2346,6 +2402,9 @@ export function createAiChatWidget(
           typeof (j as TrackedJob).at === "number" &&
           (j as TrackedJob).at > cutoff
       );
+      // NOTE the absent `kind` check: an entry written by the previous build
+      // has none, and rejecting it would drop the card for work that is still
+      // running across the deploy. `trackedRef` below defaults it.
     } catch {
       return []; // corrupt/unavailable storage — nothing to re-attach
     }
@@ -2359,16 +2418,25 @@ export function createAiChatWidget(
       /* storage blocked — the card still works for this session */
     }
   }
-  function rememberJob(jobId: string, tid: string): void {
-    const jobs = loadTrackedJobs().filter((j) => j.jobId !== jobId);
-    jobs.push({ jobId, threadId: tid, at: Date.now() });
+  /** The ref a stored entry refers to — `kind` defaults to "job" for entries
+   *  written before reports had their own source. */
+  function trackedRef(j: TrackedJob): WorkRef {
+    return { kind: j.kind ?? "job", id: j.jobId };
+  }
+  function rememberJob(ref: WorkRef, tid: string): void {
+    const jobs = loadTrackedJobs().filter(
+      (j) => refKey(trackedRef(j)) !== refKey(ref)
+    );
+    jobs.push({ jobId: ref.id, kind: ref.kind, threadId: tid, at: Date.now() });
     saveTrackedJobs(jobs);
   }
   /** A finished job is not a live job: forgetting it here is what stops the card
    *  from being redrawn on the next refresh (the transcript's own completion
    *  artifact is the lasting record). */
-  function forgetJob(jobId: string): void {
-    saveTrackedJobs(loadTrackedJobs().filter((j) => j.jobId !== jobId));
+  function forgetJob(ref: WorkRef): void {
+    saveTrackedJobs(
+      loadTrackedJobs().filter((j) => refKey(trackedRef(j)) !== refKey(ref))
+    );
   }
 
   /** The card's title: the host's own wording, else the copy for a type we know,
@@ -2515,9 +2583,14 @@ export function createAiChatWidget(
     // Still in flight and the host can stop it → Cancel. The server cancel is
     // cooperative, so the button just asks: the card keeps polling and flips
     // to "Cancelled" when the runner actually stops at its next boundary.
-    if (!terminal && view.id && opts.cancelJob) {
+    // The cancel goes to the route that OWNS the work: a report is cancelled
+    // on its own row, and after the contract migration there is no generic job
+    // to cancel it through.
+    const cancelFor =
+      view.type === "report" ? opts.cancelReport : opts.cancelJob;
+    if (!terminal && view.id && cancelFor) {
       const jobId = view.id;
-      const cancel = opts.cancelJob;
+      const cancel = cancelFor;
       const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
       btn.type = "button";
       btn.innerHTML = `<span>${escapeHtml(L("jobCancel"))}</span>`;
@@ -2548,14 +2621,14 @@ export function createAiChatWidget(
    * The polling itself lives in `watchJob` — this is the card half, kept apart
    * because a tile wants the second half without the first.
    */
-  function trackJob(jobId: string, tid: string | undefined): void {
-    const getJob = opts.getJob;
-    if (!getJob || !jobId) return;
-    if (tid) rememberJob(jobId, tid);
+  function trackJob(ref: WorkRef, tid: string | undefined): void {
+    const read = ref.kind === "report" ? opts.getReport : opts.getJob;
+    if (!read || !ref.id) return;
+    if (tid) rememberJob(ref, tid);
     // The poll is started BEFORE the card guard below, deliberately: that guard
     // protects the CARD from being drawn twice, and a job whose card is already
     // up still needs its loop running (and its tiles fed) after a re-attach.
-    watchJob(jobId);
+    watchJob(ref);
     // Idempotent per id, and it has to be: `reattachTrackedJobs` calls this
     // TWICE for the same job (once from browser storage, once when the server
     // listing resolves). The dedupe used to sit below the append, so the second
@@ -2563,12 +2636,12 @@ export function createAiChatWidget(
     // one orphaned in the log, repainted by nobody and frozen on "Queued"
     // forever. Bail before touching the DOM when the card is already on screen;
     // a stale entry left detached by a transcript wipe is rebuilt instead.
-    const existing = jobCards.get(jobId);
+    const existing = jobCards.get(refKey(ref));
     if (existing?.isConnected) return;
     const card = el("div", `${PREFIX}-job`);
     paintJob(card, pendingJobView());
     log.appendChild(card);
-    jobCards.set(jobId, card);
+    jobCards.set(refKey(ref), card);
     scrollDown(true);
   }
 
@@ -2581,13 +2654,13 @@ export function createAiChatWidget(
    * the tracked list rather than moved, so there is one path, not two.
    */
   function reattachTrackedJobs(tid: string | undefined): void {
-    if (!opts.getJob || !tid) return;
+    if (!(opts.getJob || opts.getReport) || !tid) return;
     jobCards.clear();
     // Browser storage FIRST so the card is back on the same tick as the
     // transcript — a job this device started is already known here, and waiting
     // on a round-trip would flash an empty conversation.
     for (const j of loadTrackedJobs()) {
-      if (j.threadId === tid) trackJob(j.jobId, undefined);
+      if (j.threadId === tid) trackJob(trackedRef(j), undefined);
     }
     // Then ask the SERVER what this thread actually has running. Storage only
     // knows what this browser started, so a job begun on a phone, or before
@@ -2600,7 +2673,14 @@ export function createAiChatWidget(
       .then((running) => {
         // The thread may have been switched while the request was in flight.
         if (threadId !== tid) return;
-        for (const j of running) if (j.id) trackJob(j.id, tid);
+        // The listing is MULTI-SOURCE: it carries reports as well as generic
+        // jobs, and each row's `type` is what says which. Deriving the ref
+        // here — rather than assuming "job" — is what makes a report started
+        // on another device re-attach to the right poller.
+        for (const j of running) {
+          const ref = refOf(j);
+          if (ref) trackJob(ref, tid);
+        }
       })
       .catch(() => {
         /* offline or unauthorised — storage already covered this device */
@@ -4915,14 +4995,18 @@ export function createAiChatWidget(
           `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
           `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
         wrap.appendChild(ok);
-        if (jobId) trackJob(jobId, threadId);
         // A REPORT is a document, not just a task: once it exists it has a
-        // page, and the useful thing to hand the user is a way in. The card's
-        // POLLER is deliberately left on the generic job read — that contract
-        // ("never a per-type endpoint", see getJob's doc) is what keeps one
-        // poller serving every kind of tracked work.
+        // page, and the useful thing to hand the user is a way in.
         const reportId =
           res && typeof res === "object" ? res.reportId : undefined;
+        // TRACK THE REPORT, NOT ITS JOB ROW. Both ids come back today, but the
+        // generic row is being retired — a card polling it would go blind the
+        // moment the contract migration lands, and it would go blind SILENTLY,
+        // stuck on "Queued" forever rather than erroring. Prefer the id that
+        // will still exist; fall back to the job id for work that has no
+        // report (an import, a render).
+        if (reportId) trackJob({ kind: "report", id: reportId }, threadId);
+        else if (jobId) trackJob({ kind: "job", id: jobId }, threadId);
         const href = reportId ? opts.reportHref?.(reportId) : undefined;
         if (href) {
           const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;
@@ -5971,7 +6055,9 @@ export function createAiChatWidget(
     }
     tile.appendChild(box);
     if (it.jobId) {
-      subscribeJob(it.jobId, tile, (view) => paintUiTileLive(tile, view));
+      subscribeJob({ kind: "job", id: it.jobId }, tile, (view) =>
+        paintUiTileLive(tile, view)
+      );
     }
     if (it.title) {
       const t = el("div", `${PREFIX}-ui-tile-title`);
