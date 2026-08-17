@@ -153,10 +153,12 @@ export async function applyProposal(
   }
   if (name === "generate_report") {
     // ENQUEUE AND RETURN: minutes of work (plan → queries → author →
-    // document), a live job card via the generic job id,
-    // and the notification reports the finished document. The message names
-    // the ACTUAL output format — a PPTX ask confirmed with "the PDF will
-    // land…" read as the wrong job being started.
+    // document), watched on the report page itself.
+    //
+    // There is ONE outcome message now. It used to branch on `format` so a
+    // deck ask was not confirmed with "the PDF will land…", which read as the
+    // wrong job starting — but a report no longer produces a file at all, in
+    // either format. It produces a page.
     const started = await api<{
       job?: { jobId?: string | null };
       report?: { id?: string | null };
@@ -164,22 +166,14 @@ export async function applyProposal(
       method: "POST",
       body: JSON.stringify(args),
     });
-    const isPptx =
-      String((args as { format?: unknown }).format ?? "").toLowerCase() ===
-      "pptx";
     return {
-      message: isPptx
-        ? t("aiAssistant.apply.reportStartedPptx", {
-            defaultValue:
-              "Building the presentation — the PPTX will land in your assets ✓",
-          })
-        : // RENAMED, not reworded: a key whose MEANING changed keeps its old
-          // translation, and `check:i18n` only compares key SETS — so the
-          // Turkish sentence promising a PDF in Assets would have survived
-          // silently under the old key.
-          t("aiAssistant.apply.reportStartedLive", {
-            defaultValue: "Writing the report — watch it build ✓",
-          }),
+      // RENAMED, not reworded: a key whose MEANING changed keeps its old
+      // translation, and `check:i18n` only compares key SETS — so the Turkish
+      // sentence promising a PDF in Assets would have survived silently under
+      // the old key.
+      message: t("aiAssistant.apply.reportStartedLive", {
+        defaultValue: "Writing the report — watch it build ✓",
+      }),
       ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
       // The report's own id, so the card can offer the PAGE rather than only a
       // progress bar. The generic job id stays alongside it until the card's
