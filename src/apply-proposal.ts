@@ -173,9 +173,12 @@ export async function applyProposal(
             defaultValue:
               "Building the presentation — the PPTX will land in your assets ✓",
           })
-        : t("aiAssistant.apply.reportStarted", {
-            defaultValue:
-              "Generating the report — the PDF will land in your assets ✓",
+        : // RENAMED, not reworded: a key whose MEANING changed keeps its old
+          // translation, and `check:i18n` only compares key SETS — so the
+          // Turkish sentence promising a PDF in Assets would have survived
+          // silently under the old key.
+          t("aiAssistant.apply.reportStartedLive", {
+            defaultValue: "Writing the report — watch it build ✓",
           }),
       ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
       // The report's own id, so the card can offer the PAGE rather than only a
