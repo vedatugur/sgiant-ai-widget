@@ -5,9 +5,10 @@
  * made here.
  *
  * This used to be copy-pasted three times (org widget, admin widget, org
- * full-page panel client) and the copies drifted — the panel's ingest_site
- * dropped the job id (no live job card) and it hand-rolled its own stale query
- * invalidation list. Every host now calls THIS function and then runs the
+ * full-page panel client) and the copies drifted — the panel's enqueue-and-
+ * return applies dropped the job id (no live job card) and it hand-rolled its
+ * own stale query invalidation list. Every host now calls THIS function and
+ * then runs the
  * shared `applyAiChange(qc, accountId, name)` itself (invalidation is the
  * host's react-query concern, not this module's).
  *
@@ -44,9 +45,9 @@ export interface ApplyProposalCtx {
 
 /**
  * Apply one confirm-gated proposal. Returns the user-visible success message,
- * or `{ message, jobId }` for enqueue-and-return tools (ingest_site,
- * generate_report) so the chat can show a LIVE job card and resolve its
- * process chip on real completion.
+ * or `{ message, jobId }` for an enqueue-and-return tool (generate_report) so
+ * the chat can show a LIVE job card and resolve its process chip on real
+ * completion.
  */
 export async function applyProposal(
   ctx: ApplyProposalCtx,
@@ -150,26 +151,9 @@ export async function applyProposal(
       defaultValue: `Saved ${n} file${n === 1 ? "" : "s"} + notes into your assets ✓`,
     });
   }
-  if (name === "ingest_site") {
-    // Enqueues and returns; the crawl runs for minutes. The card must NOT
-    // claim the import is finished — the job id below buys a LIVE card in the
-    // chat, and the notification still reports the result. The enqueue hands
-    // back the GENERIC job id, which is what the live card polls.
-    const started = await api<{ job?: { jobId?: string | null } }>(
-      `/accounts/${accountId}/assets/ingest-site`,
-      { method: "POST", body: JSON.stringify(args) }
-    );
-    return {
-      message: t("aiAssistant.apply.siteImportStarted", {
-        defaultValue:
-          "Importing the site — I'll notify you when the folder is ready ✓",
-      }),
-      ...(started?.job?.jobId ? { jobId: started.job.jobId } : {}),
-    };
-  }
   if (name === "generate_report") {
-    // Same enqueue-and-return shape as ingest_site: minutes of work (plan →
-    // queries → author → document), a live job card via the generic job id,
+    // ENQUEUE AND RETURN: minutes of work (plan → queries → author →
+    // document), a live job card via the generic job id,
     // and the notification reports the finished document. The message names
     // the ACTUAL output format — a PPTX ask confirmed with "the PDF will
     // land…" read as the wrong job being started.

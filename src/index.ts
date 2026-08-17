@@ -370,8 +370,8 @@ export interface WidgetJobView {
   type?: string;
   /** The coarse, type-agnostic lifecycle — `JobStatus` on the wire. */
   status: "queued" | "running" | "done" | "failed" | "cancelled";
-  /** Done-of-total, with a short label for what is happening right now (the page
-   *  being crawled). `total` is null while it is not yet known. */
+  /** Done-of-total, with a short label for what is happening right now (the
+   *  report section being built). `total` is null while it is not yet known. */
   progress?: { done?: number; total?: number | null; label?: string | null };
   /** Overrides the type-derived title when the host knows better. */
   title?: string | null;
@@ -760,7 +760,7 @@ export interface AiChatWidgetOptions {
    *
    * The widget also remembers its own jobs in browser storage, which is fast
    * and enough for the device that started them — and wrong everywhere else. A
-   * crawl begun on a phone, or before the cache was cleared, left the desktop
+   * report begun on a phone, or before the cache was cleared, left the desktop
    * showing a conversation with nothing happening in it while it ran. This is
    * the authoritative answer; storage is the instant one.
    *
@@ -769,7 +769,7 @@ export interface AiChatWidgetOptions {
   listThreadJobs?: (threadId: string) => Promise<WidgetJobView[]>;
   /**
    * Cancel a running/queued job the chat is watching (the card's Cancel
-   * button). Cooperative on the server — a crawl stops at the next page
+   * button). Cooperative on the server — a report stops at the next step
    * boundary — so the card keeps polling and flips to "Cancelled" when the
    * runner actually stops. Omit to hide the button.
    */
@@ -851,7 +851,6 @@ export const WIDGET_LABELS = {
   // Live background-job card — a job the chat started and now watches. The
   // titles are per known TYPE, with a neutral fallback for a type this build
   // has never heard of (an AI-defined job type must still render).
-  jobTitleSiteIngest: "Importing the website",
   jobTitleCoder: "Working on a code task",
   jobTitleReport: "Generating the report",
   jobTitleFallback: "Background job",
@@ -863,7 +862,7 @@ export const WIDGET_LABELS = {
   jobCancel: "Cancel",
   jobCancelling: "Cancelling…",
   jobProgress: "{done} of {total}",
-  /** Used while the total is still unknown — a crawl learns it after page one. */
+  /** Used while the total is still unknown — a report learns it once planned. */
   jobProgressOpen: "{done} so far",
   jobOpenResult: "Open the result",
   /** Toggle under the flow tail that reveals the job's full activity feed. */
@@ -2145,12 +2144,12 @@ export function createAiChatWidget(
   // was invisible. So the apply's job id is kept, a card is drawn in the log, and
   // the GENERIC job read is polled until the job is terminal.
   //
-  // Nothing here knows what a site import is. It renders a status, a
+  // Nothing here knows what a report is. It renders a status, a
   // done-of-total, a label and a terminal outcome — which is all `JobSummary`
   // promises for a job of ANY type, including one this build has never seen.
 
   /** How often a live job is re-read. Slow enough not to be a poll storm, fast
-   *  enough that "3 of 12" visibly moves on a crawl. */
+   *  enough that "3 of 12" visibly moves while a job runs. */
   const JOB_POLL_MS = 3000;
   /** Stop babysitting a job that never lands — the card says so rather than
    *  spinning forever. */
@@ -2367,14 +2366,13 @@ export function createAiChatWidget(
    *  else a neutral one — an unknown type must still read as something. */
   function jobTitle(view: WidgetJobView): string {
     if (view.title) return view.title;
-    if (view.type === "site_ingest") return L("jobTitleSiteIngest");
     if (view.type === "coder") return L("jobTitleCoder");
     if (view.type === "report") return L("jobTitleReport");
     return L("jobTitleFallback");
   }
 
-  /** "3 of 12" / "3 so far" / nothing at all — `total` is null until a crawl has
-   *  read its first page, and "3 of 0" would be a lie. */
+  /** "3 of 12" / "3 so far" / nothing at all — `total` is null until the runner
+   *  has planned its work, and "3 of 0" would be a lie. */
   function jobCounts(view: WidgetJobView): string {
     const done = view.progress?.done ?? 0;
     const total = view.progress?.total ?? null;
@@ -2411,8 +2409,8 @@ export function createAiChatWidget(
             ? L("jobQueued")
             : L("jobRunning");
     const counts = jobCounts(view);
-    // The progress LABEL is server text (for a crawl, a URL off the site being
-    // imported) — escaped like every other untrusted string the widget draws.
+    // The progress LABEL is server text (for a report, the section being
+    // built) — escaped like every other untrusted string the widget draws.
     const detail = failed ? (view.error ?? "") : (view.progress?.label ?? "");
     const total = view.progress?.total ?? 0;
     const done = view.progress?.done ?? 0;
@@ -2583,9 +2581,9 @@ export function createAiChatWidget(
       if (j.threadId === tid) trackJob(j.jobId, undefined);
     }
     // Then ask the SERVER what this thread actually has running. Storage only
-    // knows what this browser started, so an import begun on a phone, or before
+    // knows what this browser started, so a job begun on a phone, or before
     // the cache was cleared, was invisible on every other device — the card
-    // said nothing was happening while the crawl ran. `trackJob` is idempotent
+    // said nothing was happening while it ran. `trackJob` is idempotent
     // per id, so a job both sources know about is drawn once.
     const listRunning = opts.listThreadJobs;
     if (!listRunning) return;
@@ -4478,26 +4476,8 @@ export function createAiChatWidget(
       list("winningPatterns", "Patterns");
       return lines.join("\n");
     }
-    // A whole-site import is ONE argument with enormous consequences. Dumping
-    // "url: example.com" tells the user nothing about what they are approving —
-    // how many pages, where it lands, that it runs in the background. Spell it
-    // out; this is the card people hesitate on.
-    if (name === "ingest_site") {
-      const site = String(args.url ?? "").replace(/^https?:\/\//, "");
-      const pages = Number(args.maxPages);
-      const cap = Number.isFinite(pages) && pages > 0 ? pages : 20;
-      return [
-        `Import the whole of ${site} into assets.`,
-        `Up to ${cap} pages — the server picks the real content pages (rooms,` +
-          ` gallery, about) and skips carts and policies.`,
-        `Each page gets its own subfolder under "${String(
-          args.folderName ?? site
-        )}"${args.withReadme === false ? "" : ", with a README per page"}.`,
-        "Runs in the background — a notification arrives when it lands.",
-      ].join("\n");
-    }
-    // A report is also one small card with minutes of consequences — say what
-    // will happen, not just the raw args.
+    // A report is one small card with minutes of consequences — say what will
+    // happen, not just the raw args.
     if (name === "generate_report") {
       const lines = [String(args.request ?? "")];
       if (typeof args.title === "string" && args.title)
@@ -6528,7 +6508,7 @@ export function createAiChatWidget(
   /**
    * A background job this conversation started has finished.
    *
-   * `ingest_site` and friends return immediately and run for minutes, then
+   * `generate_report` and friends return immediately and run for minutes, then
    * report back onto the THREAD — which the chat only ever saw on a reload, so
    * "I'll notify you when the folder is ready" was followed, in the chat, by
    * nothing at all. The api announces the change (`publishLiveChange`) and the
