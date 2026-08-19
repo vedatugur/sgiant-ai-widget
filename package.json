@@ -13,7 +13,8 @@
   "dependencies": {
     "@sgiant/ai-agent-bridge": "*",
     "@sgiant/assets": "*",
-    "@sgiant/shared": "*"
+    "@sgiant/shared": "*",
+    "@sgiant/ui": "*"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",

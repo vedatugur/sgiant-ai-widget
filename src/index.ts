@@ -37,6 +37,11 @@ import {
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
 } from "@sgiant/shared";
+// PURE-DATA token entry (`@sgiant/ui/tokens` has no imports at all), so this
+// does not drag React into a vanilla-DOM bundle. The widget hand-writes its
+// CSS as strings, which is exactly why it had its own copy of the product's
+// easing curve — interpolating the token means there is still one definition.
+import { motionCssVars } from "@sgiant/ui/tokens";
 import { isNavigationAction } from "./host-actions";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
 // for hosts that want to validate a spec before handing it over.
@@ -3787,7 +3792,7 @@ export function createAiChatWidget(
     if (!dragging) return;
     dragging = false;
     const dy = (e.changedTouches[0]?.clientY ?? dragStartY) - dragStartY;
-    panel.style.transition = "transform .25s cubic-bezier(.22,1,.36,1)";
+    panel.style.transition = "transform var(--duration-fast) var(--ease-out)";
     if (dy > 110) {
       panel.style.transform = "translateY(100%)";
       window.setTimeout(close, 230);
@@ -6963,13 +6968,22 @@ function injectStyles(side: "left" | "right"): void {
  * var(--aiw-text) = #eee — white on white, i.e. invisible. Same class of bug
  * left the error card's rust text on its own near-black background. Anything
  * that needs a red/green surface must use these four vars so the dark override
- * below reaches it automatically. */
-.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#888;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+ * below reaches it automatically.
+ *
+ * NOTE: this whole sheet is a JS template literal — no backticks in here.
+ * --aiw-muted is a CONTRAST FLOOR, not a shade preference. It was #888,
+ * which measures 3.54:1 on this sheet's own white surface — under the 4.5:1
+ * body-text minimum, on the token carrying timestamps, job states and event
+ * detail. #6e6e6e clears it against every surface the widget paints
+ * (5.10:1 on #fff, 4.76:1 on the darkest, #f7f7f8). The dark counterpart
+ * (#9b9b9b) already passes at 6.51:1 / 5.02:1 and is unchanged. Anything
+ * lighter than this in light mode is a regression, not a restyle. */
+.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 @keyframes ${PREFIX}-richin{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
-.${PREFIX}-rich-in{animation:${PREFIX}-richin .28s cubic-bezier(.22,1,.36,1)}
+.${PREFIX}-rich-in{animation:${PREFIX}-richin var(--duration-base) var(--ease-out)}
 @keyframes ${PREFIX}-tokin{from{opacity:0;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
 .${PREFIX}-tok{animation:${PREFIX}-tokin .34s ease forwards}
 .${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid color-mix(in srgb,var(--aiw-accent) 15%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise .2s ease}
@@ -7025,7 +7039,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1)}
+.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width var(--duration-base) var(--ease-out),height var(--duration-base) var(--ease-out)}
 .${PREFIX}-header{background:var(--aiw-gradient);color:var(--aiw-accent-contrast);padding:12px 14px;display:flex;align-items:center;gap:10px}
 /* Drag-to-reposition. touch-action:none is what makes this work on a
    touchscreen — without it the browser claims the gesture as a scroll and the
@@ -7205,6 +7219,16 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    rule so it wins the cascade. */
 .${PREFIX}-msgactions.${PREFIX}-user{align-self:flex-end;justify-content:flex-end;padding-right:2px;opacity:0}
 .${PREFIX}-msg.${PREFIX}-user:hover + .${PREFIX}-msgactions.${PREFIX}-user,.${PREFIX}-msgactions.${PREFIX}-user:hover,.${PREFIX}-msgactions.${PREFIX}-user:focus-within{opacity:1}
+/* HOVER IS NOT A UNIVERSAL INPUT. On a touch device there is no hover state
+   to enter, so opacity 0 revealed only on hover meant Edit and Copy did not
+   EXIST on a phone — the widget's mobile layout is a full-screen sheet, i.e.
+   the case where they matter most. hover:none is the honest test (it asks
+   what the primary pointer can do, not how wide the screen is), and the
+   answer there is: always visible, just quiet.
+   NOTE: this whole sheet is a JS template literal, so no backticks. */
+@media (hover:none){
+.${PREFIX}-msgactions.${PREFIX}-user{opacity:.75}
+}
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
 .${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
@@ -7453,7 +7477,7 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
      top of the widget's own avatar and buttons (reported 2026-08-07).
      A full-screen sheet covers the viewport and IS the modal surface while
      it is open, so here — and only here — it outranks host chrome. */
-  .${PREFIX}-panel{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup .3s cubic-bezier(.22,1,.36,1);transition:none}
+  .${PREFIX}-panel{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup var(--duration-base) var(--ease-out);transition:none}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
   /* Give the title its own full-width row: avatar + actions share the top row,
