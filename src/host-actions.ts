@@ -354,7 +354,7 @@ export function createHostActions(
       // resolved the widget's promise and rendered a tick, so "show me where"
       // ticked green while nothing was highlighted.
       if (!ok) throw new Error(`no such control on this page: ${data.target}`);
-      return "Shown on the page";
+      return tr("aiAssistant.action.actionShownOnPage", "Shown on the page");
     }
     // State-changing UI control (fill / click). The widget has already forced a
     // Confirm step before we get here (renderAction), so this runs post-approval.
@@ -364,7 +364,7 @@ export function createHostActions(
       // a fill or a click succeeded when the control was never found means they
       // walk away believing a value was entered.
       if (!ok) throw new Error(`no such control on this page: ${data.target}`);
-      return "Done on the page";
+      return tr("aiAssistant.action.actionDoneOnPage", "Done on the page");
     }
     const fn = map[action];
     // THROW, don't shrug. Returning undefined here resolved the widget's

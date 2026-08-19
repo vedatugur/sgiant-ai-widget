@@ -1005,6 +1005,23 @@ export const WIDGET_LABELS = {
   /** Carousel paging controls on a composed card. */
   prev: "Previous",
   next: "Next",
+  /** ACTION CHIPS — the in-chat "open this page / run this" affordances.
+   *  These were template literals built inline, so they had no key at all and
+   *  a host could not translate them however hard it tried: a fully Turkish
+   *  session still read "Opening Billing…", "Billing ✓", "Couldn't open
+   *  Billing". `{label}` is the action's own name, which the host localises. */
+  actionOpening: "Opening {label}…",
+  actionDone: "{label} ✓",
+  actionOpenFailed: "Couldn't open {label}",
+  actionRunFailed: "Couldn't run {label}",
+  actionRetry: "{label} — try again",
+  /** Outcomes of an action the HOST performed on the page behind the chat. */
+  actionShownOnPage: "Shown on the page",
+  actionDoneOnPage: "Done on the page",
+  actionPageFailed: "Couldn't do that on the page",
+  actionOpened: "Opened",
+  /** A thread the transcript endpoint would not return. */
+  threadOpenFailed: "Couldn't open that conversation.",
 } as const;
 
 /** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */
@@ -4061,8 +4078,8 @@ export function createAiChatWidget(
           ...(data.value !== undefined ? { value: data.value } : {}),
         });
         return r.ok
-          ? "Shown on the page"
-          : r.message || "Couldn't do that on the page";
+          ? L("actionShownOnPage")
+          : r.message || L("actionPageFailed");
       }
       const candidate =
         name === "navigate"
@@ -4072,7 +4089,7 @@ export function createAiChatWidget(
       const relPath = isSafeRelPath(candidate) ? candidate : null;
       if (relPath != null && opts.getAdvancedUrl) {
         navigateFrame(opts.getAdvancedUrl(relPath));
-        return "Opened";
+        return L("actionOpened");
       }
     }
     return opts.onWidgetAction ? opts.onWidgetAction(name, data) : undefined;
@@ -4279,7 +4296,7 @@ export function createAiChatWidget(
     } catch {
       if (overlay) {
         overlay.querySelector(`.${PREFIX}-history-list`)!.textContent =
-          "Couldn't open that conversation.";
+          L("threadOpenFailed");
       } else {
         // No overlay to report into — say it in the conversation itself.
         addActivityChip(L("historyLoadFailed"), "error");
@@ -6026,7 +6043,8 @@ export function createAiChatWidget(
       }
       try {
         const msg = await dispatchAction(a.name, data);
-        btn.textContent = (typeof msg === "string" && msg) || `${label} ✓`;
+        btn.textContent =
+          (typeof msg === "string" && msg) || L("actionDone", { label });
       } catch {
         btn.disabled = false;
         btn.textContent = `${label} — ${L("tryAgain")}`;
@@ -6421,7 +6439,7 @@ export function createAiChatWidget(
     // never auto-follow — re-opening a conversation must not navigate the app.
     if ((autoNav || advanced) && !replay) {
       const chip = el("div", `${PREFIX}-autonav`);
-      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
+      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(L("actionOpening", { label }))}</span>`;
       wrap.appendChild(chip);
       log.appendChild(wrap);
       scrollDown(true);
@@ -6436,10 +6454,12 @@ export function createAiChatWidget(
       ).then(
         (msg) => {
           chip.querySelector("span")!.textContent =
-            (typeof msg === "string" && msg) || `${label} ✓`;
+            (typeof msg === "string" && msg) || L("actionDone", { label });
         },
         () => {
-          chip.querySelector("span")!.textContent = `Couldn't open ${label}`;
+          chip.querySelector("span")!.textContent = L("actionOpenFailed", {
+            label,
+          });
         }
       );
       return;
@@ -6455,13 +6475,13 @@ export function createAiChatWidget(
         // between "opened" and "you are already there", which is the whole
         // reason a click on the page you are on looked broken.
         btn.innerHTML = `<span>${escapeHtml(
-          (typeof msg === "string" && msg) || `${label} ✓`
+          (typeof msg === "string" && msg) || L("actionDone", { label })
         )}</span>`;
       } catch {
         // Re-enabling in silence left the user to guess. Refusing an off-app
         // path is a decision worth stating.
         btn.disabled = false;
-        btn.innerHTML = `<span>${escapeHtml(label)} — try again</span>`;
+        btn.innerHTML = `<span>${escapeHtml(L("actionRetry", { label }))}</span>`;
       }
     });
     wrap.appendChild(btn);
@@ -6595,17 +6615,19 @@ export function createAiChatWidget(
     ) {
       const label = spec.label || "Opening…";
       const chip = el("div", `${PREFIX}-autonav`);
-      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(`Opening ${label}…`)}</span>`;
+      chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(L("actionOpening", { label }))}</span>`;
       wrap.appendChild(chip);
       log.appendChild(wrap);
       scrollDown(true);
       void Promise.resolve(dispatchAction(spec.name, spec.data ?? {})).then(
         (msg) => {
           chip.querySelector("span")!.textContent =
-            (typeof msg === "string" && msg) || `${label} ✓`;
+            (typeof msg === "string" && msg) || L("actionDone", { label });
         },
         () => {
-          chip.querySelector("span")!.textContent = `Couldn't run ${label}`;
+          chip.querySelector("span")!.textContent = L("actionRunFailed", {
+            label,
+          });
         }
       );
       return;
@@ -6619,11 +6641,11 @@ export function createAiChatWidget(
       try {
         const msg = await dispatchAction(spec.name, spec.data ?? {});
         btn.innerHTML = `<span>${escapeHtml(
-          (typeof msg === "string" && msg) || `${label} ✓`
+          (typeof msg === "string" && msg) || L("actionDone", { label })
         )}</span>`;
       } catch {
         btn.disabled = false;
-        btn.innerHTML = `<span>${escapeHtml(label)} — try again</span>`;
+        btn.innerHTML = `<span>${escapeHtml(L("actionRetry", { label }))}</span>`;
       }
     };
     btn.addEventListener("click", () => {
