@@ -266,6 +266,17 @@ export interface HostActionsConfig {
   }) => void;
   /** App-specific actions, merged over the standard set (can override). */
   handlers?: Record<string, HostActionHandler>;
+  /**
+   * The host's translator, for the CHIP OUTCOMES below.
+   *
+   * Every visible string the widget itself renders goes through
+   * `WIDGET_LABELS`, which is what lets a host translate the chrome. These
+   * outcomes were plain English record literals returned straight into the chip
+   * text, so a Turkish session read "Opened dashboards" and "Already there" in
+   * the middle of a Turkish conversation. Optional so a host that passes none
+   * keeps today's English.
+   */
+  t?: (key: string, defaultValue: string) => string;
 }
 
 /**
@@ -276,6 +287,7 @@ export function createHostActions(
   cfg: HostActionsConfig
 ): (action: string, data: Record<string, string>) => Promise<string | void> {
   const base = cfg.accountId ? `/accounts/${cfg.accountId}` : "";
+  const tr = cfg.t ?? ((_k: string, d: string) => d);
   const standard: Record<string, HostActionHandler> = {
     // Deep-link INTO the library: a folder and/or one file's preview.
     //
@@ -293,7 +305,9 @@ export function createHostActions(
       const path = `${STANDARD_ACTION_PATHS["open-assets"]}?${query}`;
       if (!alreadyThere(resolveTarget(base, path))) cfg.navigate(path);
       cfg.showAssets?.({ folderId, assetId });
-      return assetId ? "Opened the file" : "Opened the folder";
+      return assetId
+        ? tr("aiAssistant.action.actionOpenedFile", "Opened the file")
+        : tr("aiAssistant.action.actionOpenedFolder", "Opened the folder");
     },
     navigate: (data) => {
       if (data.path) {
@@ -303,9 +317,9 @@ export function createHostActions(
         // location never matched, so "you are already here" could not fire on
         // the one action most likely to be aimed at the current page.
         if (alreadyThere(resolveTarget(base, data.path)))
-          return "Already there";
+          return tr("aiAssistant.action.actionAlreadyThere", "Already there");
         cfg.navigate(data.path);
-        return "Opened";
+        return tr("aiAssistant.action.actionOpened", "Opened");
       }
     },
   };
@@ -316,9 +330,15 @@ export function createHostActions(
     standard[name] = () => {
       const target = `${base}${path}`;
       if (alreadyThere(target))
-        return STANDARD_ACTION_ALREADY[name] ?? "Already there";
+        return tr(
+          `aiAssistant.action.actionAlready_${name.replace(/-/g, "_")}`,
+          STANDARD_ACTION_ALREADY[name] ?? "Already there"
+        );
       cfg.navigate(target);
-      return STANDARD_ACTION_DONE[name] ?? "Opened";
+      return tr(
+        `aiAssistant.action.actionDone_${name.replace(/-/g, "_")}`,
+        STANDARD_ACTION_DONE[name] ?? "Opened"
+      );
     };
   }
   const map: Record<string, HostActionHandler> = {
