@@ -43,6 +43,7 @@ import {
 // easing curve — interpolating the token means there is still one definition.
 import { motionCssVars } from "@sgiant/ui/tokens";
 import { isNavigationAction } from "./host-actions";
+import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
 // for hosts that want to validate a spec before handing it over.
 import { parseJsonDirective } from "./directive";
@@ -399,6 +400,21 @@ export interface WidgetJobView {
   /** Where the finished work landed — an in-app, root-relative path the card
    *  links to (e.g. "/assets"). Omit when the job produced nothing to open. */
   resultPath?: string | null;
+  /**
+   * Where this work can be WATCHED while it runs — an in-app, root-relative
+   * path, available from the moment the work exists rather than when it ends.
+   *
+   * Distinct from `resultPath`, which is the finished artefact and is null
+   * until then. A report is the case that needs it: its whole premise is a
+   * page you watch build, so "come and look" is useful at second one and
+   * useless at the end. In advanced view the widget points the app pane here
+   * itself (see `autoNavigateFrame`), which is the difference between telling
+   * someone to watch it build and showing them.
+   *
+   * Omit for work with nothing to watch — a job whose only observable state is
+   * the card itself.
+   */
+  livePath?: string | null;
   /**
    * The MEDIA this job produced, by id — what lets a `[[ui:…]]` tile that was
    * drawn empty fill itself in with the actual asset the moment the job
@@ -912,6 +928,12 @@ export const WIDGET_LABELS = {
   jobOpenResult: "Open the result",
   /** Toggle under the flow tail that reveals the job's full activity feed. */
   jobFlowAll: "Show all {count} steps",
+  /** Shown INSTEAD of the step feed when the app pane is already showing this
+   *  run — see the collapse in renderJobCard. */
+  jobWatchingInPane: "Following along in the panel →",
+  /** Advanced view — the pane is showing a computed widget, not a route. */
+  paneBackToPage: "Back to the page",
+  paneShowingWidget: "Result",
   jobUnreachable: "Still running in the background — check back shortly",
   // Render STEPS. The runner writes its narration in English (it has no request
   // locale), but each event also carries a machine `code`, so a Turkish chat can
@@ -2592,7 +2614,22 @@ export function createAiChatWidget(
     // fallback is the point: a new step can be emitted by the server without a
     // widget release, and it degrades to an English sentence rather than to a
     // blank line or a raw key.
-    const events = view.events ?? [];
+    // FOLLOW IT INTO THE PANE, and stop narrating twice.
+    //
+    // Owner's decision (S4): once the app pane is showing the same run, the
+    // chat column collapses to ONE line. The report page owns the detail — it
+    // has the stage rail and it is the authority on stage — and two renderings
+    // of one job competing on one screen is the divergence advanced view makes
+    // absurdly visible. When the pane is NOT showing it, the chat narrates in
+    // full, because then it is the only account of what is happening.
+    //
+    // `livePath` rather than `resultPath`: this has to work while the thing is
+    // RUNNING, which is the whole point of a page you watch build.
+    if (!terminal && view.id && view.livePath) {
+      autoNavigateFrame(`${view.type ?? "job"}:${view.id}`, view.livePath);
+    }
+    const mirrored = frameShowing(view.livePath);
+    const events = mirrored ? [] : (view.events ?? []);
     const eventText = (e: {
       message: string;
       data?: Record<string, unknown> | null;
@@ -2647,6 +2684,12 @@ export function createAiChatWidget(
         : "") +
       (detail
         ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
+        : "") +
+      // The one line that replaces the narration when the pane is showing the
+      // same run. Not silence: the card still has to say WHY it went quiet, or
+      // it reads as the feed having stopped.
+      (mirrored
+        ? `<div class="${PREFIX}-job-mirrored">${escapeHtml(L("jobWatchingInPane"))}</div>`
         : "") +
       flow;
     // Finished WITH something to look at — the notification's "here's the
@@ -3861,6 +3904,32 @@ export function createAiChatWidget(
     frameUrlLabel.textContent = text;
   };
 
+  /**
+   * THE PATH THE WIDGET LAST ASKED THE FRAME TO SHOW.
+   *
+   * Compared against where the frame ACTUALLY is on every load, which is how
+   * "the user has driven the frame themselves" is detected: the pane hosts our
+   * own app, so a click inside it navigates the iframe without going through
+   * `navigateFrame` at all. Same-origin by construction (`isSafeFrameUrl`), so
+   * the location is readable — but still guarded, because a frame mid-load has
+   * no document to ask.
+   */
+  let frameRequestedPath: string | null = null;
+  /** True once the frame has gone somewhere the widget did not send it. Blocks
+   *  auto-navigation, so a report finishing never yanks a reader off the page
+   *  they chose. */
+  let frameUserDriven = false;
+
+  const framePath = (): string | null => {
+    try {
+      return advFrame?.contentWindow?.location?.pathname ?? null;
+    } catch {
+      // Cross-origin should be impossible here, but a frame that has not
+      // committed a document yet can also throw. Unknown, not "user drove it".
+      return null;
+    }
+  };
+
   /** Point the frame at a full URL (a full document load — the embedded app boots
    *  at that route and re-mounts its agent). */
   const navigateFrame = (url: string): void => {
@@ -3868,9 +3937,61 @@ export function createAiChatWidget(
     // Untrusted target (cross-origin, protocol-relative or a `javascript:`
     // payload smuggled through a model-authored path) — refuse silently.
     if (!isSafeFrameUrl(url)) return;
+    try {
+      frameRequestedPath = new URL(url, location.origin).pathname;
+    } catch {
+      frameRequestedPath = null;
+    }
     advFrame.src = url;
     setFrameUrlLabel(url);
   };
+
+  /**
+   * Follow a long operation into the pane — ONCE, and never over the user.
+   *
+   * A report tells the reader to "watch it build" and then leaves the frame
+   * wherever it was, so watching it meant clicking. This does the click. Three
+   * conditions, and each one is a way this could be obnoxious instead of
+   * helpful:
+   *
+   *  - advanced view only. In floating mode there is no pane to move, and
+   *    navigating the whole PAGE out from under someone because a background
+   *    job started is not the same feature.
+   *  - not if the user has driven the frame since (`frameUserDriven`). They
+   *    chose that page; a job finishing is not permission to leave it.
+   *  - once per operation (`autoNavigated`). A poll runs every couple of
+   *    seconds; re-navigating on each one would reload the page continuously
+   *    and make it unreadable — which is the exact opposite of watching it
+   *    build.
+   */
+  const autoNavigated = new Set<string>();
+  const autoNavigateFrame = (key: string, path: string): void => {
+    if (!advFrame || !opts.getAdvancedUrl) return;
+    if (
+      !shouldAutoNavigate({
+        advanced,
+        canNavigate: true,
+        userDriven: frameUserDriven,
+        alreadyFollowed: autoNavigated.has(key),
+        path,
+        currentPath: framePath() ?? frameRequestedPath,
+      })
+    ) {
+      return;
+    }
+    autoNavigated.add(key);
+    navigateFrame(opts.getAdvancedUrl(path));
+  };
+
+  /** Is the pane already showing this path? Drives the narration collapse —
+   *  see `renderJobCard`. Compared on pathname: a query string is a filter
+   *  within the same page, not a different destination. */
+  const frameShowing = (path: string | null | undefined): boolean =>
+    shouldCollapseNarration({
+      advanced,
+      livePath: path,
+      currentPath: framePath() ?? frameRequestedPath,
+    });
 
   // Collapse the app pane to a thin strip (not display:none — the strip keeps the
   // toggle visible so it can be re-expanded). Also refreshes the toggle's label.
@@ -3913,6 +4034,22 @@ export function createAiChatWidget(
     // targets an embedder would add a sandbox with explicit allows.
     // The frame sits in a padded body so the driven app reads as an inset,
     // rounded "screen" with breathing room rather than a flush edge-to-edge slab.
+    // THE USER CAN DRIVE THIS FRAME WITHOUT US. It hosts our own app, so a
+    // click inside it navigates the iframe directly — `navigateFrame` never
+    // hears about it. Comparing where it LANDED against where we last asked it
+    // to go is the only honest signal, and it is what stops a finishing job
+    // from yanking someone off a page they chose to open.
+    frame.addEventListener("load", () => {
+      const here = framePath();
+      if (!here) return;
+      setFrameUrlLabel(here);
+      if (frameRequestedPath === null) {
+        // We never asked for anything and it moved: the user did.
+        frameUserDriven = true;
+        return;
+      }
+      if (here !== frameRequestedPath) frameUserDriven = true;
+    });
     const body = el("div", `${PREFIX}-pane-body`);
     body.append(frame);
     pane.append(bar, body);
@@ -3928,7 +4065,92 @@ export function createAiChatWidget(
     advFrame = null;
     frameUrlLabel = null;
     collapseBtnEl = null;
+    disposePaneWidget();
     pane.innerHTML = "";
+  };
+
+  /* ------------------------------------------------------------------ *
+   * THE PANE IS A UNION: a ROUTE, or a WIDGET.
+   *
+   * It could only ever be `<iframe src>`, so anything the assistant computed —
+   * a chart, a proposed dashboard, a preview — had to become a real route
+   * before it could be shown at full size. The one that mattered most is the
+   * ordinary case: "chart my revenue by channel" produced a picture squeezed
+   * into a 368px chat column while a whole half-screen sat next to it showing
+   * a page nobody was reading.
+   *
+   * EITHER/OR, not a layering. The frame is torn down when a widget takes the
+   * pane and rebuilt when the route comes back — leaving a live iframe behind
+   * an overlay would keep its app mounted, its polls running and its agent
+   * bridge connected, invisibly.
+   *
+   * The widget half reuses `renderDataWidget` — the SAME host renderer the
+   * chat log uses — so there is one rendering path, one validation story and no
+   * second widget vocabulary. The host draws a real `<WidgetRender>` with its
+   * actual data; the pane is not a picture of one.
+   * ------------------------------------------------------------------ */
+  let paneWidgetDispose: (() => void) | null = null;
+  const disposePaneWidget = (): void => {
+    const d = paneWidgetDispose;
+    paneWidgetDispose = null;
+    if (!d) return;
+    try {
+      d();
+    } catch {
+      /* a renderer that throws on unmount must not wedge the pane */
+    }
+  };
+
+  /** True while the pane is showing a computed widget rather than a route. */
+  let paneShowsWidget = false;
+
+  const showPaneRoute = (): void => {
+    if (!paneShowsWidget) return;
+    paneShowsWidget = false;
+    disposePaneWidget();
+    buildFrame();
+    if (opts.getAdvancedUrl) navigateFrame(opts.getAdvancedUrl());
+  };
+
+  /**
+   * Put a computed widget in the pane. Returns false when the host wired no
+   * renderer — the caller then keeps it in the chat log, which is where it went
+   * before this existed.
+   */
+  const showPaneWidget = (
+    spec: unknown,
+    rows: unknown,
+    comparisonRows?: unknown
+  ): boolean => {
+    if (!advanced || !opts.renderDataWidget) return false;
+    teardownFrame();
+    paneShowsWidget = true;
+    const bar = el("div", `${PREFIX}-pane-bar`);
+    const back = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
+    back.type = "button";
+    // The way BACK to the page. Without it the pane is a dead end and the only
+    // exit is leaving advanced view entirely.
+    back.setAttribute("aria-label", L("paneBackToPage"));
+    back.title = L("paneBackToPage");
+    back.innerHTML = ICON_CHEVRON_R;
+    back.addEventListener("click", () => showPaneRoute());
+    const label = el("div", `${PREFIX}-pane-url`);
+    label.textContent = L("paneShowingWidget");
+    bar.append(back, label);
+    const body = el("div", `${PREFIX}-pane-body`);
+    const host = el("div", `${PREFIX}-pane-widget`);
+    body.append(host);
+    pane.append(bar, body);
+    try {
+      const dispose = opts.renderDataWidget(host, spec, rows, comparisonRows);
+      if (dispose) paneWidgetDispose = dispose;
+    } catch {
+      // A renderer that throws must not leave an empty half-screen: fall back
+      // to the route and let the caller put it in the log.
+      showPaneRoute();
+      return false;
+    }
+    return true;
   };
 
   const updateAdvancedBtn = (): void => {
@@ -4035,6 +4257,10 @@ export function createAiChatWidget(
     // the button so it shows the right icon/label when advanced is exited.
     if (expanded) setExpanded(false);
     buildFrame();
+    // A fresh advanced session: the user has not driven anything yet, and any
+    // operation that auto-navigated in a PREVIOUS session may do so again.
+    frameUserDriven = false;
+    autoNavigated.clear();
     navigateFrame(opts.getAdvancedUrl());
     updateAdvancedBtn();
     rememberAdvanced();
@@ -6375,6 +6601,23 @@ export function createAiChatWidget(
     rows: unknown,
     comparisonRows?: unknown
   ): void {
+    // ADVANCED VIEW: the big surface is the right place for a chart.
+    //
+    // A computed widget used to land in the 368px chat column while half the
+    // screen next to it showed a page nobody was reading. Same principle as
+    // the report narration collapsing when the pane shows the run: whichever
+    // surface can render it properly gets it, and the chat says where it went
+    // rather than drawing a second, smaller copy.
+    //
+    // Falls through to the log when the pane cannot take it (no host renderer,
+    // or the renderer threw), so a failure here costs nothing.
+    if (showPaneWidget(spec, rows, comparisonRows)) {
+      const note = el("div", `${PREFIX}-job-mirrored`);
+      note.textContent = L("jobWatchingInPane");
+      log.appendChild(note);
+      scrollDown(true);
+      return;
+    }
     // In-app: hand the frame to the host's REAL dashboard renderer (charts).
     if (opts.renderDataWidget) {
       const host = el("div", `${PREFIX}-widget ${PREFIX}-widget-host`);
@@ -7004,6 +7247,8 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-job-bar{height:4px;border-radius:3px;background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
 .${PREFIX}-job-bar>i{display:block;height:100%;background:var(--aiw-accent);transition:width .4s ease}
 .${PREFIX}-job-detail{color:var(--aiw-muted);font-size:11px;word-break:break-word}
+.${PREFIX}-job-mirrored{color:var(--aiw-muted);font-size:11px;font-style:italic}
+.${PREFIX}-pane-widget{width:100%;height:100%;overflow:auto;background:var(--aiw-surface);border-radius:12px;padding:16px;box-sizing:border-box}
 .${PREFIX}-job-flow{list-style:none;margin:6px 0 0;padding:0 0 0 2px;display:flex;flex-direction:column;gap:3px}
 .${PREFIX}-job-ev{position:relative;padding-left:12px;color:var(--aiw-text-2);font-size:11px;line-height:1.35;word-break:break-word}
 .${PREFIX}-job-ev::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:50%;background:var(--aiw-muted)}
