@@ -34,6 +34,19 @@ export interface ApplyProposalCtx {
    *  (a staff platform page): every account-scoped apply is refused honestly
    *  instead of firing at `/accounts//…`. */
   accountId: string;
+  /**
+   * The `AiArtifact` the runner persisted for a dashboard/template write.
+   *
+   * `apply_dashboard` and `save_template` cannot be rebuilt from `args`: their
+   * apply is a REST call that takes the artifact's ID, because the artifact is
+   * what the server validates and marks `applied`. The runner has always
+   * emitted it on the `tool_proposal` frame and nothing on the client read it,
+   * so both tools rendered a confirm card whose Apply fell through to
+   * `throw new Error("Unsupported action")` — the model offered a dashboard,
+   * the user pressed Apply, and got an error. `applyArtifact` was implemented
+   * on the chat client for exactly this and had no caller at all.
+   */
+  artifactId?: string;
   /** The host's translator (react-i18next `t` wrapped to a plain signature). */
   t: (key: string, defOrOpts?: unknown) => string;
   /** Staff-plane only: allow the generic `mcp__sgiant__api_request` write (the
@@ -53,7 +66,7 @@ export async function applyProposal(
   name: string,
   args: Record<string, unknown>
 ): Promise<string | { message?: string; jobId?: string }> {
-  const { api, accountId, t } = ctx;
+  const { api, accountId, artifactId, t } = ctx;
   // On the staff plane a platform page has NO ambient account. Every
   // account-scoped apply below needs one — refuse honestly instead of firing
   // at /accounts//… (the api_request card carries its own path and is exempt).
@@ -181,12 +194,36 @@ export async function applyProposal(
   // Asset-library housekeeping tools — each maps straight onto its own
   // library endpoint.
   if (name === "organize_assets")
-    return applyAssetOrganize(api, accountId, args);
-  if (name === "manage_folders") return applyFolderManage(api, accountId, args);
-  if (name === "share_asset") return applyAssetShare(api, accountId, args);
+    return applyAssetOrganize(api, accountId, args, t);
+  if (name === "manage_folders")
+    return applyFolderManage(api, accountId, args, t);
+  if (name === "share_asset") return applyAssetShare(api, accountId, args, t);
   if (name === "save_artifact_to_assets")
-    return applyAssetSave(api, accountId, args);
-  if (name === "edit_asset") return applyAssetEdit(api, accountId, args);
-  if (name === "create_asset") return applyAssetCreate(api, accountId, args);
+    return applyAssetSave(api, accountId, args, t);
+  if (name === "edit_asset") return applyAssetEdit(api, accountId, args, t);
+  if (name === "create_asset") return applyAssetCreate(api, accountId, args, t);
+  // THE DASHBOARD / TEMPLATE WRITES. Both apply through the artifact the runner
+  // saved, not through `args` — the server looks the artifact up by id, checks
+  // it is not already applied, builds the dashboard from its payload and marks
+  // it `applied`, which is also what makes a double-click idempotent.
+  if (name === "apply_dashboard" || name === "save_template") {
+    if (!artifactId)
+      throw new Error(
+        t(
+          "aiAssistant.apply.noArtifact",
+          "This proposal has no saved artifact to apply — ask the assistant to build it again."
+        )
+      );
+    const res = await api<{ ok?: boolean; dashboardId?: string }>(
+      `/accounts/${accountId}/ai/artifacts/${artifactId}/apply`,
+      { method: "POST" }
+    );
+    return name === "save_template"
+      ? t("aiAssistant.apply.templateSaved", "Template saved ✓")
+      : t("aiAssistant.apply.dashboardApplied", {
+          defaultValue: "Dashboard created ✓",
+          dashboardId: res?.dashboardId ?? "",
+        });
+  }
   throw new Error(`Unsupported action: ${name}`);
 }

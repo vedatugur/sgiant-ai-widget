@@ -749,7 +749,7 @@ export interface AiChatWidgetOptions {
      *  on its own session and would otherwise aim at whatever account its page
      *  is scoped to — which is not always the account the assistant reasoned
      *  about, and on a platform page is not an account at all. */
-    opts?: { accountId?: string }
+    opts?: { accountId?: string; artifactId?: string }
   ) => Promise<
     string | void | { message?: string; jobId?: string; reportId?: string }
   >;
@@ -923,6 +923,19 @@ export const WIDGET_LABELS = {
   proposalCreateFile: "Create this file in your library?",
   proposalShareAsset: "Create a public share link?",
   proposalSaveArtifact: "Save this to your asset library?",
+  // The SEVEN write tools that used to hit the generic English fallback
+  // ("Apply this change?") — including generate_report, the most expensive
+  // confirm in the product. The widget's contract is that visible copy lives
+  // here so a host can translate it; a `??` literal in the render path is
+  // outside that contract and untranslatable by construction.
+  proposalGenerateReport: "Generate this report?",
+  proposalIngestWebsite: "Import this website into your assets?",
+  proposalRunBrowserFlow: "Run this browser flow?",
+  proposalSetAccountSettings: "Save these account settings?",
+  proposalManageFolders: "Apply these folder changes?",
+  proposalApplyDashboard: "Apply this dashboard?",
+  proposalSaveTemplate: "Save this as a template?",
+  proposalGeneric: "Apply this change?",
   // The generate_report confirm card. These were four hardcoded English lines
   // in `proposalSummary` — on a card the user reads before spending minutes of
   // model time, in a widget whose whole contract is that visible copy lives
@@ -1333,6 +1346,12 @@ interface StreamFrame {
   status?: string;
   /** tool_proposal frame — a confirm-gated write tool's args. */
   args?: unknown;
+  /** tool_proposal frame — the AiArtifact the runner persisted for a
+   *  dashboard/template write, which is the ONLY handle its REST apply takes.
+   *  The runner has always emitted this; nothing here read it, so
+   *  `apply_dashboard` and `save_template` rendered a confirm card whose Apply
+   *  could only reach `throw new Error("Unsupported action")`. */
+  artifactId?: string;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;
@@ -4472,6 +4491,13 @@ export function createAiChatWidget(
     share_asset: L("proposalShareAsset"),
     save_artifact_to_assets: L("proposalSaveArtifact"),
     mcp__sgiant__api_request: L("proposalApiRequest"),
+    generate_report: L("proposalGenerateReport"),
+    ingest_website: L("proposalIngestWebsite"),
+    run_browser_flow: L("proposalRunBrowserFlow"),
+    set_account_settings: L("proposalSetAccountSettings"),
+    manage_folders: L("proposalManageFolders"),
+    apply_dashboard: L("proposalApplyDashboard"),
+    save_template: L("proposalSaveTemplate"),
   };
   function proposalSummary(
     name: string,
@@ -4832,7 +4858,9 @@ export function createAiChatWidget(
     /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
     fields: ProposalField[] = [],
     /** The account this write targets, per the worker. */
-    proposalAccountId?: string
+    proposalAccountId?: string,
+    /** The persisted artifact a dashboard/template apply needs. */
+    proposalArtifactId?: string
   ): void {
     // `-pending` marks a card that is still AWAITING the user, and it is what
     // the end-of-turn reload checks. The reload used to look for `-proposal`,
@@ -4863,7 +4891,7 @@ export function createAiChatWidget(
       title.appendChild(badge);
     }
     title.appendChild(
-      document.createTextNode(PROPOSAL_LABELS[name] ?? "Apply this change?")
+      document.createTextNode(PROPOSAL_LABELS[name] ?? L("proposalGeneric"))
     );
     wrap.appendChild(title);
     let disposePreview: (() => void) | undefined;
@@ -5013,7 +5041,16 @@ export function createAiChatWidget(
         const res = await opts.onApplyProposal!(
           name,
           threadId ? { ...edited, threadId } : edited,
-          proposalAccountId ? { accountId: proposalAccountId } : undefined
+          // `artifactId` travels beside the account: the dashboard/template
+          // applies are the two that cannot be reconstructed from `args` alone.
+          proposalAccountId || proposalArtifactId
+            ? {
+                ...(proposalAccountId ? { accountId: proposalAccountId } : {}),
+                ...(proposalArtifactId
+                  ? { artifactId: proposalArtifactId }
+                  : {}),
+              }
+            : undefined
         );
         const msg = typeof res === "string" ? res : res?.message;
         // An apply that ENQUEUED answers with a job id. Keeping it is the whole
@@ -5176,6 +5213,9 @@ export function createAiChatWidget(
       fields: ProposalField[];
       /** The account the worker said this write is for. */
       accountId?: string;
+      /** The artifact a dashboard/template apply needs — the runner emits it,
+       *  and until now nothing on this side carried it. */
+      artifactId?: string;
     }> = [];
     let turnIn = 0;
     let turnOut = 0;
@@ -5495,6 +5535,7 @@ export function createAiChatWidget(
                 // most of them — the card stays a plain confirmation.
                 fields: proposalFields((frame as { fields?: unknown }).fields),
                 accountId: (frame as { accountId?: string }).accountId,
+                artifactId: (frame as { artifactId?: string }).artifactId,
               });
               producedAny = true;
             }
@@ -5572,7 +5613,14 @@ export function createAiChatWidget(
           /* the thread shows the reply on its next open */
         }
         for (const p of deferredProposals)
-          renderProposal(p.name, p.args, p.agent, p.fields, p.accountId);
+          renderProposal(
+            p.name,
+            p.args,
+            p.agent,
+            p.fields,
+            p.accountId,
+            p.artifactId
+          );
         maybeDing();
         scrollDown();
         saveState();
@@ -5587,7 +5635,14 @@ export function createAiChatWidget(
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
     for (const p of deferredProposals)
-      renderProposal(p.name, p.args, p.agent, p.fields, p.accountId);
+      renderProposal(
+        p.name,
+        p.args,
+        p.agent,
+        p.fields,
+        p.accountId,
+        p.artifactId
+      );
     if (deferredProposals.length) scrollDown();
     if (!producedAny) {
       if (failure) showError(failure);
