@@ -18,6 +18,15 @@ export const AI_DOMAIN_KEYS: Record<string, string[]> = {
   // A finished report must appear in the list without a manual refresh — the
   // whole point of enqueueing from chat is that the user does not go looking.
   reports: ["reports", "admin-reports", "report"],
+  // `apply_dashboard` and `save_template` write through the artifact-apply
+  // endpoint rather than through a normal mutation, so nothing else in the app
+  // knows a row appeared. Without these keys the user confirms "Create
+  // dashboard", the chat says it worked, and the Dashboards page they are
+  // looking at stays empty until a manual reload — which reads as a failure.
+  // `dashboard-templates` is NOT account-scoped (the admin page keys it bare),
+  // so `invalidateAiTouched` also invalidates each key un-scoped; see below.
+  dashboards: ["dashboards", "dashboard", "dashboard-view"],
+  templates: ["dashboard-templates"],
 };
 
 /** Which domains each apply-proposal name touches (for scoped invalidation). */
@@ -32,6 +41,8 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   share_asset: ["assets"],
   save_artifact_to_assets: ["assets"],
   generate_report: ["reports"],
+  apply_dashboard: ["dashboards"],
+  save_template: ["templates", "dashboards"],
 };
 
 /** Minimal shape of a React Query client — avoids a hard dep on @tanstack here. */
