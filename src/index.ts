@@ -4571,8 +4571,24 @@ export function createAiChatWidget(
 
   // Restore the open/closed state across reloads — a user who left the assistant
   // open finds it open again (done after open() + bindKeyboard are defined).
+  //
+  // ADVANCED VIEW RESTORES TOO, and did not for its whole life: every toggle
+  // called `rememberAdvanced()` and wrote `ayca:adv:<persistKey>`, but nothing
+  // ever read that key back — `advanced` was initialised `false` and stayed
+  // false. A write with no reader, so the flag was perfectly maintained and
+  // never consulted. Anyone working in the split view lost it on every refresh
+  // and landed back in the small floating widget: the transcript and the thread
+  // came back (those keys ARE read), the working surface did not, which reads
+  // as "the chat didn't continue".
+  //
+  // Order matters — advanced is a layout of the OPEN panel, so it can only be
+  // entered after open(). openAdvanced() no-ops without `getAdvancedUrl`, so a
+  // host that doesn't offer the view is unaffected.
   try {
-    if (openStateKey && localStorage.getItem(openStateKey) === "1") open();
+    if (openStateKey && localStorage.getItem(openStateKey) === "1") {
+      open();
+      if (advKey && localStorage.getItem(advKey) === "1") openAdvanced();
+    }
   } catch {
     /* storage blocked — start closed */
   }
