@@ -36,6 +36,7 @@ export const AI_ACTION_DOMAINS: Record<string, string[]> = {
   organize_assets: ["assets"],
   manage_folders: ["assets"],
   set_account_settings: ["account"],
+  wp_upsert_post: ["account"],
   edit_asset: ["assets"],
   create_asset: ["assets"],
   share_asset: ["assets"],

@@ -962,6 +962,7 @@ export const WIDGET_LABELS = {
   proposalManageFolders: "Apply these folder changes?",
   proposalApplyDashboard: "Apply this dashboard?",
   proposalSaveTemplate: "Save this as a template?",
+  proposalWordpressDraft: "Save this WordPress draft?",
   proposalGeneric: "Apply this change?",
   // The generate_report confirm card. These were four hardcoded English lines
   // in `proposalSummary` — on a card the user reads before spending minutes of
@@ -4762,6 +4763,7 @@ export function createAiChatWidget(
     manage_folders: L("proposalManageFolders"),
     apply_dashboard: L("proposalApplyDashboard"),
     save_template: L("proposalSaveTemplate"),
+    wp_upsert_post: L("proposalWordpressDraft"),
   };
   function proposalSummary(
     name: string,
@@ -4883,6 +4885,14 @@ export function createAiChatWidget(
       return `New file: ${filename}${folder}\n${preview}${
         content.length > 200 ? "…" : ""
       }`;
+    }
+    if (name === "wp_upsert_post") {
+      const title = typeof args.title === "string" ? args.title : "Untitled";
+      const type =
+        typeof args.type === "string" && args.type ? args.type : "post";
+      const content = typeof args.content === "string" ? args.content : "";
+      const preview = content.replace(/<[^>]+>/g, "").slice(0, 200);
+      return `Draft ${type}: ${title}\n${preview}${content.length > 200 ? "…" : ""}`;
     }
     // A report is one small card with minutes of consequences — say what will
     // happen, not just the raw args.

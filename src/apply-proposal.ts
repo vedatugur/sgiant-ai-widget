@@ -202,6 +202,17 @@ export async function applyProposal(
     return applyAssetSave(api, accountId, args, t);
   if (name === "edit_asset") return applyAssetEdit(api, accountId, args, t);
   if (name === "create_asset") return applyAssetCreate(api, accountId, args, t);
+  if (name === "wp_upsert_post") {
+    const draft = await api<{ editUrl?: string; id?: number }>(
+      `/accounts/${accountId}/integrations/wordpress/posts`,
+      { method: "POST", body: JSON.stringify(args) }
+    );
+    return t("aiAssistant.apply.wordpressDraft", {
+      defaultValue: "Draft saved on WordPress ✓",
+      id: draft?.id ?? "",
+      url: draft?.editUrl ?? "",
+    });
+  }
   // THE DASHBOARD / TEMPLATE WRITES. Both apply through the artifact the runner
   // saved, not through `args` — the server looks the artifact up by id, checks
   // it is not already applied, builds the dashboard from its payload and marks
