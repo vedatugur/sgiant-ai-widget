@@ -14,7 +14,7 @@
     "@sgiant/ai-agent-bridge": "*",
     "@sgiant/assets": "*",
     "@sgiant/shared": "*",
-    "@sgiant/ui": "*"
+    "@sgiant/tokens": "^1.0.1"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",

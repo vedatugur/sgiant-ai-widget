@@ -37,11 +37,14 @@ import {
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
 } from "@sgiant/shared";
-// PURE-DATA token entry (`@sgiant/ui/tokens` has no imports at all), so this
-// does not drag React into a vanilla-DOM bundle. The widget hand-writes its
-// CSS as strings, which is exactly why it had its own copy of the product's
-// easing curve — interpolating the token means there is still one definition.
-import { motionCssVars } from "@sgiant/ui/tokens";
+// Straight from `@sgiant/tokens`, NOT through `@sgiant/ui/tokens`. That subpath
+// is a re-export left over from before the tokens moved out of the component
+// library, and taking it made this vanilla-DOM widget declare a dependency on a
+// React library carrying three.js, recharts and Clerk — to read one function.
+// The widget hand-writes its CSS as strings, which is why it once had its own
+// copy of the product's easing curve; interpolating the token keeps one
+// definition without the closure.
+import { motionCssVars } from "@sgiant/tokens";
 import { isNavigationAction } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
