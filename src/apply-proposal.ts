@@ -24,7 +24,12 @@ import {
   applyAssetCreate,
   applyAssetSave,
   applyAssetShare,
-} from "@sgiant/assets";
+} from "@sgiant/assets/actions";
+// `/actions`, NOT the barrel. These six are pure functions in apply-organize.ts,
+// but @sgiant/assets' index re-exports them alongside AssetsProvider and the
+// picker/library/share COMPONENTS — so importing through it puts React, and
+// with it @sgiant/ui's three.js and lucide, in the closure of a vanilla-DOM
+// widget. Measured: 354kB bundled alone, carrying liquid-scene.js.
 
 export interface ApplyProposalCtx {
   /** The host's Clerk-authed JSON fetcher (already based at the right API origin). */
