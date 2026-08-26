@@ -20,6 +20,7 @@
 export {
   makePageContext,
   matchManifest,
+  isKnownNavTarget,
   createHostActions,
   STANDARD_ACTION_PATHS,
   isNavigationAction,
@@ -45,7 +46,7 @@ import {
 // copy of the product's easing curve; interpolating the token keeps one
 // definition without the closure.
 import { motionCssVars } from "@sgiant/tokens";
-import { isNavigationAction } from "./host-actions";
+import { isNavigationAction, isKnownNavTarget } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
 // for hosts that want to validate a spec before handing it over.
@@ -1546,12 +1547,25 @@ export function createAiChatWidget(
   let lastUserContent = "";
   // The navigable pages from the most recent turn's pageContext, cached so the
   // #111 prose-nav fallback (linkifyProseNav) can match a model's "Open <page>"
-  // prose against a real path even after the turn's getContext() has gone.
+  // prose against a real path even after the turn's getContext() has gone —
+  // and, since S4, the allow-list `dispatchAction` checks a navigation against.
   let knownNavTargets: Array<{
     path?: string;
     title?: string;
     action?: string;
   }> = [];
+  /** Read the catalogue straight from the host, for a navigation dispatched
+   *  before this session has sent a turn (a chip in a restored transcript). */
+  async function refreshNavTargets(): Promise<void> {
+    if (!opts.getContext) return;
+    try {
+      const ctx = await opts.getContext();
+      const targets = (ctx as { navTargets?: unknown } | undefined)?.navTargets;
+      if (Array.isArray(targets)) knownNavTargets = targets;
+    } catch {
+      // A host that cannot say what its pages are has not declared any.
+    }
+  }
 
   // Conversation memory across page reloads (opt-in via persistKey). Kept in
   // localStorage so a refresh restores the thread + messages.
@@ -2629,8 +2643,13 @@ export function createAiChatWidget(
     //
     // `livePath` rather than `resultPath`: this has to work while the thing is
     // RUNNING, which is the whole point of a page you watch build.
-    if (!terminal && view.id && view.livePath) {
-      autoNavigateFrame(`${view.type ?? "job"}:${view.id}`, view.livePath);
+    // Keyed through `refOf`/`refKey`, the same way `jobCards` and
+    // `userConfirmedWork` are: `type` is free-form copy ("import", "render"),
+    // so composing the key by hand here gave the follow decision a key that
+    // could not match the one the confirmation was recorded under.
+    const followRef = !terminal && view.livePath ? refOf(view) : null;
+    if (followRef && view.livePath) {
+      autoNavigateFrame(refKey(followRef), view.livePath);
     }
     const mirrored = frameShowing(view.livePath);
     const events = mirrored ? [] : (view.events ?? []);
@@ -2776,6 +2795,23 @@ export function createAiChatWidget(
     log.appendChild(card);
     jobCards.set(refKey(ref), card);
     scrollDown(true);
+  }
+
+  /**
+   * Work THIS session's user started by pressing a button, keyed like `jobCards`.
+   *
+   * The only thing that separates "the report you just asked me to write" from
+   * "an import some other tab left running" — and the difference matters because
+   * the first earns the app pane and the second must never take it. `trackJob`
+   * cannot tell them apart on its own: it is called with a threadId from the
+   * apply below AND from the server-listing re-attach, so the presence of a
+   * thread proves nothing about who asked. The fact is recorded where the
+   * confirmation actually happens instead.
+   */
+  const userConfirmedWork = new Set<string>();
+  function trackConfirmedJob(ref: WorkRef): void {
+    userConfirmedWork.add(refKey(ref));
+    trackJob(ref, threadId);
   }
 
   /**
@@ -3954,13 +3990,19 @@ export function createAiChatWidget(
    * Follow a long operation into the pane — ONCE, and never over the user.
    *
    * A report tells the reader to "watch it build" and then leaves the frame
-   * wherever it was, so watching it meant clicking. This does the click. Three
+   * wherever it was, so watching it meant clicking. This does the click. Four
    * conditions, and each one is a way this could be obnoxious instead of
    * helpful:
    *
    *  - advanced view only. In floating mode there is no pane to move, and
    *    navigating the whole PAGE out from under someone because a background
    *    job started is not the same feature.
+   *  - only work the user confirmed in THIS session (`userConfirmedWork`).
+   *    Tracked jobs are restored from localStorage and re-discovered from the
+   *    server listing, so a card can appear for an import another tab (or
+   *    another device) started; `openAdvanced` clears `autoNavigated` for a
+   *    fresh session, and without this condition the first poll after opening
+   *    the pane would send it to that job's page.
    *  - not if the user has driven the frame since (`frameUserDriven`). They
    *    chose that page; a job finishing is not permission to leave it.
    *  - once per operation (`autoNavigated`). A poll runs every couple of
@@ -3975,6 +4017,7 @@ export function createAiChatWidget(
       !shouldAutoNavigate({
         advanced,
         canNavigate: true,
+        userConfirmedThisSession: userConfirmedWork.has(key),
         userDriven: frameUserDriven,
         alreadyFollowed: autoNavigated.has(key),
         path,
@@ -4306,6 +4349,23 @@ export function createAiChatWidget(
     // as success, so the chip ticked green over a path we had just declined.
     if (name === "navigate" && !isSafeRelPath(data.path))
       throw new Error("that navigation target is not an in-app page");
+    // …and the shape test is not the gate. It admits every path in the app,
+    // including another tenant's: `/accounts/<someone-else>/settings` is
+    // root-relative, and the host's `orgPath`/`adminPath` return an
+    // already-`/accounts/`-prefixed path untouched, so it would be loaded into
+    // the advanced frame — which is deliberately un-sandboxed and carries the
+    // live session. The manifest this turn was built from is the real allow
+    // list; it has been present as `knownNavTargets` since #111 and nothing
+    // but the prose-nav fallback ever read it.
+    if (name === "navigate") {
+      // The cache holds the LAST TURN THIS SESSION SENT, which is not every
+      // chip that can be clicked: `persistKey` restores a transcript across a
+      // reload, and its nav chips are live before a word has been sent. Ask the
+      // host for its catalogue rather than refuse a page the manifest declares.
+      if (!knownNavTargets.length) await refreshNavTargets();
+      if (!isKnownNavTarget(data.path, knownNavTargets))
+        throw new Error("that page is not one I can open");
+    }
     if (advanced && transport) {
       if (isUiControlAction(name) || isOperateAction(name)) {
         const r = await transport.act(name as BridgeAction, {
@@ -5353,8 +5413,8 @@ export function createAiChatWidget(
         // stuck on "Queued" forever rather than erroring. Prefer the id that
         // will still exist; fall back to the job id for work that has no
         // report (an import, a render).
-        if (reportId) trackJob({ kind: "report", id: reportId }, threadId);
-        else if (jobId) trackJob({ kind: "job", id: jobId }, threadId);
+        if (reportId) trackConfirmedJob({ kind: "report", id: reportId });
+        else if (jobId) trackConfirmedJob({ kind: "job", id: jobId });
         const href = reportId ? opts.reportHref?.(reportId) : undefined;
         if (href) {
           const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;

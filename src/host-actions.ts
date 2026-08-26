@@ -130,6 +130,60 @@ export function matchManifest(
   return best;
 }
 
+/**
+ * Is this AI-supplied path one of the pages the manifest actually DECLARES?
+ *
+ * The manifest is the whole security surface for navigation, and until now it
+ * was only ever advice: it went into the prompt as "Pages you can open (use
+ * ONLY these to navigate)" and nothing checked the answer. The only real gate
+ * was a shape test — starts with one `/`, not `//` or `/\` — which every
+ * cross-tenant path also passes. `/accounts/<someone-else>/settings` is a
+ * root-relative in-app route by that definition, and `orgPath` returns an
+ * already-`/accounts/`-prefixed path untouched, so a model that emitted one got
+ * it loaded into the deliberately un-sandboxed, same-origin advanced frame.
+ *
+ * Matched from the START, per segment, unlike `matchManifest` — which matches a
+ * SUFFIX because it is handed a full SPA route and has to find the entry that
+ * describes it. Here the input is the account-relative path the model wrote, so
+ * the manifest's namespace has to be its PREFIX or the check is no gate at all:
+ * a suffix test admits `/accounts/<someone-else>/dashboards` on the strength of
+ * the `/dashboards` entry. Extra trailing segments ARE allowed — that is how a
+ * detail page under a declared list ("/reports/<uuid>") stays reachable — and
+ * `:param` segments match any one segment, as in the manifest itself.
+ *
+ * `..` is refused outright: the host prefixes the account AFTER this runs, so
+ * `/reports/../../accounts/<someone-else>/settings` would be normalised by the
+ * browser back out of the account it was prefixed with.
+ *
+ * NO MANIFEST MEANS NO NAVIGATION. A host that declares no pages has declared
+ * nothing the model may open, and falling back to "any root-relative path" here
+ * would restore exactly the hole this closes.
+ */
+export function isKnownNavTarget(
+  path: unknown,
+  targets: readonly { path?: string }[] | undefined | null
+): path is string {
+  if (typeof path !== "string") return false;
+  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\"))
+    return false;
+  if (!targets?.length) return false;
+  const bare = path.split(/[?#]/)[0] ?? "";
+  const segs = normalizePath(bare).split("/").filter(Boolean);
+  if (segs.some((s) => s === "." || s === "..")) return false;
+  for (const t of targets) {
+    if (!t.path) continue;
+    const entry = normalizePath(t.path).split("/").filter(Boolean);
+    // The root entry describes the root, never everything beneath it.
+    if (!entry.length) {
+      if (!segs.length) return true;
+      continue;
+    }
+    if (entry.length > segs.length) continue;
+    if (entry.every((s, i) => s.startsWith(":") || s === segs[i])) return true;
+  }
+  return false;
+}
+
 /** Build a standard PageContext from a path (derives `page`, caps the trail).
  *  Pass the app's page `manifest` to also attach the current page's descriptor
  *  and the navigable-page catalog. */
@@ -267,6 +321,14 @@ export interface HostActionsConfig {
   /** App-specific actions, merged over the standard set (can override). */
   handlers?: Record<string, HostActionHandler>;
   /**
+   * The page manifest this host declares — the SAME catalogue the model is
+   * offered as "Pages you can open". A model-authored `navigate` path is
+   * checked against it (see `isKnownNavTarget`) before the router is touched,
+   * so the list stops being advice and becomes the gate. A host that passes
+   * none can navigate nowhere.
+   */
+  pages?: readonly { path?: string }[];
+  /**
    * The host's translator, for the CHIP OUTCOMES below.
    *
    * Every visible string the widget itself renders goes through
@@ -311,6 +373,16 @@ export function createHostActions(
     },
     navigate: (data) => {
       if (data.path) {
+        // The manifest decides, not the path's shape. Floating mode hands the
+        // path to the host's own router, which is the same session and the same
+        // origin as the advanced frame — so it needs the same gate, refused out
+        // loud rather than by returning undefined (an undefined return resolves
+        // as success and the chip ticks green over a path we declined).
+        if (!isKnownNavTarget(data.path, cfg.pages))
+          return tr(
+            "aiAssistant.action.actionNotAPage",
+            "That is not a page I can open"
+          );
         // Compare what the host will ACTUALLY open, not what the model wrote.
         // The AI emits account-relative paths ("/assets"); the host prefixes
         // the account before routing. Testing the bare path against the real

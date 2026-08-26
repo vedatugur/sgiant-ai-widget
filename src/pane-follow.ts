@@ -30,6 +30,19 @@ export interface AutoNavigateInput {
   advanced: boolean;
   /** The host wired `getAdvancedUrl` — without it there is no embed URL. */
   canNavigate: boolean;
+  /**
+   * The user CONFIRMED this operation in this session — they pressed the button
+   * that started it, in this widget, just now.
+   *
+   * The other three conditions all ask whether following would be RUDE. This
+   * one asks whether the operation is the user's at all. A tracked job outlives
+   * the tab: it is written to localStorage so a running import survives a
+   * refresh, and it is also re-discovered from the server listing so work
+   * started on another device shows up here. Neither of those is a thing the
+   * person in front of the screen just asked for, and "advanced view was opened"
+   * is not consent to be sent to a page some other tab started building.
+   */
+  userConfirmedThisSession: boolean;
   /** The user has driven the frame themselves since this session began. */
   userDriven: boolean;
   /** This operation has already been followed once. */
@@ -51,6 +64,7 @@ export interface AutoNavigateInput {
  */
 export function shouldAutoNavigate(i: AutoNavigateInput): boolean {
   if (!i.advanced || !i.canNavigate) return false;
+  if (!i.userConfirmedThisSession) return false;
   if (i.userDriven || i.alreadyFollowed) return false;
   if (!i.path || !i.path.startsWith("/") || i.path.startsWith("//")) {
     return false;
