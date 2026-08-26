@@ -15,6 +15,8 @@ import {
   isOperateAction,
   runOperateAction,
 } from "./ui-control";
+// Type-only: erased at build, so this stays a zero-runtime-dependency module.
+import type { Locale } from "@sgiant/shared";
 
 /** Which product surface the user is on. */
 export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
@@ -75,13 +77,114 @@ export interface PageContext {
   uiTargets?: Array<{ id: string; label: string }>;
 }
 
-/** Normalize a path for manifest matching: drop a leading 2-letter locale
- *  segment (marketing "/en/network" → "/network") and any trailing slash. */
+/**
+ * The locale segments the site actually serves.
+ *
+ * "Any two lowercase letters" is NOT a locale test: `/ai` is a real marketing
+ * page, and treating its first segment as a locale rewrote that entry to `/`,
+ * which then matched every path with the same segment count. Mirrors
+ * apps/marketing/src/i18n/config.ts; the platform `Locale` union types it, so
+ * a locale that is renamed there fails to compile here.
+ */
+const LOCALE_SEGMENTS = ["en", "tr"] as const satisfies readonly Locale[];
+
+function isLocaleSegment(seg: string): boolean {
+  return (LOCALE_SEGMENTS as readonly string[]).includes(seg);
+}
+
+/** Normalize a path for manifest matching: drop a leading locale segment
+ *  (marketing "/en/network" → "/network") and any trailing slash. */
 function normalizePath(path: string): string {
   let p = path.replace(/\/+$/, "") || "/";
   const m = p.match(/^\/([a-z]{2})(\/|$)/);
-  if (m) p = p.slice(m[1].length + 1) || "/";
+  if (m && isLocaleSegment(m[1])) p = p.slice(m[1].length + 1) || "/";
   return p;
+}
+
+/** Manifest entries are ours and locale-neutral by contract (see
+ *  `PageManifestEntry.path`), so they get a trailing-slash trim and nothing
+ *  else — no locale strip, no decoding. */
+function entrySegments(path: string): string[] {
+  return path.replace(/\/+$/, "").split("/").filter(Boolean);
+}
+
+/**
+ * Percent-decode until the result stops changing, so a doubly-encoded segment
+ * (`%252e`) is judged by what it finally says rather than by its first layer.
+ * Malformed encoding, and nesting past any plausible depth, are refusals —
+ * there is no legitimate route we would be rejecting.
+ */
+function decodeFully(raw: string): string | null {
+  let cur = raw;
+  for (let i = 0; i < 6; i++) {
+    if (!cur.includes("%")) return cur;
+    let next: string;
+    try {
+      next = decodeURIComponent(cur);
+    } catch {
+      return null;
+    }
+    if (next === cur) return cur;
+    cur = next;
+  }
+  return null;
+}
+
+/**
+ * Decode ONE raw path segment into the thing a browser will finally resolve it
+ * to, or null when it is not a plain segment at all.
+ *
+ * This is the half of the gate that has to come FIRST. Judging the raw spelling
+ * is a blocklist — it refuses `..` and admits `%2e%2e`, `%2E%2E`, `.%2e` and
+ * `%252e%252e`, every one of which the URL parser resolves as a double-dot
+ * segment (or resolves after one more decode hop on the server).
+ */
+function decodeSegment(raw: string): string | null {
+  const decoded = decodeFully(raw);
+  if (decoded === null) return null;
+  // Compatibility forms fold into ASCII: U+FF0E FULLWIDTH FULL STOP twice is
+  // `..` after NFKC, and U+FF0F folds to a solidus.
+  const seg = decoded.normalize("NFKC");
+  // A segment that decodes into a SEPARATOR smuggled structure past the split:
+  // `%2f` and `%5c` are both "/" once the URL is parsed.
+  if (/[/\\]/.test(seg)) return null;
+  // C0 controls and DEL. Tab/LF/CR matter most — the URL parser STRIPS them, so
+  // `.%09.` arrives as `..`.
+  if (/[\u0000-\u001f\u007f]/.test(seg)) return null;
+  return seg;
+}
+
+/**
+ * Decode an AI-supplied path into the segments the browser will actually
+ * resolve, or null if it is not a root-relative in-app path at all.
+ *
+ * Decode first, then validate. The caller matches what comes back against the
+ * manifest, which is an ALLOW-list; nothing downstream re-inspects spellings.
+ */
+function navPathSegments(path: unknown): string[] | null {
+  if (typeof path !== "string") return null;
+  // The URL parser strips leading/trailing C0-and-space before it parses.
+  if (path !== path.trim()) return null;
+  if (!path.startsWith("/")) return null;
+  const bare = path.split(/[?#]/)[0] ?? "";
+  // A backslash is a path separator to the URL parser, so `/\evil.example.com`
+  // is protocol-relative. No route needs one.
+  if (bare.includes("\\")) return null;
+  // Protocol-relative (`//host`), or an empty interior segment.
+  if (bare.includes("//")) return null;
+  const out: string[] = [];
+  for (const raw of bare.split("/")) {
+    if (!raw) continue; // the leading "/" and one trailing "/"
+    const seg = decodeSegment(raw);
+    if (seg === null) return null;
+    // Dot segments are relative MOVES, not names. The host prefixes the account
+    // after this runs, so `/reports/../../accounts/<them>/x` climbs straight
+    // back out of the account it was just given.
+    if (seg === "." || seg === "..") return null;
+    out.push(seg);
+  }
+  if (out.length && isLocaleSegment(out[0])) out.shift();
+  return out;
 }
 
 /**
@@ -151,9 +254,19 @@ export function matchManifest(
  * detail page under a declared list ("/reports/<uuid>") stays reachable — and
  * `:param` segments match any one segment, as in the manifest itself.
  *
- * `..` is refused outright: the host prefixes the account AFTER this runs, so
- * `/reports/../../accounts/<someone-else>/settings` would be normalised by the
- * browser back out of the account it was prefixed with.
+ * DECODE FIRST, THEN VALIDATE. The first cut of this refused a literal `..`
+ * segment by comparing the raw spelling, which is a blocklist — and a blocklist
+ * of shapes is exactly what produced the hole above. `%2e%2e`, `%2E%2E`, `.%2e`
+ * and `%252e%252e` all survive a literal comparison and all mean `..` by the
+ * time the URL is parsed, so `/reports/%2e%2e/%2e%2e/%2e%2e/accounts/<them>/x`
+ * walked straight through it and into the frame. `navPathSegments` resolves the
+ * path to what the browser will actually see — percent-decoded to a fixed
+ * point, NFKC-folded, backslashes and protocol-relative forms refused — and
+ * only then is each segment matched against the manifest.
+ *
+ * A dot segment is refused rather than resolved: the host prefixes the account
+ * AFTER this runs, so resolving here would judge a different path than the one
+ * the browser resolves, and no real route contains one.
  *
  * NO MANIFEST MEANS NO NAVIGATION. A host that declares no pages has declared
  * nothing the model may open, and falling back to "any root-relative path" here
@@ -163,16 +276,12 @@ export function isKnownNavTarget(
   path: unknown,
   targets: readonly { path?: string }[] | undefined | null
 ): path is string {
-  if (typeof path !== "string") return false;
-  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\"))
-    return false;
+  const segs = navPathSegments(path);
+  if (segs === null) return false;
   if (!targets?.length) return false;
-  const bare = path.split(/[?#]/)[0] ?? "";
-  const segs = normalizePath(bare).split("/").filter(Boolean);
-  if (segs.some((s) => s === "." || s === "..")) return false;
   for (const t of targets) {
     if (!t.path) continue;
-    const entry = normalizePath(t.path).split("/").filter(Boolean);
+    const entry = entrySegments(t.path);
     // The root entry describes the root, never everything beneath it.
     if (!entry.length) {
       if (!segs.length) return true;
