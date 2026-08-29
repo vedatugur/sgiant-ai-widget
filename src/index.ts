@@ -46,6 +46,7 @@ import {
 // copy of the product's easing curve; interpolating the token keeps one
 // definition without the closure.
 import { motionCssVars } from "@sgiant/tokens";
+import { resolveAccentContrast } from "./contrast";
 import { isNavigationAction, isKnownNavTarget } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
@@ -1732,6 +1733,19 @@ export function createAiChatWidget(
   if (opts.accent && !themeTokens.accent) themeTokens.accent = opts.accent;
   if ((opts.gradient || opts.accent) && !themeTokens.gradient) {
     themeTokens.gradient = gradient;
+  }
+  // DERIVE the foreground for accent-filled controls (#307). The sheet's
+  // default is `#fff`, right against the widget's own violet (7.10:1) and wrong
+  // against every accent a host actually passes — all three of ours send teal
+  // `#60C7C8`, where white measures 2.00:1 across thirteen controls. A default
+  // could not fix that, because the failing value WAS the default.
+  //
+  // An explicit `accent-contrast` still wins: a host that has measured its own
+  // pairing is not overruled. And an accent we cannot parse (a `color-mix()`,
+  // a var(), a named colour) leaves the token untouched rather than guessing.
+  if (themeTokens.accent && !themeTokens["accent-contrast"]) {
+    const fg = resolveAccentContrast(themeTokens.accent);
+    if (fg) themeTokens["accent-contrast"] = fg;
   }
   for (const [k, v] of Object.entries(themeTokens)) {
     bubble.style.setProperty(`--aiw-${k}`, v);
@@ -7791,7 +7805,11 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:var(--aiw-surface)}
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2)}
 .${PREFIX}-proposal-media-holder{position:relative}
-.${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:var(--aiw-accent-contrast);font-size:11px;font-weight:600}
+/* NOT --aiw-accent-contrast: this badge sits on 60% black over an image, not on
+   the accent, so it must stay light whatever the accent resolves to. Reading the
+   accent token here would have turned it navy-on-black the moment #307 made the
+   contrast derived. */
+.${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#FCF7E3;font-size:11px;font-weight:600}
 .${PREFIX}-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
 .${PREFIX}-chip{padding:8px 14px;border-radius:999px;border:1px solid color-mix(in srgb,var(--aiw-accent) 35%,transparent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent);color:var(--aiw-accent);font-size:13px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .${PREFIX}-chip:hover{background:color-mix(in srgb,var(--aiw-accent) 14%,transparent)}
