@@ -868,6 +868,7 @@ export const WIDGET_LABELS = {
     "Couldn't send your answer — wait for the current reply to finish, then try again.",
   // Header / bubble
   openBubble: "Open {name}",
+  openBubbleUnread: "Open {name} — {count} unread",
   panelAria: "{name} chat",
   newChat: "New chat",
   pastConversations: "Past conversations",
@@ -1403,6 +1404,23 @@ export type DirectiveRenderer = (
   spec: unknown
 ) => (() => void) | void;
 
+/**
+ * What the collapsed launcher is saying (#305).
+ *
+ * It had exactly ONE appearance, which is why an unread reply and an idle
+ * corner animated about equally. Only `unread` and `working` move; the rest are
+ * static differences, and that is what makes movement mean something again.
+ */
+export interface LauncherState {
+  state?: "resting" | "unread" | "working" | "offline" | "parked";
+  /** `unread` only — shown as a count badge. */
+  count?: number;
+  /** `pill` on a first visit (a word, not a puzzle — #88); `pebble` after. */
+  variant?: "pebble" | "pill";
+  /** Which way the mark and disc invert. "auto" reads the host's own surface. */
+  ground?: "light" | "ink" | "auto";
+}
+
 export interface AiChatWidgetHandle {
   open(): void;
   close(): void;
@@ -1411,6 +1429,8 @@ export interface AiChatWidgetHandle {
   /** Register a custom directive renderer at runtime (see `renderers`).
    *  Reserved built-in tags are rejected with an Error. */
   registerRenderer(tag: string, renderer: DirectiveRenderer): void;
+  /** Drive the collapsed launcher. Partial — omitted fields keep their value. */
+  setLauncher(next: LauncherState): void;
 }
 
 interface StreamFrame {
@@ -1459,42 +1479,43 @@ interface StreamFrame {
 
 const PREFIX = "sgiant-aiw";
 
-// Copilot — a tiny living LIQUID blob (not a face): a brand-gradient droplet that
-// morphs organically with a wet highlight. Editorial, not cartoon; reads
-// cleanly at 24–36px. Morph via SMIL <animate>; float in CSS.
-// Shared gradient + goo filter — appended to the root ONCE so the bubble and
-// the in-panel avatar (two copies of AVATAR_SVG) reference the same defs.
-// Duplicate <defs> ids in the DOM break the second instance's filter (the
-// blob disappears), so the defs live here, not inside each avatar svg.
+// Copilot — the CRESCENT (#305). "Copilot = moonlight (tr)" is already the
+// comment on ASSISTANT in packages/tokens, and this file's own avatar fallback
+// was documented as "else a crescent glyph" — describing a mark nobody had
+// drawn. This draws it.
+//
+// What it replaces: a morphing SVG blob, an feGaussianBlur+feColorMatrix goo
+// filter, two orbiting metaballs with three <animate> tracks each, a float
+// loop, a blink loop, an orange glow, a gradient ring and a two-layer shadow —
+// EIGHT simultaneous effects to say one thing, "there is a chat here". Each was
+// added for a reason and none was ever taken away, so the launcher was loud at
+// rest and had nothing left to say when a reply was actually waiting.
+//
+// It is ONE path with no filter and no SMIL. That is not only simplicity: a CSS
+// `animation:none` cannot reach a SMIL <animate>, so a reader who asked their OS
+// for stillness got a permanently moving blob in the corner of every page (#308
+// recorded that as unreachable from CSS; this is the fix).
+//
+// THE GROUND RULE, measured rather than chosen. Contrast over the brand sweep:
+// white fails on every stop (teal 2.00, amber 1.93, orange 2.81) and navy
+// clears all of them (8.41 / 8.73 / 5.98); on cream, teal is 1.86 and navy is
+// 15.66. Navy is the only value that survives the whole sweep and cream is the
+// only value that survives navy — so THE MARK AND ITS DISC ALWAYS STRADDLE
+// NAVY. Light ground: navy disc, gradient mark. Ink ground: the whole object
+// inverts to a cream disc with a navy mark. The gradient never makes that
+// second trip, which is why there is no third variant.
 const AVATAR_DEFS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<radialGradient id="${PREFIX}-av-g" cx="38%" cy="30%" r="72%">
-<stop offset="0%" stop-color="#FFC98A"/><stop offset="50%" stop-color="#FA712D"/><stop offset="100%" stop-color="#DB3F1B"/>
-</radialGradient>
-<filter id="${PREFIX}-av-goo" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b"/>
-<feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8"/></filter></defs></svg>`;
+<linearGradient id="${PREFIX}-av-sweep" x1="0" y1="1" x2="1" y2="0">
+<stop offset="0%" stop-color="#60C7C8"/><stop offset="55%" stop-color="#FBAA34"/><stop offset="100%" stop-color="#FA712D"/>
+</linearGradient></defs></svg>`;
 
-const AVATAR_SVG = `<svg viewBox="6 6 36 36" class="${PREFIX}-ayca" aria-hidden="true">
-<g filter="url(#${PREFIX}-av-goo)" fill="url(#${PREFIX}-av-g)">
-<path d="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z">
-<animate attributeName="d" dur="4.2s" repeatCount="indefinite"
- values="M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z;M24 9C34 6 42 15 39 25C38 34 29 42 23 39C14 42 6 31 9 23C11 14 17 11 24 9Z;M25 7C33 9 42 16 40 24C42 33 33 42 24 40C15 43 6 32 8 24C6 15 17 7 25 7Z;M23 8C31 7 41 14 40 24C40 32 32 41 24 40C16 42 7 31 8 23C9 16 16 9 23 8Z;M24 8C31 8 40 13 40 24C40 31 31 40 24 40C17 40 8 31 8 24C8 17 17 8 24 8Z"/>
-</path>
-<circle r="5">
-<animate attributeName="cx" dur="3.1s" repeatCount="indefinite" values="36;41;33;38;36"/>
-<animate attributeName="cy" dur="3.1s" repeatCount="indefinite" values="15;22;19;13;15"/>
-<animate attributeName="r" dur="3.1s" repeatCount="indefinite" values="5;6.2;3.8;5.5;5"/>
-</circle>
-<circle r="4.4">
-<animate attributeName="cx" dur="3.7s" repeatCount="indefinite" values="12;7;15;9;12"/>
-<animate attributeName="cy" dur="3.7s" repeatCount="indefinite" values="33;27;34;30;33"/>
-<animate attributeName="r" dur="3.7s" repeatCount="indefinite" values="4.4;5.4;3.4;4.8;4.4"/>
-</circle>
-</g>
-<ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#fff" opacity=".42">
-<animate attributeName="cx" dur="4.2s" repeatCount="indefinite" values="19;22;17;20;19"/>
-<animate attributeName="cy" dur="4.2s" repeatCount="indefinite" values="18;16;20;17;18"/>
-</ellipse>
-</svg>`;
+// The mark, taken from the resolved specimen rather than re-derived: two arcs
+// of the SAME radius, which is what makes a crescent read as a MOON. My first
+// attempt used a shallower second arc (r19 against r15) with the tips at top
+// and bottom — geometrically a crescent, but standing straight up. It read as
+// 90 degrees, which is a shape and not a moon. This one is tilted, and the
+// tilt is the whole difference.
+const AVATAR_SVG = `<svg viewBox="0 0 24 24" class="${PREFIX}-ayca" aria-hidden="true"><path class="${PREFIX}-av-mark" d="M20.4 14.5A8.6 8.6 0 0 1 9.5 3.6 8.6 8.6 0 1 0 20.4 14.5Z"/></svg>`;
 
 // Small line icons for the header controls (currentColor, 18px).
 const ICON_HISTORY = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>`;
@@ -1586,6 +1607,13 @@ export function createAiChatWidget(
   function syncBusy(): void {
     busy = isThreadPending(threadId);
     sendBtn.disabled = busy;
+    // The launcher's `working` state, from the real in-flight turn rather than
+    // a separate flag that could drift from it (#305). Only while the panel is
+    // CLOSED — a breathing launcher next to an open panel that is already
+    // streaming says nothing the panel is not saying louder.
+    if (typeof applyLauncher === "function" && panel.style.display === "none") {
+      setLauncher({ state: busy ? "working" : "resting" });
+    }
   }
   let lastUserContent = "";
   // The navigable pages from the most recent turn's pageContext, cached so the
@@ -1713,7 +1741,119 @@ export function createAiChatWidget(
 
   const bubble = el("button", `${PREFIX}-bubble`);
   bubble.setAttribute("aria-label", L("openBubble", { name }));
-  bubble.innerHTML = `<span class="${PREFIX}-bubble-av">${avatarInner}</span>`;
+  bubble.innerHTML =
+    `<span class="${PREFIX}-bubble-av">${avatarInner}</span>` +
+    `<span class="${PREFIX}-bubble-label"></span>` +
+    `<span class="${PREFIX}-bubble-dot" hidden></span>`;
+
+  /**
+   * The launcher's six states (#305).
+   *
+   * Held as one object and applied wholesale so a partial update cannot leave
+   * two states on at once — the reason the old launcher had one appearance is
+   * that nothing owned this.
+   *
+   * `ground: "auto"` reads the HOST's own background rather than guessing: the
+   * same widget mounts on a white app, a cream report and a near-black
+   * marketing page, and the mark has to straddle navy on all three.
+   */
+  const launcher: Required<LauncherState> = {
+    state: "resting",
+    count: 0,
+    // A reader who has opened it once does not need the word again. Its OWN
+    // key, not the thread cache: that expires after 12 hours by design, and
+    // "has this person ever met the widget" is not a fact that should expire.
+    variant: hasOpenedBefore() ? "pebble" : "pill",
+    ground: "auto",
+  };
+
+  const OPENED_KEY = `${PREFIX}.opened`;
+  function hasOpenedBefore(): boolean {
+    try {
+      return localStorage.getItem(OPENED_KEY) === "1";
+    } catch {
+      // Blocked storage: show the pebble rather than greeting a returning
+      // reader with the first-visit pill on every page.
+      return true;
+    }
+  }
+  function markOpened(): void {
+    try {
+      localStorage.setItem(OPENED_KEY, "1");
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  function resolveGround(): "light" | "ink" {
+    if (launcher.ground !== "auto") return launcher.ground;
+    try {
+      // SAMPLE WHERE THE LAUNCHER ACTUALLY SITS, not up its parent chain.
+      // Walking parents reads <body>, and on a marketing page body is
+      // near-white while the section under the corner is near-black — measured
+      // on our own home page, which returned "light" over a dark hero. The
+      // launcher is position:fixed, so its ancestors say nothing about what is
+      // behind it.
+      const r = bubble.getBoundingClientRect();
+      const stack = document.elementsFromPoint(
+        r.left + r.width / 2,
+        r.top + r.height / 2
+      );
+      for (const node of stack) {
+        // Skip the widget's own chrome, or it reads its own disc.
+        if (node === bubble || bubble.contains(node) || panel.contains(node)) {
+          continue;
+        }
+        const bg = getComputedStyle(node).backgroundColor;
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(bg);
+        // `transparent` tells us nothing — keep looking behind it.
+        if (!m || (m[4] !== undefined && Number(m[4]) <= 0.5)) continue;
+        const [r8, g8, b8] = [Number(m[1]), Number(m[2]), Number(m[3])];
+        // Perceived lightness, not the average — green dominates.
+        return (0.2126 * r8 + 0.7152 * g8 + 0.0722 * b8) / 255 < 0.5
+          ? "ink"
+          : "light";
+      }
+    } catch {
+      /* no DOM answer — the light default is the common case */
+    }
+    return "light";
+  }
+
+  function applyLauncher(): void {
+    const dot = bubble.querySelector(
+      `.${PREFIX}-bubble-dot`
+    ) as HTMLElement | null;
+    const label = bubble.querySelector(
+      `.${PREFIX}-bubble-label`
+    ) as HTMLElement | null;
+    for (const s of ["unread", "working", "offline", "parked"]) {
+      bubble.classList.toggle(`${PREFIX}-bubble-${s}`, launcher.state === s);
+    }
+    bubble.classList.toggle(
+      `${PREFIX}-bubble-pill`,
+      launcher.variant === "pill"
+    );
+    bubble.classList.toggle(`${PREFIX}-on-ink`, resolveGround() === "ink");
+    if (label) label.textContent = launcher.variant === "pill" ? name : "";
+    if (dot) {
+      const showCount = launcher.state === "unread" && launcher.count > 0;
+      dot.hidden = !showCount && launcher.state !== "offline";
+      dot.textContent = showCount ? String(launcher.count) : "";
+    }
+    // The label carries the state for anyone not looking at it.
+    bubble.setAttribute(
+      "aria-label",
+      launcher.state === "unread" && launcher.count > 0
+        ? L("openBubbleUnread", { name, count: launcher.count })
+        : L("openBubble", { name })
+    );
+  }
+
+  function setLauncher(next: LauncherState): void {
+    Object.assign(launcher, next);
+    applyLauncher();
+  }
   const panel = el("div", `${PREFIX}-panel`);
   // Theme: the stylesheet is written entirely against --aiw-* custom
   // properties, with light defaults + a prefers-color-scheme:dark token block
@@ -3783,6 +3923,10 @@ export function createAiChatWidget(
   };
 
   const open = (prefill?: unknown, forceNew?: boolean): void => {
+    // The first-visit pill has done its job the moment it is opened, and an
+    // unread count is answered by reading the thread (#305).
+    markOpened();
+    setLauncher({ variant: "pebble", state: "resting", count: 0 });
     panel.style.display = "flex";
     panel.style.transform = ""; // clear any leftover drag offset
     // Re-apply the saved position NOW that the panel is visible and laid out, so
@@ -5625,6 +5769,13 @@ export function createAiChatWidget(
       }
       if (final) raw = renderDirectives(raw);
       history.push({ role: "assistant", content: raw });
+      // A reply that arrived while the panel was CLOSED is the one thing the
+      // launcher has ever needed to say and could not (#305). Counted here, at
+      // the moment a reply is recorded, rather than from a transcript diff —
+      // the diff would also count the replies the reader has already seen.
+      if (panel.style.display === "none") {
+        setLauncher({ state: "unread", count: launcher.count + 1 });
+      }
       applyAssistantRich(bubble, raw, true);
       return bubble;
     };
@@ -7135,11 +7286,60 @@ export function createAiChatWidget(
   // LAST thing setup does.
   paintOpeningView();
 
+  /**
+   * `offline` from the browser, not from a failed request (#305).
+   *
+   * A launcher that says so up front is better than one that looks ready and
+   * fails on click — which is what the widget did, since every turn's failure
+   * arrived only after the reader had committed to asking. `navigator.onLine`
+   * is a floor, not a guarantee (it can be true behind a captive portal), so it
+   * is used to say "definitely not" and never to promise the opposite.
+   */
+  const syncOnline = (): void => {
+    if (typeof navigator === "undefined") return;
+    if (!navigator.onLine) setLauncher({ state: "offline" });
+    else if (launcher.state === "offline") setLauncher({ state: "resting" });
+  };
+  window.addEventListener("online", syncOnline);
+  window.addEventListener("offline", syncOnline);
+  syncOnline();
+
+  /**
+   * The ground under a fixed launcher CHANGES as the page scrolls — a dark hero
+   * gives way to a light body — so "auto" has to be re-read, not resolved once
+   * at mount. Debounced to one rAF and applied only when the answer actually
+   * flips, so scrolling costs one elementsFromPoint per frame at most and the
+   * mark never strobes between two fills.
+   */
+  let groundTimer = 0;
+  let lastGround: "light" | "ink" | null = null;
+  const watchGround = (): void => {
+    // TRAILING, not leading, and not one rAF. A single rAF sampled while the
+    // scroll was still in flight and read the OLD stack — measured: the class
+    // stayed `on-ink` over a light section until a scroll event was dispatched
+    // by hand, which proved the logic right and the timing wrong. Same shape as
+    // the router-vs-fragment race in #303. The ground does not need to update
+    // mid-scroll; it needs to be correct when the reader stops.
+    window.clearTimeout(groundTimer);
+    groundTimer = window.setTimeout(() => {
+      if (launcher.ground !== "auto") return;
+      const now = resolveGround();
+      if (now === lastGround) return;
+      lastGround = now;
+      applyLauncher();
+    }, 140);
+  };
+  window.addEventListener("scroll", watchGround, { passive: true });
+  window.addEventListener("resize", watchGround, { passive: true });
+
+  applyLauncher();
+
   return {
     open,
     close,
     toggle,
     registerRenderer,
+    setLauncher,
     destroy() {
       // FIRST: cut the in-flight turn loose. Everything below tears down the
       // DOM it would otherwise keep writing to.
@@ -7149,6 +7349,11 @@ export function createAiChatWidget(
         window.removeEventListener(opts.openEventName, onOpenEvent);
       }
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("online", syncOnline);
+      window.removeEventListener("offline", syncOnline);
+      window.removeEventListener("scroll", watchGround);
+      window.removeEventListener("resize", watchGround);
+      window.clearTimeout(groundTimer);
       unbindKeyboard();
       clearRich();
       teardownFrame();
@@ -7410,7 +7615,27 @@ function injectStyles(side: "left" | "right"): void {
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
-.${PREFIX}-ayca{display:block;width:100%;height:100%;overflow:visible;animation:${PREFIX}-float 4s ease-in-out infinite;filter:drop-shadow(0 5px 14px rgba(250,113,45,.5))}
+/* The crescent (#305). No float loop, no drop-shadow glow: those were two of
+   the eight effects the launcher stacked at rest, and a control that is loud at
+   rest has nothing left to say when a reply is waiting. */
+.${PREFIX}-ayca{display:block;width:100%;height:100%;overflow:visible}
+/* THE INVERSION, in two rules. Light ground: navy disc, gradient mark. Ink
+   ground: cream disc, navy mark. Nothing else needs to know about grounds. */
+.${PREFIX}-av-mark{fill:url(#${PREFIX}-av-sweep)}
+.${PREFIX}-on-ink .${PREFIX}-av-mark{fill:#151D2F}
+/* THE OBJECT INVERTS, not just the mark. Inverting only the fill left a navy
+   mark on a navy disc — invisible, and precisely the failure the rule exists to
+   prevent: "a navy pebble on a navy section is a hole with a moon in it". Found
+   by looking at it on the dark marketing hero, where the class was correct and
+   the result was still nothing. */
+/* The ink variant carries a heavier shadow (it has less to push against) and a
+   HAIRLINE of the opposite value. The hairline is what makes a stale ground
+   reading survivable: a cream disc that ends up over white is 1.06:1 and
+   effectively gone, and the ground under a fixed launcher genuinely changes as
+   the reader scrolls. One pixel of navy is enough to keep it an object. */
+.${PREFIX}-bubble.${PREFIX}-on-ink{background:#FCF7E3;box-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 1px rgba(21,29,47,.55)}
+.${PREFIX}-bubble.${PREFIX}-on-ink .${PREFIX}-bubble-label{color:#151D2F}
+.${PREFIX}-bubble.${PREFIX}-on-ink .${PREFIX}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}
 /* The collapsed launcher is a real, recognisable FAB: a circular surface chip
    with a soft shadow and a hairline ring, the animated mascot centred inside.
@@ -7421,14 +7646,55 @@ function injectStyles(side: "left" | "right"): void {
    (viewers/drawers, z<=40) but BELOW the app's Radix modals (z-50) — a dialog
    the user opens must cover the chat, not hide behind it. The old max-int
    z-index put the chat over every modal. */
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:48;width:64px;height:64px;border:2px solid transparent;border-radius:50%;background:linear-gradient(var(--aiw-surface-raised),var(--aiw-surface-raised)) padding-box,var(--aiw-gradient) border-box;color:var(--aiw-accent-contrast);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 10px 26px rgba(0,0,0,.32),0 2px 8px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
-.${PREFIX}-bubble:hover{transform:translateY(-2px) scale(1.06);box-shadow:0 14px 32px rgba(0,0,0,.4),0 3px 10px rgba(0,0,0,.2)}
+/* THE LAUNCHER AT REST IS STILL. It is a navy disc carrying the gradient
+   crescent — the object straddles navy, per the ground rule above — with one
+   shadow to lift it off the page. The gradient RING is gone with the glow and
+   the float: the mark already carries the brand, and the ring was a third
+   place saying the same thing. #88 ("I can't see any chatbox") is answered by
+   the disc's own contrast (navy on white is 16.82:1) and, on a first visit, by
+   the named pill below — a word rather than a puzzle. */
+.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:48;width:56px;height:56px;border:none;border-radius:50%;background:#151D2F;color:#FCF7E3;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:0 6px 20px rgba(21,29,47,.22);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
+/* 26 in 56. The mark was 34 at first and the object read flat — a disc with a
+   shape stamped on it rather than a mark sitting in space. The ratio is the
+   richness here, not an effect. */
+.${PREFIX}-bubble .${PREFIX}-ayca{width:26px;height:26px;transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${PREFIX}-bubble:active{transform:translateY(0) scale(.96)}
+/* The first-visit variant: a word, not a puzzle. Collapses to the pebble once
+   the reader has opened it. */
+.${PREFIX}-bubble-pill{width:auto;height:48px;border-radius:999px;padding:0 18px 0 14px}
+.${PREFIX}-bubble-pill .${PREFIX}-ayca{width:22px;height:22px}
+.${PREFIX}-bubble-pill .${PREFIX}-bubble-label{display:block}
+.${PREFIX}-bubble-label{display:none;font:inherit;font-size:14.5px;font-weight:600;white-space:nowrap}
+/* Only TWO of the six states move, which is what makes movement mean
+   something again. */
+.${PREFIX}-bubble-unread{animation:${PREFIX}-pulse var(--duration-slow,420ms) var(--ease-out) 1}
+.${PREFIX}-bubble-working .${PREFIX}-ayca{animation:${PREFIX}-breathe 2.4s var(--ease-in-out) infinite}
+.${PREFIX}-bubble-offline{opacity:.72}
+.${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{background:var(--aiw-muted)}
+.${PREFIX}-bubble-parked{width:40px;height:40px;opacity:.6}
+.${PREFIX}-bubble-parked .${PREFIX}-ayca{width:20px;height:20px}
+/* The unread count and the offline dot — one badge element, two looks. */
+.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#FA712D;color:#FCF7E3;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
+@keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
+/* GATED. There was no hover:hover query anywhere in this widget, so on a
+   touchscreen the lift-and-scale stuck after the tap. The file already carries
+   a correct hover:none block for the per-message actions — the launcher was
+   simply never given the same treatment. Lift only; the scale went with it,
+   because a control that grows under the cursor is a third thing saying "I am
+   interactive" after the shadow and the pointer. */
+@media (hover: hover) and (pointer: fine){
+.${PREFIX}-bubble:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(21,29,47,.3)}
+.${PREFIX}-bubble:hover .${PREFIX}-ayca{transform:rotate(-12deg)}
+}
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-.${PREFIX}-bubble .${PREFIX}-ayca{width:54px;height:54px}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width var(--duration-base) var(--ease-out),height var(--duration-base) var(--ease-out)}
-.${PREFIX}-header{background:var(--aiw-gradient);color:var(--aiw-accent-contrast);padding:12px 14px;display:flex;align-items:center;gap:10px}
+/* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
+   itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
+   — a scrim over a gradient is a patch, not a decision. On navy the mark
+   inverts by the rule above and the scrim is unnecessary, so it is gone. */
+.${PREFIX}-header{background:#151D2F;color:#FCF7E3;border-bottom:2px solid transparent;border-image:var(--aiw-gradient) 1;padding:12px 14px;display:flex;align-items:center;gap:10px}
 /* Drag-to-reposition. touch-action:none is what makes this work on a
    touchscreen — without it the browser claims the gesture as a scroll and the
    panel never moves. user-select:none stops the title being selected mid-drag. */
@@ -7465,7 +7731,9 @@ function injectStyles(side: "left" | "right"): void {
 /* Advanced view is a fixed edge-to-edge layout — dragging is disabled there
    (the pointerdown handler bails), so drop the grab affordance too. */
 .${PREFIX}-advanced .${PREFIX}-draggable{cursor:default}
-.${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,17,30,.55)}
+/* Cream disc on the navy header — the ink half of the inversion. The scrim it
+   used to carry is gone; see the header rule. */
+.${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#FCF7E3}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
@@ -7958,6 +8226,12 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 @keyframes ${PREFIX}-blink{0%,100%{opacity:1}}
 @keyframes ${PREFIX}-blink2{0%,100%{opacity:1}}
 @keyframes ${PREFIX}-caret{0%,100%{opacity:1}}
+/* -breathe is the launcher's working state (#305). It is a STATUS signal, like
+   the spinner, so stillness would say 'idle' when a turn is running — but it is
+   also a loop in the corner of every page, which the spinner is not. Slowed and
+   shallowed rather than stopped: it still reads as alive, at a fraction of the
+   amplitude. */
+@keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.88}}
 .${PREFIX}-log{scroll-behavior:auto}
 }
 `;
