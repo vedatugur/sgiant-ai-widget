@@ -7183,6 +7183,12 @@ function attIcon(kind: string): string {
 function el(tag: string, cls: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = cls;
+  // Every button gets the focus base HERE rather than at its 40 call sites
+  // (#308). Enumerating the call sites is the wrong shape — the list falls
+  // behind the code the first time someone adds a control, which is exactly how
+  // the widget ended up with forty buttons and no designed focus state. A
+  // button created after this change is covered without anyone remembering.
+  if (tag === "button") node.classList.add(`${PREFIX}-btn`);
   return node;
 }
 
@@ -7331,6 +7337,12 @@ function hostDefinesPlatformTokens(): boolean {
 function injectStyles(side: "left" | "right"): void {
   if (stylesInjected) return;
   stylesInjected = true;
+  // WARNING, and it costs a round trip every time: this whole stylesheet is a
+  // TEMPLATE LITERAL. A backtick anywhere below — including inside a CSS
+  // comment, where it reads as harmless prose quoting a token name — closes the
+  // JS string, and the file fails to compile with an error that points at the
+  // wrong line and says only "';' expected". Do not quote identifiers with
+  // backticks in these comments.
   const css = `
 /* Theme tokens — every color in this sheet reads from these. Light defaults
    here; the dark media block below only REDEFINES tokens; explicit host
@@ -7615,8 +7627,36 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-msgact-icon:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 45%,transparent)}
 .${PREFIX}-msgact-icon svg{width:15px;height:15px}
 /* Per-message vote (thumbs) — light icon buttons; the chosen vote stays lit. */
-.${PREFIX}-votes{display:inline-flex;align-items:center;gap:2px}
-.${PREFIX}-vote{padding:3px;border-radius:6px;color:var(--aiw-muted);background:transparent}
+/* ── Accessibility floor (#308) ──────────────────────────────────────────────
+   ONE focus rule for all 40 buttons, on a base class every one of them carries.
+   Nothing in this sheet ever REMOVED a button's ring — there is no outline:none
+   on one — so this was never a keyboard trap. It is that the ring was never
+   designed and never measured against a surface the host is explicitly allowed
+   to repaint (the theme option), and "whatever the UA draws" is not an answer we can
+   ship to a third party once the widget is public (#306).
+
+   Two-toned so it holds on ANY ground: the accent fills the offset gap and a
+   fixed dark ring sits outside it, so the pair cannot vanish into either a
+   light or a dark panel. Same construction the design house prescribes for a
+   brand ring that fails on one theme. */
+.${PREFIX}-btn:focus-visible{outline:2px solid var(--aiw-accent);outline-offset:2px;box-shadow:0 0 0 4px #151D2F}
+/* A hit area of at least 24x24 (WCAG 2.2 AA) WITHOUT changing the drawn size —
+   a transparent ::before costs nothing visually, so a 20px vote button and a
+   6px carousel dot stay exactly as designed.
+
+   The GAPS below grow with them, and that is not cosmetic. WCAG's spacing
+   exception only holds when a 24px circle centred on each target does not
+   intersect its neighbour's, so the gap has to put the CENTRES 24px apart.
+   Enlarging a hit area without doing that just makes two controls fight over
+   the same pixels, which is worse than the small target was. */
+.${PREFIX}-tap::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
+/* 20px drawn + 4px gap = centres 24px apart. */
+.${PREFIX}-votes{display:inline-flex;align-items:center;gap:4px}
+/* 20x20 drawn (14px icon + 3px padding); the .-tap ::before takes the TARGET
+   to 24x24. The chat-quality control (#299) being the smallest thing in the
+   widget was the sharpest finding in the audit. */
+.${PREFIX}-vote{position:relative;padding:3px;border-radius:6px;color:var(--aiw-muted);background:transparent}
+.${PREFIX}-vote::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
 .${PREFIX}-vote:hover{color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
 .${PREFIX}-vote-on{color:var(--aiw-accent)}
 .${PREFIX}-vote svg{width:14px;height:14px;display:block}
@@ -7760,8 +7800,12 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-ui-arrow-left{left:6px}
 .${PREFIX}-ui-arrow-right{right:6px}
 .${PREFIX}-ui-counter{position:absolute;right:8px;top:8px;z-index:2;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;font-weight:700}
-.${PREFIX}-ui-dots{position:absolute;left:0;right:0;top:calc(var(--aiw-cmedia) - 14px);bottom:auto;z-index:2;display:flex;justify-content:center;gap:5px}
-.${PREFIX}-ui-dot{height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer;transition:width .15s}
+/* gap 5px -> 18px: 6px dots with 18px between them put the centres 24px apart,
+   which is what the WCAG 2.2 spacing exception actually requires (#308). */
+.${PREFIX}-ui-dots{position:absolute;left:0;right:0;top:calc(var(--aiw-cmedia) - 14px);bottom:auto;z-index:2;display:flex;justify-content:center;gap:18px}
+/* 6x6 drawn, real <button>s. Same treatment: the dot stays 6px, the target is 24. */
+.${PREFIX}-ui-dot{position:relative;height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer;transition:width .15s}
+.${PREFIX}-ui-dot::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
 .${PREFIX}-ui-dot-on{width:16px;background:#fff}
 .${PREFIX}-ui-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
 .${PREFIX}-ui-list{display:flex;flex-direction:column;gap:8px}
@@ -7887,7 +7931,35 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
 }
-@media (prefers-reduced-motion:reduce){.${PREFIX}-bubble,.${PREFIX}-bubble-av::before,.${PREFIX}-panel,.${PREFIX}-msg,.${PREFIX}-typing span,.${PREFIX}-ayca,.${PREFIX}-eyes,.${PREFIX}-streaming::after,.${PREFIX}-rich-in,.${PREFIX}-tok{animation:none}.${PREFIX}-log{scroll-behavior:auto}}
+/* ── Reduced motion, gated at the KEYFRAME (#308) ────────────────────────────
+   This used to name eleven selectors. Twenty-two were animated, four of the
+   eleven carried no animation at all, and the list could only ever fall further
+   behind — the shared rise keyframe alone has sixteen consumers.
+
+   Redefining the keyframes reaches every consumer, including ones added later
+   by someone who never reads this block. That is the difference between a rule
+   and a list.
+
+   NOT all the way to zero, per house law: entrances keep their fade so spatial
+   continuity survives, and lose only the movement. The spinner keeps turning
+   because it reports STATE — a still spinner says "stuck", which is a worse
+   answer than a moving one. Purely decorative loops stop entirely.
+
+   One thing CSS cannot reach: the launcher blob is SMIL animate elements, and
+   animation:none has no authority over SMIL. #305 removes it by drawing a
+   static mark; noted so the two issues do not both try. */
+@media (prefers-reduced-motion:reduce){
+@keyframes ${PREFIX}-rise{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-richin{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-tokin{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-sheetup{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-float{0%,100%{transform:none}}
+@keyframes ${PREFIX}-pulse{0%,100%{opacity:1}}
+@keyframes ${PREFIX}-blink{0%,100%{opacity:1}}
+@keyframes ${PREFIX}-blink2{0%,100%{opacity:1}}
+@keyframes ${PREFIX}-caret{0%,100%{opacity:1}}
+.${PREFIX}-log{scroll-behavior:auto}
+}
 `;
   const style = document.createElement("style");
   style.setAttribute("data-sgiant-aiw", "");
