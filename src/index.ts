@@ -7670,7 +7670,12 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-unread{animation:${PREFIX}-pulse var(--duration-slow,420ms) var(--ease-out) 1}
 .${PREFIX}-bubble-working .${PREFIX}-ayca{animation:${PREFIX}-breathe 2.4s var(--ease-in-out) infinite}
 .${PREFIX}-bubble-offline{opacity:.72}
-.${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{background:var(--aiw-muted)}
+/* A DOT, not the count badge in grey. It reuses the same element, and the
+   count's geometry (18px min-width plus 5px of padding, sized for two digits)
+   renders an empty string as a wide lozenge — which reads as a broken badge
+   rather than a status light. */
+.${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{min-width:0;width:10px;height:10px;padding:0;top:4px;background:var(--aiw-muted);box-shadow:0 0 0 2px #151D2F}
+.${PREFIX}-bubble-offline.${PREFIX}-on-ink .${PREFIX}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
 .${PREFIX}-bubble-parked{width:40px;height:40px;opacity:.6}
 .${PREFIX}-bubble-parked .${PREFIX}-ayca{width:20px;height:20px}
 /* The unread count and the offline dot — one badge element, two looks. */
