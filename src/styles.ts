@@ -296,6 +296,20 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-error-btn{border:1px solid var(--aiw-danger-border);background:var(--aiw-surface);color:var(--aiw-danger-text);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
 .${PREFIX}-error-retry{background:var(--aiw-accent);border-color:var(--aiw-accent);color:var(--aiw-accent-contrast)}
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
+/* Quality prompt (#299) — the widget asking, rather than waiting to be told.
+   Reads as a quiet aside, not an alert: it must never look like the error card,
+   because on a slow-but-good answer nothing has gone wrong. */
+.${PREFIX}-quality{align-self:stretch;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-quality-title{font-size:12.5px;font-weight:600;color:var(--aiw-text);line-height:1.35}
+.${PREFIX}-quality-row{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
+.${PREFIX}-quality-reason{flex:1 1 160px;min-width:0;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);border-radius:9px;padding:7px 10px;font:inherit;font-size:12.5px}
+.${PREFIX}-quality-reason::placeholder{color:var(--aiw-text-3)}
+.${PREFIX}-quality-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+.${PREFIX}-quality-send{border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-quality-send:disabled{opacity:.6;cursor:default}
+.${PREFIX}-quality-dismiss{border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+/* Answered state: the card collapses to a single line of thanks. */
+.${PREFIX}-quality-done{font-size:12.5px;color:var(--aiw-text-2);font-weight:500}
 .${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
 .${PREFIX}-suggestion{border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);color:var(--aiw-accent);border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
 .${PREFIX}-suggestion:hover{background:color-mix(in srgb,var(--aiw-accent) 10%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 40%,transparent)}

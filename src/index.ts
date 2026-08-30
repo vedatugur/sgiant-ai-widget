@@ -721,6 +721,10 @@ export interface AiChatWidgetOptions {
     messageId: string;
     value: 1 | -1 | 0;
     model?: string;
+    /** One line of free text from the quality prompt (#299). The reason is
+     *  where the signal actually is — "it answered the wrong question" is
+     *  actionable in a way a finer number is not. */
+    reason?: string;
   }) => Promise<void>;
   voteUpLabel?: string;
   voteDownLabel?: string;
@@ -1382,6 +1386,10 @@ export function createAiChatWidget(
   /** Placeholder key for a turn whose brand-new thread id hasn't arrived yet
    *  (the server names the thread in the first frame). */
   const NEW_TURN_KEY = "·new·";
+  /** How long a single assistant turn must run before the widget asks whether
+   *  the wait was worth it (#299). 20s is comfortably past a normal tool-using
+   *  answer and far short of the 300s ceiling. */
+  const QUALITY_SLOW_MS = 20_000;
   /** Threads with a response in flight — drives the History list's
    *  "answering…" spinner and the per-thread busy state. */
   const pendingThreads = new Set<string>();
@@ -3079,6 +3087,129 @@ export function createAiChatWidget(
   /** Thumbs up/down for one assistant message (mirrors the panel's VoteButtons).
    *  Clicking the active vote clears it; the chosen vote stays lit. Optimistic —
    *  reverts on failure. Wrapped so both buttons share the toggle state. */
+  /**
+   * The widget ASKING for a quality signal (#299).
+   *
+   * Everything else about this signal is passive, and passive on surfaces where
+   * the control was invisible or absent — which is most of why the vote table is
+   * near-empty. This is the one place the widget raises the question itself.
+   *
+   * TWO TRIGGERS, TWO QUESTIONS, on purpose. Prompting a slow-but-excellent
+   * answer with "was this helpful?" teaches us "slow = bad", which we already
+   * knew. So a long wait asks about the WAIT and offers thumbs; a failed turn
+   * asks about the GOAL and takes words, because "what were you trying to do"
+   * is the thing a failure destroys and no thumb can carry.
+   *
+   * It needs a messageId — a vote is a row against a message. A turn that
+   * persisted nothing has none, and gets no prompt: the error card's existing
+   * Report is the path there, and stacking a second ask on a failure is exactly
+   * the noise this is supposed to avoid.
+   */
+  function renderQualityPrompt(
+    variant: "slow" | "failed",
+    messageId: string,
+    model?: string
+  ): void {
+    if (!opts.vote) return;
+    const card = el("div", `${PREFIX}-quality`);
+    const title = el("div", `${PREFIX}-quality-title`);
+    title.textContent = L(
+      variant === "slow" ? "qualitySlowTitle" : "qualityFailedTitle"
+    );
+    card.appendChild(title);
+
+    // A slow turn asks for a verdict; a failed one asks what was wanted, and
+    // the words ARE the answer, so no thumbs on that variant.
+    let picked: 1 | -1 | null = variant === "failed" ? -1 : null;
+    const row = el("div", `${PREFIX}-quality-row`);
+    if (variant === "slow") {
+      const mk = (
+        v: 1 | -1,
+        label: string,
+        icon: string
+      ): HTMLButtonElement => {
+        const b = el(
+          "button",
+          `${PREFIX}-msgact ${PREFIX}-vote`
+        ) as HTMLButtonElement;
+        b.type = "button";
+        b.setAttribute("aria-label", label);
+        b.title = label;
+        b.innerHTML = icon;
+        b.addEventListener("click", () => {
+          picked = v;
+          row
+            .querySelectorAll(`.${PREFIX}-vote`)
+            .forEach((n) => n.classList.remove(`${PREFIX}-vote-on`));
+          b.classList.add(`${PREFIX}-vote-on`);
+        });
+        return b;
+      };
+      row.appendChild(mk(1, opts.voteUpLabel ?? "Helpful", ICON_THUMB_UP));
+      row.appendChild(
+        mk(-1, opts.voteDownLabel ?? "Not helpful", ICON_THUMB_DOWN)
+      );
+    }
+    const reason = el("input", `${PREFIX}-quality-reason`) as HTMLInputElement;
+    reason.type = "text";
+    reason.maxLength = 500;
+    reason.placeholder = L(
+      variant === "slow"
+        ? "qualityReasonPlaceholder"
+        : "qualityFailedPlaceholder"
+    );
+    reason.setAttribute("aria-label", title.textContent);
+    row.appendChild(reason);
+    card.appendChild(row);
+
+    const actions = el("div", `${PREFIX}-quality-actions`);
+    const send = el("button", `${PREFIX}-quality-send`) as HTMLButtonElement;
+    send.type = "button";
+    send.textContent = L("qualitySend");
+    const dismiss = el(
+      "button",
+      `${PREFIX}-quality-dismiss`
+    ) as HTMLButtonElement;
+    dismiss.type = "button";
+    dismiss.textContent = L("qualityDismiss");
+    dismiss.addEventListener("click", () => card.remove());
+    send.addEventListener("click", () => {
+      const text = reason.value.trim();
+      // Nothing said and nothing picked is a dismissal, not a datapoint.
+      if (picked === null && !text) {
+        card.remove();
+        return;
+      }
+      send.disabled = true;
+      void opts.vote!({
+        threadId: threadId ?? "",
+        messageId,
+        value: picked ?? -1,
+        ...(model ? { model } : {}),
+        ...(text ? { reason: text } : {}),
+      })
+        .then(() => {
+          card.textContent = L("qualityThanks");
+          card.classList.add(`${PREFIX}-quality-done`);
+        })
+        .catch(() => {
+          send.disabled = false;
+        });
+    });
+    actions.append(send, dismiss);
+    card.appendChild(actions);
+    log.appendChild(card);
+    scrollDown();
+  }
+
+  // Threads already asked for a quality signal THIS SESSION. At most once per
+  // thread per session (#299): a widget that asks after every slow turn is a
+  // widget people learn to dismiss without reading.
+  const qualityAsked = new Set<string>();
+  /** Turns completed per thread this session — the "never on the first turn"
+   *  half of the rule above. */
+  const threadTurns = new Map<string, number>();
+
   function buildVoteButtons(messageId: string, model?: string): HTMLElement {
     const wrap = el("div", `${PREFIX}-votes`);
     let cur: 1 | -1 | 0 = 0;
@@ -5548,6 +5679,9 @@ export function createAiChatWidget(
     // just streamed, on surfaces where no canonical reload paints one (#299).
     let liveMessageId: string | undefined;
     let liveModel: string | undefined;
+    // Wall-clock for the quality prompt's 20s trigger — comfortably past a
+    // normal tool-using answer and far short of the 300s ceiling.
+    const turnStartedAt = Date.now();
     let transportLost = false;
     // Chars of assistantRaw already painted into the streaming bubble. The
     // display can lag behind assistantRaw: directive bytes ([[tag:{json}]])
@@ -6065,6 +6199,31 @@ export function createAiChatWidget(
       rowEl.appendChild(buildVoteButtons(liveMessageId, liveModel));
       log.appendChild(rowEl);
       scrollDown();
+    }
+
+    // ASK, when the turn gave us a reason to (#299). Every other part of this
+    // signal waits to be volunteered, on controls that are easy to miss.
+    const threadKey = turnThread ?? NEW_TURN_KEY;
+    const turns = (threadTurns.get(threadKey) ?? 0) + 1;
+    threadTurns.set(threadKey, turns);
+    const elapsed = Date.now() - turnStartedAt;
+    if (
+      live() &&
+      liveMessageId &&
+      opts.vote &&
+      // Never on a thread's FIRST turn — asking someone to rate a conversation
+      // they have not had yet is noise.
+      turns > 1 &&
+      // At most once per thread per session.
+      !qualityAsked.has(threadKey) &&
+      (failure || elapsed >= QUALITY_SLOW_MS)
+    ) {
+      qualityAsked.add(threadKey);
+      renderQualityPrompt(
+        failure ? "failed" : "slow",
+        liveMessageId,
+        liveModel
+      );
     }
   }
 
