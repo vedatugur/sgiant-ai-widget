@@ -1917,6 +1917,13 @@ export function createAiChatWidget(
       setMenu(false);
     }
   });
+  // Star state per thread, learned from the History list (which already returns
+  // it) and updated on every toggle. Without this the menu row would have to
+  // guess, and showing "not starred" for a starred conversation is worse than
+  // showing nothing.
+  const starredThreads = new Map<string, boolean>();
+  let paintStarItem = (): void => {};
+
   // Build one labeled menu row. Returns handles so toggle syncs can update just
   // the icon / state pill without clobbering the label text.
   const menuItem = (
@@ -1952,6 +1959,48 @@ export function createAiChatWidget(
     exportConversation();
   });
   moreMenu.appendChild(downloadItem.btn);
+  // Star THIS conversation (#299).
+  //
+  // The star was already reachable — but only from the History panel, i.e. only
+  // on conversations you are NOT in. To bookmark the one you are reading you had
+  // to leave it, find it in a list, and star it there. That is the same
+  // reachability failure as the vote buttons, one surface over.
+  //
+  // It goes in the menu rather than the header on purpose: the header comment
+  // above records that these controls used to sit side-by-side and became "a
+  // cramped, unreadable strip of look-alike icons". A star is secondary.
+  const starItem = opts.starThread ? menuItem(L("star")) : null;
+  if (starItem) {
+    starItem.ico.textContent = "☆";
+    // Repainted from the cache below whenever the thread changes, so the row
+    // states what IS rather than what was last clicked.
+    starItem.btn.addEventListener("click", () => {
+      if (!threadId || !opts.starThread) return;
+      const id = threadId;
+      starItem.btn.disabled = true;
+      void opts
+        .starThread(id)
+        .then((r) => {
+          starredThreads.set(id, r.starred);
+          paintStarItem();
+        })
+        .finally(() => {
+          starItem.btn.disabled = false;
+        });
+    });
+    moreMenu.appendChild(starItem.btn);
+    paintStarItem = (): void => {
+      // No thread yet (a brand-new chat) means there is nothing to bookmark.
+      const known = threadId ? starredThreads.get(threadId) : undefined;
+      starItem.btn.hidden = !threadId;
+      const on = known === true;
+      starItem.ico.textContent = on ? "★" : "☆";
+      starItem.ico.style.color = on ? "#f59e0b" : "";
+      const lab = starItem.btn.querySelector(`.${PREFIX}-menu-label`);
+      if (lab) lab.textContent = on ? L("unstar") : L("star");
+    };
+    paintStarItem();
+  }
   // Flag — oversight control (agent/admin surfaces). Asks for a reason, then
   // hands it to the host's onFlag with the live thread id. Hidden when unwired.
   if (opts.onFlag) {
@@ -3844,6 +3893,7 @@ export function createAiChatWidget(
   const startNewChat = (): void => {
     viewGen++; // fence: any in-flight turn stops painting into this view
     threadId = undefined;
+    paintStarItem();
     history.length = 0;
     saveState();
     clearRich();
@@ -4653,6 +4703,9 @@ export function createAiChatWidget(
         if (opts.starThread) {
           const star = el("span", `${PREFIX}-history-star`);
           let on = Boolean(th.starred);
+          // The list is the only place star state is READ, so it is also where
+          // the menu row learns it.
+          starredThreads.set(th.id, on);
           const paint = () => {
             star.textContent = on ? "★" : "☆";
             star.style.color = on ? "#f59e0b" : "";
@@ -4667,6 +4720,8 @@ export function createAiChatWidget(
             opts.starThread!(th.id).then(
               (r) => {
                 on = r.starred;
+                starredThreads.set(th.id, on);
+                paintStarItem();
                 paint();
               },
               () => {
@@ -4702,6 +4757,7 @@ export function createAiChatWidget(
       // inline data widgets). renderThreadItems clears rich roots + the log.
       renderThreadItems(items, id);
       threadId = id;
+      paintStarItem();
       syncBusy();
       saveState();
       void refreshArtifacts();
@@ -5923,7 +5979,12 @@ export function createAiChatWidget(
                 turnThread = frame.threadId;
                 pendingThreads.add(turnThread);
               }
-              if (live()) threadId = frame.threadId;
+              if (live()) {
+                threadId = frame.threadId;
+                // A brand-new conversation just got its id — the star row can
+                // stop hiding itself.
+                paintStarItem();
+              }
             }
             const piece = frame.text ?? frame.d;
             if (piece && live()) {
