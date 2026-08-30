@@ -51,6 +51,44 @@ export function hostDefinesPlatformTokens(): boolean {
   }
 }
 
+/**
+ * DARK MODE: the host's own switch first, the OS only as a fallback.
+ *
+ * This sheet expressed dark ONLY as `@media (prefers-color-scheme:dark)`, which
+ * is right for a widget dropped on a stranger's page and wrong inside our own
+ * apps: they carry a light/dark/system switch of their own
+ * (packages/ui/src/components/theme.tsx toggles `.dark` on the document
+ * element). A user whose OS was dark and whose app was set to LIGHT got a dark
+ * widget in a light app, and the reverse broke exactly as hard. Reported from
+ * the product, and no gate could have caught it — nothing type-checks a media
+ * query, and the widget looks correct in whichever mode the person who changed
+ * it happened to be in.
+ *
+ * `-host-tokens` already answers "are we inside one of our apps": it is set at
+ * mount by `hostDefinesPlatformTokens()`, which tests for the platform's own
+ * HSL-COMPONENT control variables rather than merely for a name anyone could
+ * invent. Where it is present the app owns the scheme in BOTH directions, so
+ * the OS query must not apply. Where it is absent nothing else knows the answer
+ * and the OS query is all there is.
+ *
+ * ONE source string, interpolated under two selector scopes. A hand-copied
+ * palette is a palette that drifts, and this one has three separate blocks.
+ */
+const darkRules = (bubble: string, panel: string): string => `
+${bubble},${panel}{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}
+${panel} .${PREFIX}-assistant code{background:rgba(255,255,255,.1)}
+${panel} .${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}
+${panel} .${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}
+${panel} .${PREFIX}-assistant table.md-table td{border-bottom-color:#222}
+${panel} .${PREFIX}-assistant hr{border-top-color:#2a2a2a}
+${panel} .${PREFIX}-pane{background:#121212}
+${panel} .${PREFIX}-pane-bar{background:#1a1a1a;border-bottom-color:#262626}
+${panel} .${PREFIX}-pane-url{color:#9b9b9b}
+${panel} .${PREFIX}-pane-frame{background:#161616;border-color:#2a2a2a;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+${panel}.${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
+${panel}.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
+`;
+
 export function injectStyles(side: "left" | "right"): void {
   if (stylesInjected) return;
   stylesInjected = true;
@@ -60,6 +98,20 @@ export function injectStyles(side: "left" | "right"): void {
   // JS string, and the file fails to compile with an error that points at the
   // wrong line and says only "';' expected". Do not quote identifiers with
   // backticks in these comments.
+  // Computed HERE and not interpolated as calls, because the sheet below is a
+  // template literal and `aiw-launcher.test.ts` refuses a backtick anywhere
+  // inside it. That rule is worth keeping exactly as blunt as it is — a stray
+  // backtick in a CSS comment closes the string and reports as "';' expected"
+  // on the wrong line — so the calls come out rather than the guard being
+  // loosened to understand `${...}` spans.
+  const darkWhenHostSaysSo = darkRules(
+    `.dark .${PREFIX}-bubble`,
+    `.dark .${PREFIX}-panel`
+  );
+  const darkWhenNobodySaid = darkRules(
+    `.${PREFIX}-bubble:not(.${PREFIX}-host-tokens)`,
+    `.${PREFIX}-panel:not(.${PREFIX}-host-tokens)`
+  );
   const css = `
 /* Theme tokens — every color in this sheet reads from these. Light defaults
    here; the dark media block below only REDEFINES tokens; explicit host
@@ -80,8 +132,21 @@ export function injectStyles(side: "left" | "right"): void {
  * detail. #6e6e6e clears it against every surface the widget paints
  * (5.10:1 on #fff, 4.76:1 on the darkest, #f7f7f8). The dark counterpart
  * (#9b9b9b) already passes at 6.51:1 / 5.02:1 and is unchanged. Anything
- * lighter than this in light mode is a regression, not a restyle. */
-.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+' * lighter than this in light mode is a regression, not a restyle.
+ *
+ * --aiw-header-bg / --aiw-header-fg are the HEADER's own pair, and they exist
+ * because the bar is not an accent-filled control. Its buttons read
+ * --aiw-accent-contrast, which #307 correctly made DERIVED from the accent
+ * ("white on the teal every host actually passes is 2.00:1"). Against the teal
+ * all three of our apps pass, that derivation returns brand navy #151D2F —
+ * which is the header background. Navy on navy: 1.00:1, an invisible toolbar,
+ * shipped and reported from the product. A token means "readable on the
+ * ACCENT"; the header is not the accent. Cream on navy is 15.66:1.
+ *
+ * These two deliberately do NOT flip with the colour scheme, and neither does
+ * the bar. --aiw-surface does, which is how the active-icon chip came to paint
+ * #161616 on #151D2F in dark mode. */
+.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -214,7 +279,7 @@ export function injectStyles(side: "left" | "right"): void {
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
    — a scrim over a gradient is a patch, not a decision. On navy the mark
    inverts by the rule above and the scrim is unnecessary, so it is gone. */
-.${PREFIX}-header{background:#151D2F;color:#FCF7E3;border-bottom:2px solid transparent;border-image:var(--aiw-gradient) 1;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.${PREFIX}-header{background:var(--aiw-header-bg);color:var(--aiw-header-fg);border-bottom:2px solid transparent;border-image:var(--aiw-gradient) 1;padding:12px 14px;display:flex;align-items:center;gap:10px}
 /* Drag-to-reposition. touch-action:none is what makes this work on a
    touchscreen — without it the browser claims the gesture as a scroll and the
    panel never moves. user-select:none stops the title being selected mid-drag. */
@@ -259,7 +324,7 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
 .${PREFIX}-sub{font-size:11px;opacity:.85}
 .${PREFIX}-metachip{align-self:flex-start;margin-top:3px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.22);color:var(--aiw-accent-contrast);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.${PREFIX}-close{background:rgba(255,255,255,.15);border:none;color:var(--aiw-accent-contrast);font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
+.${PREFIX}-close{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
 .${PREFIX}-log{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--aiw-bg);scrollbar-width:thin}
 .${PREFIX}-log:focus-visible{outline:none}
 .${PREFIX}-log::-webkit-scrollbar{width:8px}
@@ -481,10 +546,10 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-edit-save{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer}
 .${PREFIX}-edit-save:hover{opacity:.92}
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
-.${PREFIX}-icon{background:rgba(255,255,255,.15);border:none;color:var(--aiw-accent-contrast);width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.${PREFIX}-icon:hover{background:rgba(255,255,255,.28)}
-.${PREFIX}-icon-on{background:var(--aiw-surface);color:var(--aiw-accent)}
-.${PREFIX}-icon-on:hover{background:var(--aiw-surface)}
+.${PREFIX}-icon{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.${PREFIX}-icon:hover{background:color-mix(in srgb,var(--aiw-header-fg) 28%,transparent)}
+.${PREFIX}-icon-on{background:var(--aiw-header-fg);color:var(--aiw-header-bg)}
+.${PREFIX}-icon-on:hover{background:var(--aiw-header-fg)}
 .${PREFIX}-morewrap{position:relative;display:inline-flex}
 .${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;display:flex;flex-direction:column;min-width:212px;padding:6px;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);
 /* A TRANSITION, not a keyframe, and anchored at the trigger (#309). It was
@@ -560,14 +625,7 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
   .${PREFIX}-advanced .${PREFIX}-resizer{display:none}
   .${PREFIX}-pane-body{padding:8px}
 }
-@media (prefers-color-scheme:dark){
-  .${PREFIX}-pane{background:#121212}
-  .${PREFIX}-pane-bar{background:#1a1a1a;border-bottom-color:#262626}
-  .${PREFIX}-pane-url{color:#9b9b9b}
-  .${PREFIX}-pane-frame{background:#161616;border-color:#2a2a2a;box-shadow:0 1px 4px rgba(0,0,0,.4)}
-  .${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
-  .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
-}
+
 .${PREFIX}-history{position:absolute;inset:0;background:var(--aiw-surface);display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--aiw-border);font-weight:600;font-size:14px}
 .${PREFIX}-history-back{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--aiw-text-2)}
@@ -703,8 +761,9 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-@media (prefers-color-scheme:dark){.${PREFIX}-bubble,.${PREFIX}-panel{--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}}
-@media (prefers-color-scheme:dark){.${PREFIX}-assistant code{background:rgba(255,255,255,.1)}.${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}.${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}.${PREFIX}-assistant table.md-table td{border-bottom-color:#222}.${PREFIX}-assistant hr{border-top-color:#2a2a2a}}
+${darkWhenHostSaysSo}
+@media (prefers-color-scheme:dark){${darkWhenNobodySaid}}
+
 @keyframes ${PREFIX}-sheetup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
@@ -731,7 +790,7 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
      the name/subtitle drop to a dedicated line below so the title never gets
      squeezed by the action buttons on narrow phones. */
   .${PREFIX}-header{position:relative;padding-top:calc(14px + env(safe-area-inset-top));display:grid;grid-template-columns:auto 1fr;grid-template-areas:"avatar actions" "name name";align-items:center;gap:8px 10px;touch-action:none}
-  .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.55)}
+  .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:color-mix(in srgb,var(--aiw-header-fg) 55%,transparent)}
   .${PREFIX}-avatar{grid-area:avatar}
   .${PREFIX}-hactions{grid-area:actions;justify-self:end}
   .${PREFIX}-hname{grid-area:name}
