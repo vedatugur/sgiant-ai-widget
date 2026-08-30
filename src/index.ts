@@ -4885,18 +4885,29 @@ export function createAiChatWidget(
       t = p.stripped;
       renderPreview(p.spec);
     }
+    // STRIP FIRST, RENDER SECOND — and strip even when nothing can render it.
+    //
+    // These two used to be gated on `opts.onWidgetAction`, so a host that wires
+    // no actions never reached the strip and the raw `[[navigate:{...}]]` was
+    // printed to the reader as text. Seen live on the public demo, whose whole
+    // job is to impress a prospect. The comment below already said "strip the
+    // directive either way"; the condition above it prevented exactly that.
+    //
+    // The model emits these because the system prompt offers them, which no
+    // host can switch off — so "no handler" is a normal state, not a misuse.
     const nav = parseJsonDirective<NavigateSpec>(t, "navigate");
-    if (nav && opts.onWidgetAction && nav.spec.path) {
+    if (nav) {
       t = nav.stripped;
-      // Strip the directive either way, but only offer/auto-follow a target
-      // that is a plain root-relative in-app route.
-      if (isSafeRelPath(nav.spec.path)) renderNavigate(nav.spec);
+      // Only offer/auto-follow a target that is a plain root-relative in-app
+      // route, and only when a host can actually act on it.
+      if (opts.onWidgetAction && nav.spec.path && isSafeRelPath(nav.spec.path))
+        renderNavigate(nav.spec);
     }
     for (let i = 0; i < 4; i++) {
       const act = parseJsonDirective<ActionSpec>(t, "action");
-      if (!act || !opts.onWidgetAction || !act.spec.name) break;
+      if (!act) break;
       t = act.stripped;
-      renderAction(act.spec);
+      if (opts.onWidgetAction && act.spec.name) renderAction(act.spec);
     }
     // Quick-reply chips — tappable answer options for a choice question.
     const chips = parseJsonDirective<ChipsSpec>(t, "chips");
@@ -4905,11 +4916,14 @@ export function createAiChatWidget(
       renderChips(chips.spec);
     }
     const form = parseFormDirective(t);
-    if (form && (opts.onWidgetAction || opts.onLead)) {
+    if (form) {
+      // Same rule: the markup never survives to the reader, with or without a
+      // host that can submit it.
       t = form.stripped;
-      renderForm(form.spec);
-    } else if ((opts.onLead || opts.onWidgetAction) && t.includes(LEAD_TOKEN)) {
+      if (opts.onWidgetAction || opts.onLead) renderForm(form.spec);
+    } else if (t.includes(LEAD_TOKEN)) {
       t = t.replace(LEAD_TOKEN, "").trim();
+      if (!(opts.onLead || opts.onWidgetAction)) return linkifyProseNav(t);
       renderForm({
         action: "lead",
         fields: [
