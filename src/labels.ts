@@ -176,6 +176,20 @@ export const WIDGET_LABELS = {
   reporting: "Reporting…",
   reported: "Reported ✓ — our team will look into it",
   reportFailed: "Couldn't report — try later",
+  // Quality prompt (#299) — the widget ASKING, because the whole signal was
+  // passive on surfaces where the control was invisible or absent.
+  //
+  // The two triggers deliberately ask DIFFERENT questions. A slow answer that
+  // was excellent, prompted with "was this helpful?", teaches us "slow = bad",
+  // which we already knew. So a long wait asks about the WAIT, and a failed
+  // turn asks about the GOAL.
+  qualitySlowTitle: "That took a while — was the answer worth it?",
+  qualityFailedTitle: "That didn't work — what were you trying to do?",
+  qualityReasonPlaceholder: "Anything you'd add? (optional)",
+  qualityFailedPlaceholder: "What were you trying to do?",
+  qualitySend: "Send",
+  qualityDismiss: "No thanks",
+  qualityThanks: "Thanks — noted ✓",
   // Signup CTA (anonymous surfaces)
   signupCta: "Sign up — 14 days free",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
