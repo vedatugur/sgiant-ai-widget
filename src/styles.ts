@@ -182,8 +182,8 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-act-agent{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--aiw-accent) 24%,transparent);border-radius:6px;padding:1px 6px}
 .${PREFIX}-act-model{flex:0 0 auto;font-size:9.5px;font-weight:600;letter-spacing:.2px;color:var(--aiw-muted);background:#9aa0a614;border:1px solid #9aa0a630;border-radius:6px;padding:1px 5px;font-variant-numeric:tabular-nums}
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid color-mix(in srgb,var(--aiw-accent) 27%,transparent);border-top-color:var(--aiw-accent);animation:${PREFIX}-spin .7s linear infinite}
-.${PREFIX}-act-ok{color:#10b981;font-weight:700}
-.${PREFIX}-act-x{color:#ef4444;font-weight:700}
+.${PREFIX}-act-ok{color:var(--aiw-ok-text);font-weight:700}
+.${PREFIX}-act-x{color:var(--aiw-danger-text);font-weight:700}
 .${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-job-done{opacity:.85}
 .${PREFIX}-job-failed{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg)}
@@ -309,7 +309,7 @@ export function injectStyles(side: "left" | "right"): void {
    from a proposal card: this one BLOCKS progress until answered, so it should
    read as something needing you, not as another message. */
 .${PREFIX}-question{margin:8px 0;padding:12px;border-radius:12px;background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-question-critical{border-color:#d93f0b;box-shadow:0 0 0 1px rgba(217,63,11,.25)}
+.${PREFIX}-question-critical{border-color:var(--aiw-danger-text);box-shadow:0 0 0 1px color-mix(in srgb,var(--aiw-danger-text) 25%,transparent)}
 .${PREFIX}-question-title{font-size:14px;font-weight:600;margin-bottom:4px;color:var(--aiw-text)}
 .${PREFIX}-question-ctx{font-size:12px;color:var(--aiw-muted);margin-bottom:8px;line-height:1.45}
 .${PREFIX}-question-opts{display:flex;flex-direction:column;gap:6px}
@@ -324,7 +324,7 @@ export function injectStyles(side: "left" | "right"): void {
 /* A multi-select confirm with nothing picked has nothing to send — it says so
    rather than looking clickable and doing nothing. */
 .${PREFIX}-question-send:disabled{opacity:.5;cursor:not-allowed}
-.${PREFIX}-question-err{margin-top:8px;font-size:12px;line-height:1.45;color:#d93f0b}
+.${PREFIX}-question-err{margin-top:8px;font-size:12px;line-height:1.45;color:var(--aiw-danger-text)}
 /* Answered: collapsed to the decision, so the transcript reads as a
    conversation rather than a dead form. */
 .${PREFIX}-question-done{border-style:dashed;opacity:.75}
@@ -447,8 +447,8 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 /* "This is the field that's holding you up." An outline rather than a border so
    it lands the same on a bare input, a checkbox row and a radio GROUP — the
    three shapes buildField can hand back. */
-.${PREFIX}-field-invalid{outline:1px solid #d93f0b;outline-offset:2px;border-radius:var(--aiw-field-radius)}
-.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:12.5px;line-height:1.45;color:#d93f0b}
+.${PREFIX}-field-invalid{outline:1px solid var(--aiw-danger-text);outline-offset:2px;border-radius:var(--aiw-field-radius)}
+.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:12.5px;line-height:1.45;color:var(--aiw-danger-text)}
 .${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
 .${PREFIX}-field-check-label{min-width:0}
 .${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:4px;cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
@@ -720,7 +720,13 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
 .${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
-.${PREFIX}-ui-badge-ready{background:#16794a}
+.${PREFIX}/* The two FILLED badges stay literal on purpose, and are not the bypass the
+   audit counted. They are opaque chips carrying the base rule's white text
+   (5.43:1 and 7.54:1), so they neither flip with the scheme nor need to:
+   --aiw-ok-bg / --aiw-danger-bg are PALE SURFACES for cards, and pouring one
+   into a filled pill would put pale text on a pale fill. Same reasoning as the
+   preview chrome's traffic-light dots. */
+-ui-badge-ready{background:#16794a}
 .${PREFIX}-ui-badge-running{background:var(--aiw-accent);color:var(--aiw-accent-contrast)}
 .${PREFIX}-ui-badge-failed{background:#a32020}
 .${PREFIX}-ui-tile-title{font-size:12px;font-weight:600;color:var(--aiw-text);margin-top:6px;line-height:1.25}
@@ -732,7 +738,7 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-btn:hover{background:var(--aiw-surface-2)}
 .${PREFIX}-ui-btn:disabled{opacity:.5;cursor:default}
 .${PREFIX}-ui-btn-primary{background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-color:transparent}
-.${PREFIX}-ui-btn-danger{color:#a32020;border-color:color-mix(in srgb,#a32020 40%,transparent)}
+.${PREFIX}-ui-btn-danger{color:var(--aiw-danger-text);border-color:color-mix(in srgb,var(--aiw-danger-text) 40%,transparent)}
 .${PREFIX}-ui-btn-ghost{padding:5px 8px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--aiw-muted);font-size:11.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-ui-confirm-q{font-size:11.5px;color:var(--aiw-text-2)}
 .${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
@@ -779,7 +785,7 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
    renders are bought from is READ rather than skimmed as a paragraph. */
 /* Two lines of the prompt: enough to judge the shot, not so much that four of
    them bury the buttons under the fold. */
-.${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:#10b981;display:inline-flex;align-items:center;gap:6px}
+.${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:var(--aiw-ok-text);display:inline-flex;align-items:center;gap:6px}
 .${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
 .${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
