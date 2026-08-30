@@ -1908,11 +1908,16 @@ export function createAiChatWidget(
 
   /**
    * Below this width the panel is a FULL-SCREEN bottom sheet (see the
-   * `@media (max-width:640px)` block). Declared up here because `applyPos`
+   * sheet media query below — see SHEET_QUERY). Declared up here because applyPos
    * needs it and runs at mount — a `const` defined later would be in the
    * temporal dead zone and throw.
    */
-  const isSheet = (): boolean => window.matchMedia("(max-width:640px)").matches;
+  // MUST match the media query below, character for character in meaning:
+  // the JS decides where the panel is positioned and the CSS decides what it
+  // looks like, and a phone in landscape used to fall between them (#309).
+  const SHEET_QUERY =
+    "(max-width:640px),(max-height:520px) and (pointer:coarse)";
+  const isSheet = (): boolean => window.matchMedia(SHEET_QUERY).matches;
 
   /**
    * Keep the panel fully on screen.
@@ -2092,12 +2097,14 @@ export function createAiChatWidget(
   moreBtn.innerHTML = ICON_MORE;
   const moreMenu = el("div", `${PREFIX}-menu`);
   moreMenu.setAttribute("role", "menu");
-  moreMenu.style.display = "none";
+  // Class, not `display` (#309): the menu transitions now, and display is not
+  // animatable. See the -menu / -menu-open rules.
+  moreMenu.classList.remove(`${PREFIX}-menu-open`);
   moreWrap.append(moreBtn, moreMenu);
   let menuOpen = false;
   const setMenu = (open: boolean): void => {
     menuOpen = open;
-    moreMenu.style.display = open ? "flex" : "none";
+    moreMenu.classList.toggle(`${PREFIX}-menu-open`, open);
     moreBtn.classList.toggle(`${PREFIX}-icon-on`, open);
     moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
   };
@@ -2899,7 +2906,7 @@ export function createAiChatWidget(
         ? `<div class="${PREFIX}-job-counts">${escapeHtml(counts)}</div>`
         : "") +
       (total > 0 && !terminal
-        ? `<div class="${PREFIX}-job-bar"><i style="width:${pct}%"></i></div>`
+        ? `<div class="${PREFIX}-job-bar"><i style="transform:scaleX(${pct / 100})"></i></div>`
         : "") +
       (detail
         ? `<div class="${PREFIX}-job-detail">${escapeHtml(detail)}</div>`
@@ -3527,7 +3534,7 @@ export function createAiChatWidget(
       quotaRemaining !== null
         ? `${quotaRemaining.toLocaleString()} free tokens left`
         : "Free preview";
-    meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="width:${pct}%"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
+    meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="transform:scaleX(${pct / 100})"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
   }
 
   // Authed status bar — remaining credits + the active Copilot role. Shown only
@@ -7576,8 +7583,8 @@ function injectStyles(side: "left" | "right"): void {
 @keyframes ${PREFIX}-richin{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
 .${PREFIX}-rich-in{animation:${PREFIX}-richin var(--duration-base) var(--ease-out)}
 @keyframes ${PREFIX}-tokin{from{opacity:0;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
-.${PREFIX}-tok{animation:${PREFIX}-tokin .34s ease forwards}
-.${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid color-mix(in srgb,var(--aiw-accent) 15%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-tok{animation:${PREFIX}-tokin var(--duration-base) var(--ease-out) forwards}
+.${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid color-mix(in srgb,var(--aiw-accent) 15%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-activity-done{opacity:.72}
 .${PREFIX}-act-label{color:var(--aiw-text-2)}
 .${PREFIX}-act-agent{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--aiw-accent) 24%,transparent);border-radius:6px;padding:1px 6px}
@@ -7585,7 +7592,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid color-mix(in srgb,var(--aiw-accent) 27%,transparent);border-top-color:var(--aiw-accent);animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:#10b981;font-weight:700}
 .${PREFIX}-act-x{color:#ef4444;font-weight:700}
-.${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-job-done{opacity:.85}
 .${PREFIX}-job-failed{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg)}
 .${PREFIX}-job-head{display:flex;align-items:center;gap:7px}
@@ -7593,7 +7600,10 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-job-state{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-muted)}
 .${PREFIX}-job-counts{color:var(--aiw-text-2);font-variant-numeric:tabular-nums}
 .${PREFIX}-job-bar{height:4px;border-radius:3px;background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
-.${PREFIX}-job-bar>i{display:block;height:100%;background:var(--aiw-accent);transition:width .4s ease}
+/* scaleX, not width (#309). Animating width reflows on every frame; a
+   transform is composited. transform-origin:left so it grows from the start of
+   the track rather than its middle. */
+.${PREFIX}-job-bar>i{display:block;height:100%;width:100%;transform-origin:left;background:var(--aiw-accent);transition:transform var(--duration-base) var(--ease-out)}
 .${PREFIX}-job-detail{color:var(--aiw-muted);font-size:11px;word-break:break-word}
 .${PREFIX}-job-mirrored{color:var(--aiw-muted);font-size:11px;font-style:italic}
 .${PREFIX}-pane-widget{width:100%;height:100%;overflow:auto;background:var(--aiw-surface);border-radius:12px;padding:16px;box-sizing:border-box}
@@ -7694,7 +7704,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise .22s ease;transition:width var(--duration-base) var(--ease-out),height var(--duration-base) var(--ease-out)}
+.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
    — a scrim over a gradient is a patch, not a decision. On navy the mark
@@ -7706,7 +7716,7 @@ function injectStyles(side: "left" | "right"): void {
 /* Question card — the assistant asking the human to decide. Visually distinct
    from a proposal card: this one BLOCKS progress until answered, so it should
    read as something needing you, not as another message. */
-.${PREFIX}-question{margin:8px 0;padding:12px;border-radius:12px;background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise .18s ease}
+.${PREFIX}-question{margin:8px 0;padding:12px;border-radius:12px;background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-question-critical{border-color:#d93f0b;box-shadow:0 0 0 1px rgba(217,63,11,.25)}
 .${PREFIX}-question-title{font-size:14px;font-weight:600;margin-bottom:4px;color:var(--aiw-text)}
 .${PREFIX}-question-ctx{font-size:12px;color:var(--aiw-muted);margin-bottom:8px;line-height:1.45}
@@ -7751,7 +7761,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-log::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:8px}
 @keyframes ${PREFIX}-caret{0%,55%{opacity:.85}55.01%,100%{opacity:0}}
 .${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:1px;background:var(--aiw-accent);vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
-.${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-msg.${PREFIX}-user{align-self:flex-end;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-bottom-left-radius:4px}
 .${PREFIX}-assistant p{margin:0 0 8px}.${PREFIX}-assistant>:last-child{margin-bottom:0}
@@ -7774,7 +7784,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-typing span{width:7px;height:7px;border-radius:50%;background:var(--aiw-accent);animation:${PREFIX}-blink 1.2s infinite}
 .${PREFIX}-typing span:nth-child(2){animation-delay:.2s}
 .${PREFIX}-typing span:nth-child(3){animation-delay:.4s}
-.${PREFIX}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-error-text{font-size:13px;font-weight:600;color:var(--aiw-danger-text)}
 .${PREFIX}-error-detail{font-size:11px;color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word}
 .${PREFIX}-error-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
@@ -7788,7 +7798,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-input{flex:1;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
 .${PREFIX}-meter{padding:7px 12px 0;background:var(--aiw-surface)}
 .${PREFIX}-meter-bar{height:4px;border-radius:999px;background:var(--aiw-surface-2);overflow:hidden}
-.${PREFIX}-meter-bar>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:width .3s ease}
+.${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:999px;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}
 .${PREFIX}-meter-row{display:flex;justify-content:space-between;gap:8px;margin-top:3px;font-size:10.5px;color:var(--aiw-muted)}
 .${PREFIX}-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;font-size:11px;background:var(--aiw-surface);border-top:1px solid var(--aiw-border-soft)}
 .${PREFIX}-status-role{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-weight:600;color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
@@ -7797,7 +7807,7 @@ function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-credits-live{color:var(--aiw-accent)}
 .${PREFIX}-cta{display:flex;justify-content:center;padding:6px 0 2px}
 .${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;color:var(--aiw-accent-contrast);text-decoration:none;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);box-shadow:0 4px 14px color-mix(in srgb,var(--aiw-accent) 25%,transparent)}
-.${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-form-title{font-size:13px;font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
 /* ── Form controls ───────────────────────────────────────────────────────
@@ -7938,7 +7948,7 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-branch-btn:hover:not(:disabled){color:var(--aiw-accent)}
 .${PREFIX}-branch-btn:disabled{opacity:.35;cursor:default}
 .${PREFIX}-branch-count{font-size:11px;padding:0 2px}
-.${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:94%;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:94%;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-edit.${PREFIX}-user{align-self:stretch}
 /* Edit mode keeps the USER BUBBLE look (same fill + radius), so clicking edit
    doesn't swap the message for a different-looking box — just a subtle focus
@@ -7957,7 +7967,18 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-icon-on{background:var(--aiw-surface);color:var(--aiw-accent)}
 .${PREFIX}-icon-on:hover{background:var(--aiw-surface)}
 .${PREFIX}-morewrap{position:relative;display:inline-flex}
-.${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;flex-direction:column;min-width:212px;padding:6px;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);animation:${PREFIX}-rise .14s ease}
+.${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;display:flex;flex-direction:column;min-width:212px;padding:6px;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);
+/* A TRANSITION, not a keyframe, and anchored at the trigger (#309). It was
+   an entrance KEYFRAME with no transform-origin, so it grew from its own centre
+   instead of from the button that opened it — and because keyframes RESTART
+   while transitions RETARGET, a fast open-close-open stuttered. It stays in the
+   DOM (display was toggled), which is exactly the rapidly-retriggered case
+   house law names.
+   visibility rather than display because display is not animatable; it
+   flips discretely at the end of the transition, which is what keeps a closed
+   menu out of the tab order. */
+transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--duration-fast) var(--ease-out),transform var(--duration-fast) var(--ease-out),visibility 0s linear var(--duration-fast)}
+.${PREFIX}-menu-open{transform:none;opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
 .${PREFIX}-menu::before{content:"";position:absolute;top:-5px;right:14px;width:10px;height:10px;background:var(--aiw-surface-raised);border-left:1px solid var(--aiw-border);border-top:1px solid var(--aiw-border);transform:rotate(45deg)}
 .${PREFIX}-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;color:var(--aiw-text-2);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:500;cursor:pointer;line-height:1.2}
 .${PREFIX}-menu-item:hover{background:color-mix(in srgb,var(--aiw-accent) 7%,transparent);color:var(--aiw-accent)}
@@ -7967,9 +7988,9 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-menu-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .${PREFIX}-menu-state{flex:0 0 auto;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:999px;padding:2px 7px}
 .${PREFIX}-menu-item-on .${PREFIX}-menu-state{color:var(--aiw-accent-contrast);background:var(--aiw-accent)}
-.${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
-.${PREFIX}-expanded .${PREFIX}-msg{max-width:75%}
+.${PREFIX}-expanded .${PREFIX}-msg{max-width:min(75%,62ch)}
 /* Advanced view — chat column + drivable app pane. The chat column always wraps
    the chat (fills the panel in normal mode); the pane only shows in advanced. */
 .${PREFIX}-chatcol{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;height:100%}
@@ -8028,7 +8049,7 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
   .${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
   .${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
 }
-.${PREFIX}-history{position:absolute;inset:0;background:var(--aiw-surface);display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise .18s ease}
+.${PREFIX}-history{position:absolute;inset:0;background:var(--aiw-surface);display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--aiw-border);font-weight:600;font-size:14px}
 .${PREFIX}-history-back{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--aiw-text-2)}
 .${PREFIX}-history-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--aiw-text-2)}
@@ -8039,14 +8060,14 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-history-date{font-size:11px;color:var(--aiw-muted);flex:0 0 auto}
 .${PREFIX}-history-star{font-size:15px;line-height:1;color:#cbcbcb;flex:0 0 auto;padding:0 2px;cursor:pointer}
 .${PREFIX}-history-star:hover{color:#f59e0b}
-.${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-widget-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
 .${PREFIX}-widget-stat{font-size:30px;font-weight:800;line-height:1.1;color:var(--aiw-text)}
 .${PREFIX}-widget-cap{font-size:13px;color:var(--aiw-text-2);margin-top:2px}
 .${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:var(--aiw-accent);margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 /* Composed UI cards ([[ui:…]]) — tiles the assistant lays out itself. */
-.${PREFIX}-ui{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-ui{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-ui-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:6px}
 .${PREFIX}-ui-cap{font-size:13px;color:var(--aiw-text-2);margin-bottom:10px}
 /* A strip SCROLLS rather than shrinking its tiles: squeezing eight scenes into
@@ -8077,8 +8098,12 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    which is what the WCAG 2.2 spacing exception actually requires (#308). */
 .${PREFIX}-ui-dots{position:absolute;left:0;right:0;top:calc(var(--aiw-cmedia) - 14px);bottom:auto;z-index:2;display:flex;justify-content:center;gap:18px}
 /* 6x6 drawn, real <button>s. Same treatment: the dot stays 6px, the target is 24. */
-.${PREFIX}-ui-dot{position:relative;height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer;transition:width .15s}
+.${PREFIX}-ui-dot{position:relative;height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer}
 .${PREFIX}-ui-dot::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
+/* The active dot widens to a pill. NO transition on that width (#309): house
+   law allows transform and opacity, and scaleX on a 6px circle distorts the
+   round cap into an ellipse — so the honest answer is to change instantly
+   rather than animate the wrong property or fake it with the right one. */
 .${PREFIX}-ui-dot-on{width:16px;background:#fff}
 .${PREFIX}-ui-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
 .${PREFIX}-ui-list{display:flex;flex-direction:column;gap:8px}
@@ -8111,7 +8136,7 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-ui-btn-danger{color:#a32020;border-color:color-mix(in srgb,#a32020 40%,transparent)}
 .${PREFIX}-ui-btn-ghost{padding:5px 8px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--aiw-muted);font-size:11.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-ui-confirm-q{font-size:11.5px;color:var(--aiw-text-2)}
-.${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-preview-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border-soft)}
 .${PREFIX}-preview-dots{display:inline-flex;gap:4px}
 .${PREFIX}-preview-dots i{width:9px;height:9px;border-radius:50%;background:#e2e2e2}
@@ -8142,11 +8167,11 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-widget-table th{text-align:left;font-weight:700;color:var(--aiw-text-2);border-bottom:1px solid var(--aiw-border);padding:6px 8px}
 .${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:var(--aiw-text)}
 .${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:13.5px;color:var(--aiw-text);display:flex;flex-direction:column;gap:3px}
-.${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent);border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .${PREFIX}-nav-btn:hover{background:color-mix(in srgb,var(--aiw-accent) 11%,transparent)}
 .${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
-.${PREFIX}-proposal{align-self:stretch;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise .2s ease}
+.${PREFIX}-proposal{align-self:stretch;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-proposal-title{font-size:13px;font-weight:700}
 .${PREFIX}-proposal-edit{display:flex;flex-direction:column;gap:4px}
 .${PREFIX}-proposal-edit-label{font-size:11.5px;font-weight:600;color:var(--aiw-text-2)}
@@ -8165,7 +8190,13 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 /* On phones the panel becomes a full-width bottom sheet (slides up from the
    bottom edge, ~90% of the dynamic viewport, rounded top, grab handle) so the
    chat is comfortably usable instead of a cramped corner card. */
-@media (max-width:640px){
+/* A phone in LANDSCAPE is about 844x390 — wider than 640, so the desktop
+   corner card applied and max-height:calc(100vh - 40px) clamped it to 350px
+   tall. Header and composer take ~120 of that, leaving ~230px of message log
+   in the exact posture where the soft keyboard also appears (#309).
+   Short viewport AND coarse pointer, not short alone: a short desktop window
+   is not a phone, and a full-screen sheet there would be wrong. */
+@media (max-width:640px),(max-height:520px) and (pointer:coarse){
   /* z-index: the desktop 48 sits deliberately BELOW the app's Radix modals
      (z-50) so a dialog covers the chat. That rule did not anticipate page
      CHROME at the same level: the marketing site's header is
