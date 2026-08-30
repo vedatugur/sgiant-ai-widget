@@ -71,6 +71,20 @@ export function hostDefinesPlatformTokens(): boolean {
  * the OS query must not apply. Where it is absent nothing else knows the answer
  * and the OS query is all there is.
  *
+' * The pane's colours are NOT in here any more. It used to carry a complete
+ * parallel palette in literals — #f4f5f7 / #eef0f3 / #e7e8ec / #777 light and
+ * #121212 / #1a1a1a / #262626 / #9b9b9b dark — which is what #306 measured as
+ * "the advanced pane does not participate in the token system at all": a themed
+ * host repainted the whole widget and this pane stayed grey. Every one of those
+ * eight values was the light or dark reading of a token that already existed,
+ * so the pane now reads the tokens and its dark half falls out for free. Only
+ * the shadow differs by scheme, because that one genuinely is not a colour
+ * token.
+ *
+ * It also lifts the URL strip off the floor: #777 on #eef0f3 measured 3.92:1,
+ * under the 4.5:1 body-text minimum. --aiw-muted is documented above as a
+ * CONTRAST FLOOR and clears it on both surfaces.
+ *
  * ONE source string, interpolated under two selector scopes. A hand-copied
  * palette is a palette that drifts, and this one has three separate blocks.
  */
@@ -81,10 +95,7 @@ ${panel} .${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(
 ${panel} .${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}
 ${panel} .${PREFIX}-assistant table.md-table td{border-bottom-color:#222}
 ${panel} .${PREFIX}-assistant hr{border-top-color:#2a2a2a}
-${panel} .${PREFIX}-pane{background:#121212}
-${panel} .${PREFIX}-pane-bar{background:#1a1a1a;border-bottom-color:#262626}
-${panel} .${PREFIX}-pane-url{color:#9b9b9b}
-${panel} .${PREFIX}-pane-frame{background:#161616;border-color:#2a2a2a;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+${panel} .${PREFIX}-pane-frame{box-shadow:0 1px 4px rgba(0,0,0,.4)}
 ${panel}.${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
 ${panel}.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
 `;
@@ -578,7 +589,7 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 /* Advanced view — chat column + drivable app pane. The chat column always wraps
    the chat (fills the panel in normal mode); the pane only shows in advanced. */
 .${PREFIX}-chatcol{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;height:100%}
-.${PREFIX}-pane{display:none;flex-direction:column;min-width:0;min-height:0;background:#f4f5f7}
+.${PREFIX}-pane{display:none;flex-direction:column;min-width:0;min-height:0;background:var(--aiw-bg)}
 .${PREFIX}-advbtn-on{background:rgba(255,255,255,.34)}
 /* Advanced view IS the wide view (owns the screen), so the plain "wide" toggle
    is redundant here — hide it and leave advanced/exit + close. */
@@ -611,11 +622,11 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-url{display:none}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-bar{padding:6px 5px}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-collapse{transform:rotate(180deg)}
-.${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e7e8ec;background:#eef0f3;flex:0 0 auto}
-.${PREFIX}-pane-url{font-size:11.5px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border);background:var(--aiw-surface-2);flex:0 0 auto}
+.${PREFIX}-pane-url{font-size:11.5px;color:var(--aiw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 /* Padded gutter around the driven app so it reads as an inset "screen". */
 .${PREFIX}-pane-body{flex:1 1 auto;min-width:0;min-height:0;display:flex;padding:12px}
-.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid #e6e7ea;border-radius:12px;background:var(--aiw-surface);min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
+.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid var(--aiw-border);border-radius:12px;background:var(--aiw-surface);min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
 /* Narrow: stack the app pane on top and the chat (with composer) below. */
 @media (max-width:820px){
   .${PREFIX}-advanced{flex-direction:column-reverse}
