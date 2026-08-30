@@ -45,7 +45,7 @@ import {
 // `@sgiant/tokens` to fix that, and then the same mistake arrived by a
 // different door as `@sgiant/assets/actions` (#306). Now it is local, and a
 // drift test holds the copies together instead of a manifest entry.
-import { resolveAccentContrast, mixSrgb } from "./contrast";
+import { resolveAccentContrast, mixSrgb, accentInk } from "./contrast";
 import { isNavigationAction } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
@@ -1128,6 +1128,34 @@ export function createAiChatWidget(
   // cannot disagree about what the background actually is. An explicit
   // `user-bg` / `user-contrast` from the host still wins, and an unparseable
   // accent leaves both untouched so the sheet's own defaults apply.
+  // The accent as INK, per scheme (#326). `--aiw-accent` is a FILL colour, and
+  // twenty rules also use it as text — links, hover states, the focused input,
+  // chips, KPI deltas, the menu icons, the active vote. A fill is not an ink:
+  //
+  //   teal   #60C7C8 (all three hosts)     2.00:1 on the light surface
+  //   violet #6d28d9 (our own default)     2.55:1 on the dark one
+  //   amber  #FBAA34                       1.93:1 on the light one
+  //
+  // So this is not "the teal is a bad accent" — EVERY accent is illegible as
+  // ink on one of the two schemes, and which one depends only on where the
+  // colour sits between the surfaces. The widget's own default is the one that
+  // fails in the dark.
+  //
+  // Two values, because the surface flips and an inline token would not: the
+  // sheet picks between them (`--aiw-accent-ink` reads `-light` in the base
+  // block and `-dark` in the dark one), so the app's own switch still drives it.
+  // Both fall back to the raw accent when the accent cannot be parsed.
+  if (themeTokens.accent) {
+    for (const [suffix, surface] of [
+      ["light", "#ffffff"],
+      ["dark", "#161616"],
+    ] as const) {
+      const key = `accent-ink-${suffix}`;
+      if (themeTokens[key]) continue;
+      const ink = accentInk(themeTokens.accent, surface);
+      if (ink) themeTokens[key] = ink;
+    }
+  }
   if (themeTokens.accent && !themeTokens["user-bg"]) {
     const bg = mixSrgb(themeTokens.accent, USER_BUBBLE_INK, 0.76);
     if (bg) {

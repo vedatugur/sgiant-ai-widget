@@ -108,3 +108,47 @@ export function mixSrgb(a: string, b: string, ratioA: number): string | null {
       .padStart(2, "0");
   return `#${chan(0)}${chan(1)}${chan(2)}`;
 }
+
+/**
+ * The accent, adjusted until it is legible as TEXT on a given surface.
+ *
+ * `--aiw-accent` is a FILL colour. Twenty rules also use it as ink — links,
+ * hover states, the focused input, chips, KPI deltas, the menu icons, the
+ * active vote — and a fill is not an ink. Measured against the surfaces this
+ * sheet actually paints:
+ *
+ *   teal   #60C7C8 (what all three hosts pass)   2.00:1 on white,  9.05 on dark
+ *   violet #6d28d9 (the widget's own default)    7.10:1 on white,  2.55 on dark
+ *   amber  #FBAA34                               1.93:1 on white,  9.39 on dark
+ *
+ * So it is not "the teal is a bad accent". Every accent is illegible as ink on
+ * one of the two schemes; the widget's own default is the one that fails in the
+ * dark. Which scheme breaks depends only on where the accent sits between the
+ * two surfaces, and that is a property of the colour, not a mistake in it.
+ *
+ * The adjustment blends toward black or white — whichever the surface is
+ * further from — and returns the FIRST step that clears the floor, so the ink
+ * stays as close to the brand accent as legibility allows rather than jumping
+ * to a safe navy. Hue survives; some chroma does not.
+ *
+ * 5% steps because that is finer than the eye reads as a colour change and
+ * still terminates in twenty iterations. Null when the accent is unparseable —
+ * the caller leaves the token alone and the sheet's own default applies, which
+ * is the same contract as `resolveAccentContrast`.
+ */
+export function accentInk(
+  accent: string,
+  surface: string,
+  target = 4.5
+): string | null {
+  const surfaceLum = relativeLuminance(surface);
+  if (surfaceLum === null || parseHex(accent) === null) return null;
+  const pole = surfaceLum > 0.5 ? "#000000" : "#ffffff";
+  for (let p = 1; p >= 0; p -= 0.05) {
+    const candidate = mixSrgb(accent, pole, p);
+    if (!candidate) return null;
+    const ratio = contrastRatio(candidate, surface);
+    if (ratio !== null && ratio >= target) return candidate;
+  }
+  return pole;
+}
