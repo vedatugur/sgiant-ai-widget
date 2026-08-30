@@ -12,9 +12,7 @@
   },
   "dependencies": {
     "@sgiant/ai-agent-bridge": "1.0.0",
-    "@sgiant/assets": "1.0.0",
-    "@sgiant/shared": "1.1.0",
-    "@sgiant/tokens": "1.0.1"
+    "@sgiant/asset-actions": "1.0.0"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",

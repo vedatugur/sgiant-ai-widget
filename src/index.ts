@@ -37,14 +37,14 @@ import {
   CHAT_ATTACHMENT_MAX_AV_BYTES,
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
-} from "@sgiant/shared";
-// Straight from `@sgiant/tokens`, NOT through `@sgiant/ui/tokens`. That subpath
-// is a re-export left over from before the tokens moved out of the component
-// library, and taking it made this vanilla-DOM widget declare a dependency on a
-// React library carrying three.js, recharts and Clerk — to read one function.
-// The widget hand-writes its CSS as strings, which is why it once had its own
-// copy of the product's easing curve; interpolating the token keeps one
-// definition without the closure.
+} from "./limits";
+// From `./limits`, not `@sgiant/shared` — see the note in that file. The
+// history is worth keeping: this import was first written as
+// `@sgiant/ui/tokens`, which made a vanilla-DOM widget declare a React library
+// carrying three.js, recharts and Clerk to read one function. It was moved to
+// `@sgiant/tokens` to fix that, and then the same mistake arrived by a
+// different door as `@sgiant/assets/actions` (#306). Now it is local, and a
+// drift test holds the copies together instead of a manifest entry.
 import { resolveAccentContrast } from "./contrast";
 import { isNavigationAction, isKnownNavTarget } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";

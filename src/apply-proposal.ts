@@ -24,12 +24,18 @@ import {
   applyAssetCreate,
   applyAssetSave,
   applyAssetShare,
-} from "@sgiant/assets/actions";
-// `/actions`, NOT the barrel. These six are pure functions in apply-organize.ts,
-// but @sgiant/assets' index re-exports them alongside AssetsProvider and the
-// picker/library/share COMPONENTS — so importing through it puts React, and
-// with it @sgiant/ui's three.js and lucide, in the closure of a vanilla-DOM
-// widget. Measured: 354kB bundled alone, carrying liquid-scene.js.
+} from "@sgiant/asset-actions";
+// ITS OWN PACKAGE now (#306), not `@sgiant/assets/actions`.
+//
+// These six are pure functions, but they used to live in @sgiant/assets — which
+// is `private: true` and peers on @sgiant/ui. The subpath import kept React out
+// of the BUNDLE (the barrel re-exports AssetsProvider and the picker/library
+// components alongside them; measured at 354kB carrying liquid-scene.js), but
+// not out of the DEPENDENCY GRAPH: this vanilla-DOM widget still declared a
+// private React library to call six functions that touch neither.
+//
+// A subpath import is a bundler optimisation. Publishing is a manifest
+// question, and the manifest said React.
 
 export interface ApplyProposalCtx {
   /** The host's Clerk-authed JSON fetcher (already based at the right API origin). */

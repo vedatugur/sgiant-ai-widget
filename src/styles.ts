@@ -9,7 +9,7 @@
  * the file it came from is the one #306 proposes publishing, and 8278 lines is
  * not something a third party can read.
  */
-import { motionCssVars } from "@sgiant/tokens";
+import { motionCssVars } from "./limits";
 
 import { PREFIX } from "./prefix";
 

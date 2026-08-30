@@ -16,7 +16,7 @@ import {
   runOperateAction,
 } from "./ui-control";
 // Type-only: erased at build, so this stays a zero-runtime-dependency module.
-import type { Locale } from "@sgiant/shared";
+import type { Locale } from "./limits";
 
 /** Which product surface the user is on. */
 export type AppSurface = "org" | "admin" | "marketing" | "onboarding";
