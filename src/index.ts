@@ -3506,9 +3506,12 @@ export function createAiChatWidget(
         : 100;
     const remTxt =
       quotaRemaining !== null
-        ? `${quotaRemaining.toLocaleString()} free tokens left`
-        : "Free preview";
-    meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="transform:scaleX(${pct / 100})"></span></div><div class="${PREFIX}-meter-row"><span>${remTxt}</span><span>${sessionUsed.toLocaleString()} used this session</span></div>`;
+        ? L("meterTokensLeft", { count: quotaRemaining.toLocaleString() })
+        : L("meterFreePreview");
+    const usedTxt = L("meterUsedThisSession", {
+      count: sessionUsed.toLocaleString(),
+    });
+    meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="transform:scaleX(${pct / 100})"></span></div><div class="${PREFIX}-meter-row"><span>${escapeHtml(remTxt)}</span><span>${escapeHtml(usedTxt)}</span></div>`;
   }
 
   // Authed status bar — remaining credits + the active Copilot role. Shown only
