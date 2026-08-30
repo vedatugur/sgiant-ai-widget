@@ -190,6 +190,13 @@ export const WIDGET_LABELS = {
   qualitySend: "Send",
   qualityDismiss: "No thanks",
   qualityThanks: "Thanks — noted ✓",
+  // Free-token meter. Shown ONLY when `signupUrl` is set, i.e. exactly on the
+  // anonymous surfaces — the marketing visitor chat and the public demo — both
+  // of which serve Turkish. These three were hardcoded English, so a Turkish
+  // visitor read "60,000 free tokens left" under a Turkish conversation.
+  meterTokensLeft: "{count} free tokens left",
+  meterFreePreview: "Free preview",
+  meterUsedThisSession: "{count} used this session",
   // Signup CTA (anonymous surfaces)
   signupCta: "Sign up — 14 days free",
   // Composed UI cards ([[ui:…]]) — the four states the widget colours. Any
