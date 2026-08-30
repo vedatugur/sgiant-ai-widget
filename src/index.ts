@@ -46,7 +46,7 @@ import {
 // different door as `@sgiant/assets/actions` (#306). Now it is local, and a
 // drift test holds the copies together instead of a manifest entry.
 import { resolveAccentContrast } from "./contrast";
-import { isNavigationAction, isKnownNavTarget } from "./host-actions";
+import { isNavigationAction } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
 // for hosts that want to validate a spec before handing it over.
@@ -126,257 +126,16 @@ export { PREFIX };
  */
 export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 
-/** One item replayed from a past thread: a chat message, or an inline data
- *  widget (so reopening restores the conversation's charts/tables, not just
- *  text). The render hooks / fallback handle the actual drawing. */
-export type LoadedThreadItem =
-  | {
-      role: "user" | "assistant";
-      content: string;
-      /** Stable message id (branching). Absent on hosts that predate branching. */
-      id?: string;
-      /** The model that produced this message, so a vote cast on REPLAYED
-       *  history is attributable per model like a live one (#299). */
-      model?: string;
-      /** Parent turn in the conversation tree (null on a root message). */
-      parentId?: string | null;
-      /** Persisted per-turn token spend (assistant messages) — replays the
-       *  ↑/↓ tokens caption that the live stream draws, so it survives the
-       *  end-of-turn thread reload and thread reopen. Shown even on the free
-       *  staff lane: not billed there, still worth seeing. */
-      inputTokens?: number;
-      outputTokens?: number;
-      /** ‹n/m› sibling switcher data — present when this turn has siblings. */
-      branch?: {
-        index: number;
-        count: number;
-        prevLeaf?: string;
-        nextLeaf?: string;
-      };
-    }
-  | { kind: "widget"; spec: unknown; rows: unknown; comparisonRows?: unknown }
-  | {
-      kind: "activity";
-      label: string;
-      status: string;
-      agent?: string;
-      model?: string;
-      /** The REPORT this step produced, if any.
-       *
-       *  An ID and not a path: `buildThreadReplay` is a pure function with no
-       *  host context, and the widget runs in three shells with different route
-       *  shapes. The renderer turns it into a path via `opts.reportHref`. */
-      reportId?: string;
-    };
-/** The message variant of a replay item (carries the branch metadata). */
-type ReplayMessageItem = Extract<
-  LoadedThreadItem,
-  { role: "user" | "assistant" }
->;
-
-/** ‹n/m› sibling navigation for one message (mirrors the panel's BranchNav). */
-interface BranchNav {
-  index: number;
-  count: number;
-  prevLeaf?: string;
-  nextLeaf?: string;
-}
-
-/** A stored message reduced to what branch navigation needs. */
-interface BranchMsg {
-  id?: string;
-  parentId?: string | null;
-  createdAt?: string;
-}
-
-const ROOT_KEY = "__root__";
-
-/** Deepest leaf under a message, following the most recent child at each step
- *  (memoised, cycle-guarded) — the target the ‹n/m› switcher jumps to. Mirrors
- *  the full-page panel's `leafUnder`. */
-function leafUnder(
-  id: string,
-  childrenByParent: Map<string, BranchMsg[]>,
-  memo: Map<string, string>,
-  guard = 0
-): string {
-  const cached = memo.get(id);
-  if (cached) return cached;
-  const kids = childrenByParent.get(id);
-  if (!kids || kids.length === 0 || guard > 1000) {
-    memo.set(id, id);
-    return id;
-  }
-  const last = kids[kids.length - 1];
-  const leaf = last?.id
-    ? leafUnder(last.id, childrenByParent, memo, guard + 1)
-    : id;
-  memo.set(id, leaf);
-  return leaf;
-}
-
-/**
- * Compute the ‹n/m› sibling switcher for every message on the active path.
- * Siblings share a parent; editing a user turn or regenerating an assistant
- * reply adds one. The prev/next targets are the deepest leaf under the adjacent
- * sibling, so switching lands on a full branch. Mirrors the panel's
- * `computeBranchNav` exactly.
- */
-function computeBranchNav(
-  messages: BranchMsg[],
-  activePathIds: string[]
-): Map<string, BranchNav> {
-  const childrenByParent = new Map<string, BranchMsg[]>();
-  for (const m of messages) {
-    const key = m.parentId ?? ROOT_KEY;
-    const arr = childrenByParent.get(key);
-    if (arr) arr.push(m);
-    else childrenByParent.set(key, [m]);
-  }
-  for (const arr of childrenByParent.values()) {
-    arr.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
-  }
-  const memo = new Map<string, string>();
-  const byId = new Map<string, BranchMsg>();
-  for (const m of messages) if (m.id) byId.set(m.id, m);
-  const nav = new Map<string, BranchNav>();
-  for (const id of activePathIds) {
-    const m = byId.get(id);
-    if (!m) continue;
-    const siblings = childrenByParent.get(m.parentId ?? ROOT_KEY) ?? [];
-    if (siblings.length < 2) continue;
-    const i = siblings.findIndex((s) => s.id === id);
-    if (i < 0) continue;
-    const prev = siblings[i - 1];
-    const next = siblings[i + 1];
-    nav.set(id, {
-      index: i + 1,
-      count: siblings.length,
-      ...(prev?.id
-        ? { prevLeaf: leafUnder(prev.id, childrenByParent, memo) }
-        : {}),
-      ...(next?.id
-        ? { nextLeaf: leafUnder(next.id, childrenByParent, memo) }
-        : {}),
-    });
-  }
-  return nav;
-}
-
-/**
- * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
- * into an ordered replay list — text messages interleaved with their data
- * widgets by `createdAt`, exactly like the full-page assistant. Pure; hosts pass
- * it the fetched payload so the widget reopens a conversation WITH its charts.
- *
- * Branching: when the server sends a non-empty `activePath`, the visible
- * transcript is that branch ONLY — messages (and message-scoped artifacts) are
- * filtered to it, and each surviving message carries its ‹n/m› sibling switcher
- * (computed over ALL messages). Absent/empty path → behave exactly as before
- * (back-compat with pre-branching hosts).
- */
-export function buildThreadReplay(payload: {
-  messages?: Array<{
-    id?: string;
-    parentId?: string | null;
-    role: string;
-    content: string;
-    createdAt?: string;
-    /** Persisted per-turn token spend (assistant rows; both read endpoints
-     *  return them) — carried into the replay's tokens caption. */
-    inputTokens?: number | null;
-    outputTokens?: number | null;
-  }>;
-  artifacts?: Array<{
-    kind: string;
-    messageId?: string | null;
-    payload?: unknown;
-    /** proposed | applied | discarded — what tells a replayed proposal card
-     *  whether Apply is still a live decision. */
-    status?: string;
-    createdAt?: string;
-  }>;
-  activePath?: string[];
-}): LoadedThreadItem[] {
-  const activePathIds =
-    payload.activePath && payload.activePath.length > 0
-      ? payload.activePath
-      : null;
-  const activeSet = activePathIds ? new Set(activePathIds) : null;
-  const branchNav = activePathIds
-    ? computeBranchNav(payload.messages ?? [], activePathIds)
-    : null;
-  const items: Array<{ t: string; item: LoadedThreadItem }> = [];
-  for (const m of payload.messages ?? []) {
-    // Off-branch messages don't appear in the active transcript.
-    if (activeSet && m.id && !activeSet.has(m.id)) continue;
-    if ((m.role === "user" || m.role === "assistant") && m.content.trim()) {
-      const item: ReplayMessageItem = {
-        role: m.role,
-        content: m.content,
-        ...(m.id ? { id: m.id } : {}),
-        ...(m.parentId !== undefined ? { parentId: m.parentId } : {}),
-        ...(m.inputTokens ? { inputTokens: m.inputTokens } : {}),
-        ...(m.outputTokens ? { outputTokens: m.outputTokens } : {}),
-        ...(m.id && branchNav?.has(m.id)
-          ? { branch: branchNav.get(m.id) }
-          : {}),
-      };
-      items.push({ t: m.createdAt ?? "", item });
-    }
-  }
-  for (const a of payload.artifacts ?? []) {
-    // Branch-scoped artifacts (tied to a message) only belong to the active
-    // branch; artifacts with no messageId are thread-wide and always stay.
-    if (activeSet && a.messageId && !activeSet.has(a.messageId)) continue;
-    if (a.kind === "widget") {
-      const p = (a.payload ?? {}) as {
-        spec?: unknown;
-        rows?: unknown;
-        comparisonRows?: unknown;
-      };
-      if (!p.spec) continue;
-      items.push({
-        t: a.createdAt ?? "",
-        item: {
-          kind: "widget",
-          spec: p.spec,
-          rows: p.rows ?? [],
-          comparisonRows: p.comparisonRows ?? null,
-        },
-      });
-    } else if (a.kind === "activity") {
-      // A persisted process step — replays the timeline (+ acting agent) on reopen.
-      const p = (a.payload ?? {}) as {
-        label?: string;
-        status?: string;
-        agent?: string;
-        model?: string;
-        reportId?: string;
-      };
-      if (!p.label) continue;
-      // The report id was persisted on the artifact and DROPPED here, so a
-      // finished report replayed as a chip you could read and not open.
-      const reportId =
-        p.status !== "error" && typeof p.reportId === "string" && p.reportId
-          ? p.reportId
-          : undefined;
-      items.push({
-        t: a.createdAt ?? "",
-        item: {
-          kind: "activity",
-          label: p.label,
-          status: p.status ?? "ok",
-          agent: p.agent,
-          model: p.model,
-          ...(reportId ? { reportId } : {}),
-        },
-      });
-    }
-  }
-  items.sort((x, y) => x.t.localeCompare(y.t));
-  return items.map((s) => s.item);
-}
+// Thread replay + branch navigation moved to `./replay.ts` (#320): a pure
+// transform, server payload in and render items out, with no DOM and no
+// host context — the shape #306 needs more of.
+import {
+  type LoadedThreadItem,
+  type ReplayMessageItem,
+  type BranchNav,
+} from "./replay";
+export { buildThreadReplay } from "./replay";
+export type { LoadedThreadItem } from "./replay";
 
 /**
  * A background job as the CHAT needs to draw it.
@@ -865,320 +624,35 @@ export interface AiChatWidgetOptions {
   >;
 }
 
-/** A data widget the assistant can render inline via `[[widget:{json}]]`. */
-interface WidgetSpec {
-  /** "stat" | "kpis" | "list" | "table". Unknown kinds fall back to a list. */
-  kind?: string;
-  title?: string;
-  /** stat: the big value + caption + optional delta. */
-  value?: string | number;
-  caption?: string;
-  delta?: string;
-  /** kpis: tiles of {label,value}. */
-  items?: Array<{ label?: string; value?: string | number; delta?: string }>;
-  /** list: plain bullet lines. */
-  lines?: string[];
-  /** table: header columns + row cells. */
-  columns?: string[];
-  rows?: Array<Array<string | number>>;
-}
+// The directive vocabulary moved to `./specs.ts` (#320): what the model may
+// emit inside `[[tag:{json}]]`, and the parsing of it. #306 calls this the
+// widget’s real extension point, so it needs to be findable.
+import {
+  type WidgetSpec,
+  type NavigateSpec,
+  type PreviewSpec,
+  type ActionSpec,
+  type ChipsSpec,
+  LEAD_TOKEN,
+  type FormSpec,
+  type ProposalField,
+  type BuiltField,
+  isTruthyValue,
+  isPrimitiveArg,
+  proposalFields,
+  parseFormDirective,
+  stripDirectivesForReplay,
+} from "./specs";
 
-/** A navigation suggestion the assistant emits via `[[navigate:{json}]]`. */
-interface NavigateSpec {
-  path: string;
-  label?: string;
-}
-
-/** A dynamic HTML preview the assistant draws via `[[preview:{json}]]` — rendered
- *  in a fully sandboxed iframe (no scripts, no same-origin) so arbitrary HTML+CSS
- *  paints the real look but nothing can execute or reach out. */
-interface PreviewSpec {
-  html: string;
-  title?: string;
-}
-
-/** An in-app action the assistant proposes via `[[action:{json}]]`. The host
- *  maps `name` to a real operation; `confirm` (if set) requires user approval. */
-interface ActionSpec {
-  name: string;
-  label?: string;
-  /** Confirmation prompt — when set, the user must approve before it runs. */
-  confirm?: string;
-  /** Opaque data passed to the host's onWidgetAction(name, data). */
-  data?: Record<string, string>;
-}
-
-/** Quick-reply chips the assistant offers via `[[chips:{json}]]` — tappable
- *  answer options so the user picks instead of typing. Single-select sends on
- *  tap; multi-select toggles + a Send button; `other` adds a "type your own"
- *  chip. The chosen text is sent as a NORMAL message (history stays in order). */
-interface ChipsSpec {
-  options: string[];
-  multi?: boolean;
-  other?: boolean;
-}
-
-/** Sentinel the assistant emits to ask the widget to render an email form. */
-const LEAD_TOKEN = "[[collect-email]]";
-
-/** One field in an AI-rendered form directive. */
-interface FormField {
-  name: string;
-  label?: string;
-  /** Kept in step with what `buildField` can actually draw — a spec allowed to
-   *  ask for a control the builder cannot render is a promise to the model that
-   *  the UI then breaks. */
-  type?:
-    | "text"
-    | "email"
-    | "number"
-    | "textarea"
-    | "select"
-    | "checkbox"
-    | "radio";
-  placeholder?: string;
-  required?: boolean;
-  options?: string[];
-}
-interface FormSpec {
-  action: string;
-  title?: string;
-  fields: FormField[];
-  submit?: string;
-}
-
-/**
- * A field the ASSISTANT asked the user to fill in on a proposal card.
- *
- * Declared by the proposal, never by the widget. A table of "which args are
- * editable for which tool" hardcoded in the UI would mean the chat can only
- * ever ask the questions the frontend was built to ask — a new tool, or a
- * decision the model wants confirmed, would need a UI release. The model knows
- * what it is unsure about; it says so, and the card renders it.
- *
- * Same shape as a `[[form:…]]` field, and built by the same `buildField`, so an
- * input looks identical wherever the chat draws one.
- */
-interface ProposalField {
-  /** The proposal ARG this field overwrites on apply. */
-  arg: string;
-  label?: string;
-  type?: string;
-  placeholder?: string;
-  options?: string[];
-  required?: boolean;
-}
-
-/**
- * A control `buildField` produced, plus how to read its answer.
- *
- * The reader is part of the return value because "what the user chose" is not
- * `.value` for every control type — a checkbox is `.checked`, a radio group is
- * whichever of its inputs is checked — and every caller wants the same thing: a
- * string to put in the payload.
- */
-interface BuiltField {
-  /** Append THIS — the control, or the wrapper a labelled/grouped one needs. */
-  node: HTMLElement;
-  read: () => string;
-  /** The control draws its own caption; a caller adding one would double it. */
-  selfLabelled?: boolean;
-}
-
-/** Truthiness for a prefilled checkbox — model output, so accept the obvious
- *  spellings rather than demanding exactly `"true"`. */
-function isTruthyValue(v: string | undefined): boolean {
-  return ["true", "1", "yes", "on"].includes((v ?? "").trim().toLowerCase());
-}
-
-/** A proposal arg a field can be PREFILLED from: anything JSON-primitive, which
- *  is everything with one obvious rendering. Objects/arrays have none, and
- *  null/undefined mean the assistant proposed nothing for that arg. */
-function isPrimitiveArg(v: unknown): v is string | number | boolean {
-  return (
-    typeof v === "string" || typeof v === "number" || typeof v === "boolean"
-  );
-}
-
-/** Read the fields off a proposal frame, defensively — this is model output. */
-function proposalFields(raw: unknown): ProposalField[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter(
-      (f): f is ProposalField =>
-        Boolean(f) &&
-        typeof f === "object" &&
-        typeof (f as ProposalField).arg === "string" &&
-        Boolean((f as ProposalField).arg)
-    )
-    .slice(0, 6);
-}
-
-/** Pull a `[[form:{json}]]` directive out of assistant text, if present. Uses
- *  the shared brace-matching extractor, then validates the form shape. */
-function parseFormDirective(
-  text: string
-): { spec: FormSpec; stripped: string } | null {
-  const r = parseJsonDirective<FormSpec>(text, "form");
-  if (!r) return null;
-  const { spec } = r;
-  if (!spec || typeof spec.action !== "string" || !Array.isArray(spec.fields))
-    return null;
-  return r;
-}
-
-/**
- * REPLAY view of a stored message: strip every interactive directive (which the
- * live turn already rendered as buttons/forms) so a reopened conversation shows
- * clean prose instead of raw `[[navigate:…]]` / `[[form:…]]` code, with a short
- * INERT note per directive (no re-execution). Used by the history/thread
- * restore path; live turns still render the real interactive widgets.
- */
-function stripDirectivesForReplay(text: string): {
-  clean: string;
-  notes: string[];
-  navs: NavigateSpec[];
-  uis: unknown[];
-} {
-  let t = text;
-  const notes: string[] = [];
-  const uis: unknown[] = [];
-  // Navigation is idempotent and side-effect-free, so on replay we hand it back
-  // to be re-rendered as a REAL clickable chip rather than flattened to an inert
-  // note — otherwise every "Open <page>" the assistant offered goes dead the
-  // moment the thread reloads (which send() does after each turn for canonical
-  // ids). This is the true cause of #111: the model DID emit [[navigate]], the
-  // restore path is what killed it.
-  const navs: NavigateSpec[] = [];
-  for (let i = 0; i < 8; i++) {
-    const w = parseJsonDirective<NavigateSpec>(t, "navigate");
-    if (!w) break;
-    t = w.stripped;
-    if (w.spec.path) navs.push(w.spec);
-    else notes.push(`↗ ${w.spec.label || "Open page"}`);
-  }
-  for (let i = 0; i < 8; i++) {
-    const w = parseJsonDirective<ActionSpec>(t, "action");
-    if (!w) break;
-    t = w.stripped;
-    notes.push(`• ${w.spec.label || w.spec.name}`);
-  }
-  for (let i = 0; i < 8; i++) {
-    const w = parseJsonDirective<WidgetSpec>(t, "widget");
-    if (!w) break;
-    t = w.stripped;
-    notes.push(`▦ ${w.spec.title || "widget"}`);
-  }
-  // Composed UI cards are handed BACK to be re-drawn, not flattened to a note.
-  // A card is the substance of the turn, not a decoration on it: a client who
-  // reopens the conversation tomorrow to look at the scenes they were approving
-  // would otherwise find "▦ card" where the scenes had been. Re-drawing is safe
-  // because every button on a card requires a click — nothing here can run by
-  // itself on restore.
-  for (let i = 0; i < 4; i++) {
-    const u = parseJsonDirective<unknown>(t, "ui");
-    if (!u) break;
-    t = u.stripped;
-    uis.push(u.spec);
-  }
-  for (let i = 0; i < 3; i++) {
-    const p = parseJsonDirective<PreviewSpec>(t, "preview");
-    if (!p) break;
-    t = p.stripped;
-    notes.push(`[preview] ${p.spec.title || "Preview"}`);
-  }
-  for (let i = 0; i < 4; i++) {
-    const c = parseJsonDirective<ChipsSpec>(t, "chips");
-    if (!c) break;
-    t = c.stripped;
-    notes.push("💬 options offered");
-  }
-  const f = parseFormDirective(t);
-  if (f) {
-    t = f.stripped;
-    notes.push(`📝 ${f.spec.title || "Form"} — submitted`);
-  }
-  if (t.includes(LEAD_TOKEN)) {
-    t = t.replace(LEAD_TOKEN, "").trim();
-    notes.push("📝 Form — submitted");
-  }
-  return { clean: t, notes, navs, uis };
-}
-
-/**
- * Is this an AI-supplied in-app path we're willing to navigate to? Model output
- * is untrusted (it can carry text scraped from third-party sites), so a path is
- * only ever a SITE-ROOT-RELATIVE route: it must start with a single `/` and
- * must not start with `//` or `/\` (both read as protocol-relative, i.e. another
- * origin) — which also rules out `javascript:`/`data:` payloads.
- */
-function isSafeRelPath(path: unknown): path is string {
-  return (
-    typeof path === "string" &&
-    path.startsWith("/") &&
-    !path.startsWith("//") &&
-    !path.startsWith("/\\")
-  );
-}
-
-/**
- * THE navigation gate — the one the advanced view's frame stands behind.
- *
- * Module-level and exported on purpose. `dispatchAction` is a closure over a
- * live DOM, so with the decision inline there the single check that keeps a
- * model-authored path out of an un-sandboxed, same-origin, session-bearing
- * iframe was unreachable by any test: deleting it left the whole suite green.
- * Here it is exercised directly (tests/unit/nav-manifest-gate.test.ts) and the
- * call site is pinned by source assertion.
- *
- * Throws rather than returning a verdict: an undefined return from
- * `dispatchAction` resolves as SUCCESS, and the chip ticks green over a path we
- * had just declined.
- *
- * `getTargets` is a getter, not an array: `refreshTargets` REPLACES the cache,
- * and the second read has to see what the first one fetched.
- */
-export async function gateNavigationTarget(
-  path: unknown,
-  getTargets: () => readonly { path?: string }[],
-  refreshTargets: () => Promise<void>
-): Promise<void> {
-  // AI-supplied navigation targets are untrusted: only a root-relative in-app
-  // route is ever followed — in the advanced-view frame OR by the host router.
-  if (!isSafeRelPath(path))
-    throw new Error("that navigation target is not an in-app page");
-  // …and the shape test is not the gate. It admits every path in the app,
-  // including another tenant's: `/accounts/<someone-else>/settings` is
-  // root-relative, and the host's `orgPath`/`adminPath` return an
-  // already-`/accounts/`-prefixed path untouched. The manifest this turn was
-  // built from is the real allow-list; it has been present as `knownNavTargets`
-  // since #111 and nothing but the prose-nav fallback ever read it.
-  //
-  // The cache holds the LAST TURN THIS SESSION SENT, which is not every chip
-  // that can be clicked: `persistKey` restores a transcript across a reload and
-  // its nav chips are live before a word has been sent. Ask the host for its
-  // catalogue rather than refuse a page the manifest declares.
-  if (!getTargets().length) await refreshTargets();
-  if (!isKnownNavTarget(path, getTargets()))
-    throw new Error("that page is not one I can open");
-}
-
-/**
- * Final gate in front of the advanced-view iframe's `src`. That frame is
- * deliberately un-sandboxed (it hosts our own app with the live session), so
- * only a same-origin http(s) URL may ever be loaded into it.
- */
-function isSafeFrameUrl(url: string): boolean {
-  try {
-    const u = new URL(url, location.origin);
-    return (
-      u.origin === location.origin &&
-      (u.protocol === "http:" || u.protocol === "https:")
-    );
-  } catch {
-    return false;
-  }
-}
+// URL safety moved to `./safe-url.ts` (#320): what the widget will navigate
+// to, given that model output is untrusted. A public surface once the
+// widget publishes.
+import {
+  isSafeRelPath,
+  gateNavigationTarget,
+  isSafeFrameUrl,
+} from "./safe-url";
+export { gateNavigationTarget } from "./safe-url";
 
 /**
  * Renders one custom `[[<tag>:{json}]]` directive into `host` (already
@@ -1269,75 +743,31 @@ interface StreamFrame {
   model?: string;
 }
 
-// Copilot — the CRESCENT (#305). "Copilot = moonlight (tr)" is already the
-// comment on ASSISTANT in packages/tokens, and this file's own avatar fallback
-// was documented as "else a crescent glyph" — describing a mark nobody had
-// drawn. This draws it.
-//
-// What it replaces: a morphing SVG blob, an feGaussianBlur+feColorMatrix goo
-// filter, two orbiting metaballs with three <animate> tracks each, a float
-// loop, a blink loop, an orange glow, a gradient ring and a two-layer shadow —
-// EIGHT simultaneous effects to say one thing, "there is a chat here". Each was
-// added for a reason and none was ever taken away, so the launcher was loud at
-// rest and had nothing left to say when a reply was actually waiting.
-//
-// It is ONE path with no filter and no SMIL. That is not only simplicity: a CSS
-// `animation:none` cannot reach a SMIL <animate>, so a reader who asked their OS
-// for stillness got a permanently moving blob in the corner of every page (#308
-// recorded that as unreachable from CSS; this is the fix).
-//
-// THE GROUND RULE, measured rather than chosen. Contrast over the brand sweep:
-// white fails on every stop (teal 2.00, amber 1.93, orange 2.81) and navy
-// clears all of them (8.41 / 8.73 / 5.98); on cream, teal is 1.86 and navy is
-// 15.66. Navy is the only value that survives the whole sweep and cream is the
-// only value that survives navy — so THE MARK AND ITS DISC ALWAYS STRADDLE
-// NAVY. Light ground: navy disc, gradient mark. Ink ground: the whole object
-// inverts to a cream disc with a navy mark. The gradient never makes that
-// second trip, which is why there is no third variant.
-const AVATAR_DEFS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<linearGradient id="${PREFIX}-av-sweep" x1="0" y1="1" x2="1" y2="0">
-<stop offset="0%" stop-color="#60C7C8"/><stop offset="55%" stop-color="#FBAA34"/><stop offset="100%" stop-color="#FA712D"/>
-</linearGradient></defs></svg>`;
-
-// The mark, taken from the resolved specimen rather than re-derived: two arcs
-// of the SAME radius, which is what makes a crescent read as a MOON. My first
-// attempt used a shallower second arc (r19 against r15) with the tips at top
-// and bottom — geometrically a crescent, but standing straight up. It read as
-// 90 degrees, which is a shape and not a moon. This one is tilted, and the
-// tilt is the whole difference.
-const AVATAR_SVG = `<svg viewBox="0 0 24 24" class="${PREFIX}-ayca" aria-hidden="true"><path class="${PREFIX}-av-mark" d="M20.4 14.5A8.6 8.6 0 0 1 9.5 3.6 8.6 8.6 0 1 0 20.4 14.5Z"/></svg>`;
-
-// Small line icons for the header controls (currentColor, 18px).
-const ICON_HISTORY = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>`;
-const ICON_EXPAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>`;
-const ICON_COLLAPSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>`;
-// Compass — the auto-navigate ("drive me there") toggle.
-const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
-// Advanced view: a panel split into a sidebar + main area (Copilot ⇆ live app).
-const ICON_ADVANCED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="4" x2="10" y2="20"/></svg>`;
-const ICON_CHEVRON_R = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
-// Download — export the current conversation as a .txt transcript.
-const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
-// Flag — agent/admin oversight: flag the current conversation with a reason.
-const ICON_FLAG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
-// Bell — toggle a soft chime when a reply arrives.
-const ICON_BELL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
-const ICON_BELL_OFF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-// Kebab (vertical dots) — the "More" overflow menu that collects the secondary
-// header controls so they no longer crowd the title bar side-by-side.
-const ICON_MORE = `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`;
-// Paperclip — the composer's attach-a-file control. A crisp line icon replaces
-// the flat 📎 emoji so the button reads as part of the widget, not an OS glyph.
-const ICON_ATTACH = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>`;
-// Branching controls: edit a user turn, regenerate an assistant reply, and the
-// ‹n/m› sibling switcher arrows.
-const ICON_EDIT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-const ICON_REGEN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L3 8"/></svg>`;
-const ICON_CHEV_L = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>`;
-const ICON_CHEV_R = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
-// Per-message quality vote (thumbs up/down) — mirrors the React panel's VoteButtons.
-const ICON_THUMB_UP = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>`;
-const ICON_THUMB_DOWN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>`;
+// Every SVG this file draws now lives in `./icons.ts` (#320) — pure data,
+// and the file an embedder must point at to replace the mark (#306:
+// `avatarUrl` only accepts a bitmap today).
+import {
+  AVATAR_DEFS,
+  AVATAR_SVG,
+  ICON_HISTORY,
+  ICON_EXPAND,
+  ICON_COLLAPSE,
+  ICON_COMPASS,
+  ICON_ADVANCED,
+  ICON_CHEVRON_R,
+  ICON_DOWNLOAD,
+  ICON_FLAG,
+  ICON_BELL,
+  ICON_BELL_OFF,
+  ICON_MORE,
+  ICON_ATTACH,
+  ICON_EDIT,
+  ICON_REGEN,
+  ICON_CHEV_L,
+  ICON_CHEV_R,
+  ICON_THUMB_UP,
+  ICON_THUMB_DOWN,
+} from "./icons";
 
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
