@@ -135,6 +135,9 @@ export type LoadedThreadItem =
       content: string;
       /** Stable message id (branching). Absent on hosts that predate branching. */
       id?: string;
+      /** The model that produced this message, so a vote cast on REPLAYED
+       *  history is attributable per model like a live one (#299). */
+      model?: string;
       /** Parent turn in the conversation tree (null on a root message). */
       parentId?: string | null;
       /** Persisted per-turn token spend (assistant messages) — replays the
@@ -1256,6 +1259,10 @@ interface StreamFrame {
   /** meta frame — staff-only "model" chip: which model/agent runs the turn. */
   isStaff?: boolean;
   modelLabel?: string;
+  /** done frame — the persisted id of the turn's final assistant message, and
+   *  the model that wrote it. Absent when the turn persisted nothing. */
+  messageId?: string;
+  model?: string;
 }
 
 // Copilot — the CRESCENT (#305). "Copilot = moonlight (tr)" is already the
@@ -3072,7 +3079,7 @@ export function createAiChatWidget(
   /** Thumbs up/down for one assistant message (mirrors the panel's VoteButtons).
    *  Clicking the active vote clears it; the chosen vote stays lit. Optimistic —
    *  reverts on failure. Wrapped so both buttons share the toggle state. */
-  function buildVoteButtons(messageId: string): HTMLElement {
+  function buildVoteButtons(messageId: string, model?: string): HTMLElement {
     const wrap = el("div", `${PREFIX}-votes`);
     let cur: 1 | -1 | 0 = 0;
     const up = el(
@@ -3103,7 +3110,12 @@ export function createAiChatWidget(
       paint();
       // messageId is globally unique; the current threadId scopes the vote.
       void opts
-        .vote({ threadId: threadId ?? "", messageId, value })
+        .vote({
+          threadId: threadId ?? "",
+          messageId,
+          value,
+          ...(model ? { model } : {}),
+        })
         .catch(() => {
           cur = prev;
           paint();
@@ -3171,7 +3183,10 @@ export function createAiChatWidget(
         });
         rowEl.appendChild(btn);
       }
-      if (canVote) rowEl.appendChild(buildVoteButtons(item.id as string));
+      if (canVote)
+        rowEl.appendChild(
+          buildVoteButtons(item.id as string, item.model ?? undefined)
+        );
     }
     log.appendChild(rowEl);
   }
@@ -5529,6 +5544,10 @@ export function createAiChatWidget(
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
+    // Stamped by the turn's `done` frame — the handle for rating the answer
+    // just streamed, on surfaces where no canonical reload paints one (#299).
+    let liveMessageId: string | undefined;
+    let liveModel: string | undefined;
     let transportLost = false;
     // Chars of assistantRaw already painted into the streaming bubble. The
     // display can lag behind assistantRaw: directive bytes ([[tag:{json}]])
@@ -5878,6 +5897,14 @@ export function createAiChatWidget(
               metaChip.textContent = frame.modelLabel;
               metaChip.hidden = false;
             }
+            // The turn's own message id + model (#299). This is what lets the
+            // LIVE turn be rated on a surface that has no id-bearing replay to
+            // fall back on — the visitor lane, whose transcript read carried no
+            // ids at all until this change.
+            if (frame.type === "done") {
+              if (frame.messageId) liveMessageId = frame.messageId;
+              if (frame.model) liveModel = frame.model;
+            }
             if (frame.type === "error" && frame.message)
               failure = frame.message;
           }
@@ -6018,6 +6045,26 @@ export function createAiChatWidget(
       } catch {
         /* keep the streamed view if the reload fails */
       }
+    } else if (liveMessageId && opts.vote && producedAny && live()) {
+      // NO canonical reload happened, so nothing is going to paint the vote
+      // control for us (#299).
+      //
+      // Hosts that wire `setActiveLeaf` (org, admin) reload the thread after
+      // every turn, and that reload re-renders each message WITH its persisted
+      // id — which is why thumbs already appear on a live turn there. The issue
+      // read that as "votes only on replayed turns"; measured, it is narrower
+      // and the gap is here:
+      //
+      //   • the visitor lane wires no setActiveLeaf at all, so it never reloads
+      //   • a live proposal card or an error card SUPPRESSES the reload, to
+      //     avoid wiping ephemeral UI — so those turns lose the control too
+      //
+      // In all three the id now arrives on the `done` frame, so the answer just
+      // read is ratable without reopening the thread.
+      const rowEl = el("div", `${PREFIX}-msgactions ${PREFIX}-assistant`);
+      rowEl.appendChild(buildVoteButtons(liveMessageId, liveModel));
+      log.appendChild(rowEl);
+      scrollDown();
     }
   }
 
