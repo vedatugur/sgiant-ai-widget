@@ -30,6 +30,17 @@ let stylesInjected = false;
  * `#fff` fails the test and we leave its page alone — the failure mode of
  * guessing wrong here is an unreadable chat form on someone else's website.
  */
+/**
+ * The near-black the user bubble mixes the accent into.
+ *
+ * Exported because `index.ts` derives that bubble's foreground against the
+ * RESULT of the mix, not against the accent (#307 one level down: over the teal
+ * all three hosts pass, the bubble is `#4a9d9e` and the old literal `#fff` was
+ * 3.18:1). Two copies of this number would put the derivation and the paint on
+ * different backgrounds, which is the same bug again.
+ */
+export const USER_BUBBLE_INK = "#04191b";
+
 export function hostDefinesPlatformTokens(): boolean {
   try {
     const cs = getComputedStyle(document.documentElement);
@@ -343,7 +354,7 @@ export function injectStyles(side: "left" | "right"): void {
 @keyframes ${PREFIX}-caret{0%,55%{opacity:.85}55.01%,100%{opacity:0}}
 .${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:1px;background:var(--aiw-accent);vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
 .${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-msg.${PREFIX}-user{align-self:flex-end;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;border-bottom-right-radius:4px}
+.${PREFIX}-msg.${PREFIX}-user{align-self:flex-end;background:var(--aiw-user-bg,color-mix(in srgb,var(--aiw-accent) 76%,${USER_BUBBLE_INK}));color:var(--aiw-user-contrast,#fff);border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-bottom-left-radius:4px}
 .${PREFIX}-assistant p{margin:0 0 8px}.${PREFIX}-assistant>:last-child{margin-bottom:0}
 .${PREFIX}-assistant h1,.${PREFIX}-assistant h2,.${PREFIX}-assistant h3,.${PREFIX}-assistant h4{margin:10px 0 6px;font-weight:700;line-height:1.25}

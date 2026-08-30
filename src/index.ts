@@ -45,7 +45,7 @@ import {
 // `@sgiant/tokens` to fix that, and then the same mistake arrived by a
 // different door as `@sgiant/assets/actions` (#306). Now it is local, and a
 // drift test holds the copies together instead of a manifest entry.
-import { resolveAccentContrast } from "./contrast";
+import { resolveAccentContrast, mixSrgb } from "./contrast";
 import { isNavigationAction } from "./host-actions";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
 // The component vocabulary composed UI cards are drawn from. Re-exported below
@@ -113,7 +113,11 @@ export { applyProposal, type ApplyProposalCtx } from "./apply-proposal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 import { PREFIX } from "./prefix";
-import { hostDefinesPlatformTokens, injectStyles } from "./styles";
+import {
+  hostDefinesPlatformTokens,
+  injectStyles,
+  USER_BUBBLE_INK,
+} from "./styles";
 import { WIDGET_LABELS, type WidgetLabels } from "./labels";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
 export type { WidgetLabels };
@@ -1110,6 +1114,29 @@ export function createAiChatWidget(
   if (themeTokens.accent && !themeTokens["accent-contrast"]) {
     const fg = resolveAccentContrast(themeTokens.accent);
     if (fg) themeTokens["accent-contrast"] = fg;
+  }
+  // The user's own message bubble needs its OWN pairing, for the reason #307
+  // exists and one level deeper. That bubble is not accent-filled: it is the
+  // accent mixed 76% into a near-black navy, which lands somewhere the raw
+  // accent's foreground was never measured against. Over the teal all three
+  // hosts pass it resolves to `#4a9d9e`, where the sheet's literal `#fff` is
+  // **3.18:1** — under the floor, on every message the user types, which is the
+  // most-drawn element in the widget.
+  //
+  // Deriving against the MIX rather than the accent is the whole point; the mix
+  // is computed once, in JS, and handed to CSS as a resolved value so the two
+  // cannot disagree about what the background actually is. An explicit
+  // `user-bg` / `user-contrast` from the host still wins, and an unparseable
+  // accent leaves both untouched so the sheet's own defaults apply.
+  if (themeTokens.accent && !themeTokens["user-bg"]) {
+    const bg = mixSrgb(themeTokens.accent, USER_BUBBLE_INK, 0.76);
+    if (bg) {
+      themeTokens["user-bg"] = bg;
+      if (!themeTokens["user-contrast"]) {
+        const fg = resolveAccentContrast(bg);
+        if (fg) themeTokens["user-contrast"] = fg;
+      }
+    }
   }
   for (const [k, v] of Object.entries(themeTokens)) {
     bubble.style.setProperty(`--aiw-${k}`, v);

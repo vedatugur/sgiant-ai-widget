@@ -77,3 +77,34 @@ export function resolveAccentContrast(accent: string): string | null {
   if (dark === null || light === null) return null;
   return dark >= light ? CONTRAST_DARK : CONTRAST_LIGHT;
 }
+
+/**
+ * Mix two hex colours in sRGB, the same way CSS `color-mix(in srgb, …)` does.
+ *
+ * Exists because the user's message bubble is not painted with the accent — it
+ * is painted with the accent mixed 76% into a near-black navy, and a foreground
+ * derived from the RAW accent is derived against the wrong background. Over the
+ * teal all three hosts pass, that bubble resolves to `#4a9d9e` and the sheet's
+ * literal `#fff` measures **3.18:1** on it: #307's defect, still live in the
+ * most-used element in the widget, because the fix was applied to the token and
+ * the bubble never read the token.
+ *
+ * The mix is computed HERE and handed to CSS as a resolved value, rather than
+ * computed here AND written as a `color-mix()` next door. Two implementations of
+ * one blend is how the foreground and the background drift apart, which is the
+ * whole bug again one level down.
+ *
+ * Null when either colour is unparseable — the caller must then leave whatever
+ * was there alone rather than guess, exactly as `resolveAccentContrast` does.
+ */
+export function mixSrgb(a: string, b: string, ratioA: number): string | null {
+  const pa = parseHex(a);
+  const pb = parseHex(b);
+  if (!pa || !pb) return null;
+  const p = Math.min(1, Math.max(0, ratioA));
+  const chan = (i: number): string =>
+    Math.round(pa[i] * p + pb[i] * (1 - p))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${chan(0)}${chan(1)}${chan(2)}`;
+}
