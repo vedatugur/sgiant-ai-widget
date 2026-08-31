@@ -123,7 +123,6 @@ import {
   relBucket,
   relTime,
   wrapPreviewHtml,
-  type StreamFrame,
 } from "./dom";
 import {
   hostDefinesPlatformTokens,
