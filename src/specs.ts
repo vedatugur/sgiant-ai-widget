@@ -14,6 +14,8 @@
  */
 
 import { parseJsonDirective } from "./directive";
+import { el } from "./dom";
+import { PREFIX } from "./prefix";
 
 /** A data widget the assistant can render inline via `[[widget:{json}]]`. */
 export interface WidgetSpec {
@@ -253,4 +255,105 @@ export function stripDirectivesForReplay(text: string): {
     notes.push("📝 Form — submitted");
   }
   return { clean: t, notes, navs, uis };
+}
+
+/**
+ * Build one editable control for a proposal form, plus how to READ it back.
+ *
+ * Moved here from index.ts (#320) with ZERO closure dependencies — the whole
+ * function reaches only `el`, `PREFIX`, and this file's own `BuiltField` and
+ * `isTruthyValue`. It sat in the 6000-line closure purely because that is
+ * where it was typed; nothing about it was ever widget state.
+ *
+ * `read` is the point of the return shape: every control answers as a STRING
+ * whatever it was drawn as, because the submit path posts a flat
+ * `Record<string, string>`. A checkbox that returned a boolean would be the
+ * one field in the form with a different contract.
+ */
+export function buildField(field: {
+  name: string;
+  type?: string;
+  label?: string;
+  placeholder?: string;
+  options?: string[];
+  required?: boolean;
+  value?: string;
+}): BuiltField {
+  const type = field.type ?? "text";
+  // Boolean/choice controls carry their own caption — a bare 16px box with
+  // the label somewhere above it reads as decoration, not as a question.
+  if (type === "checkbox") {
+    const row = el("label", `${PREFIX}-field-check`);
+    const box = el("input", `${PREFIX}-check`) as HTMLInputElement;
+    box.type = "checkbox";
+    box.checked = isTruthyValue(field.value);
+    if (field.required) box.required = true;
+    row.appendChild(box);
+    const cap = el("span", `${PREFIX}-field-check-label`);
+    cap.textContent = field.label ?? field.placeholder ?? field.name;
+    row.appendChild(cap);
+    // Stringified so a field's answer is always a string, whatever it was
+    // drawn as — the submit path posts a flat Record<string,string>.
+    return {
+      node: row,
+      selfLabelled: true,
+      read: () => (box.checked ? "true" : "false"),
+    };
+  }
+  if (type === "radio" && field.options?.length) {
+    const group = el("div", `${PREFIX}-field-group`);
+    // The `name` attribute is what makes radios mutually exclusive, so it has
+    // to be unique per rendered group — two proposal cards asking the same
+    // question would otherwise fight over one selection.
+    const groupName = `${PREFIX}-${field.name}-${Math.random().toString(36).slice(2, 9)}`;
+    for (const o of field.options) {
+      const row = el("label", `${PREFIX}-field-check`);
+      const radio = el("input", `${PREFIX}-check`) as HTMLInputElement;
+      radio.type = "radio";
+      radio.name = groupName;
+      radio.value = o;
+      // Required propagates to the inputs (one required radio makes the whole
+      // group required). It was dropped here, so a required choice reported
+      // itself as answered while nothing was selected.
+      if (field.required) radio.required = true;
+      if (o === field.value) radio.checked = true;
+      row.appendChild(radio);
+      const cap = el("span", `${PREFIX}-field-check-label`);
+      cap.textContent = o;
+      row.appendChild(cap);
+      group.appendChild(row);
+    }
+    return {
+      node: group,
+      read: () =>
+        group.querySelector<HTMLInputElement>("input:checked")?.value ?? "",
+    };
+  }
+  let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  if (type === "textarea") {
+    input = el("textarea", `${PREFIX}-field`) as HTMLTextAreaElement;
+  } else if (type === "select") {
+    const sel = el("select", `${PREFIX}-field`) as HTMLSelectElement;
+    for (const o of field.options ?? []) {
+      const opt = document.createElement("option");
+      opt.value = o;
+      opt.textContent = o;
+      sel.appendChild(opt);
+    }
+    input = sel;
+  } else {
+    const i = el("input", `${PREFIX}-field`) as HTMLInputElement;
+    i.type = type === "number" ? "number" : type;
+    input = i;
+  }
+  if ("placeholder" in input && field.placeholder)
+    (input as HTMLInputElement).placeholder = field.label
+      ? `${field.label} — ${field.placeholder}`
+      : field.placeholder;
+  else if ("placeholder" in input && field.label)
+    (input as HTMLInputElement).placeholder = field.label;
+  if (field.required) (input as HTMLInputElement).required = true;
+  // Prefilled: the card hands back a value the user can accept or rewrite.
+  if (field.value !== undefined) input.value = field.value;
+  return { node: input, read: () => input.value.trim() };
 }

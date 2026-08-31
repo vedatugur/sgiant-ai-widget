@@ -6,6 +6,14 @@
     // resolution + JSX because this package now imports @sgiant/assets' raw
     // .tsx sources (the shared apply-proposal helpers), which use
     // extensionless imports that NodeNext refuses.
+    // An unused import here is a CONSUMER's error without these, because the
+    // shared base sets `strict` but not these two, and only the SPAs turn them
+    // on. This package ships SOURCE, so `tsc --noEmit` here never saw the
+    // orphaned imports two #320 extractions left behind — both surfaced in
+    // apps/ui-org and apps/marketing instead, which is the wrong package, the
+    // wrong person, and one CI round trip later.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",
     "module": "ESNext",
