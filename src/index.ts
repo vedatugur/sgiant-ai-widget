@@ -104,6 +104,7 @@ export {
 export { applyProposal, type ApplyProposalCtx } from "./apply-proposal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
+import { createMessageChrome } from "./message-chrome";
 import { PREFIX } from "./prefix";
 import { createUiRenderers } from "./ui-render";
 import { createProposalSummary } from "./proposal-summary";
@@ -137,11 +138,7 @@ export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 // Thread replay + branch navigation moved to `./replay.ts` (#320): a pure
 // transform, server payload in and render items out, with no DOM and no
 // host context — the shape #306 needs more of.
-import {
-  type LoadedThreadItem,
-  type ReplayMessageItem,
-  type BranchNav,
-} from "./replay";
+import { type LoadedThreadItem, type ReplayMessageItem } from "./replay";
 export { buildThreadReplay } from "./replay";
 export type { LoadedThreadItem } from "./replay";
 
@@ -723,8 +720,6 @@ import {
   ICON_ATTACH,
   ICON_EDIT,
   ICON_REGEN,
-  ICON_CHEV_L,
-  ICON_CHEV_R,
   ICON_THUMB_UP,
   ICON_THUMB_DOWN,
 } from "./icons";
@@ -2481,35 +2476,25 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
-  /** ‹n/m› sibling-branch switcher (ChatGPT/Claude-style): the arrows jump to the
-   *  deepest leaf of the previous/next sibling branch (disabled at the ends). */
-  function buildBranchNav(branch: BranchNav): HTMLElement {
-    const nav = el("div", `${PREFIX}-branchnav`);
-    const prev = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
-    prev.type = "button";
-    prev.setAttribute("aria-label", "Previous version");
-    prev.innerHTML = ICON_CHEV_L;
-    prev.disabled = !branch.prevLeaf;
-    if (branch.prevLeaf) {
-      const leaf = branch.prevLeaf;
-      prev.addEventListener("click", () => void switchBranch(leaf));
-    }
-    const count = el("span", `${PREFIX}-branch-count`);
-    count.textContent = `${branch.index}/${branch.count}`;
-    const next = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
-    next.type = "button";
-    next.setAttribute("aria-label", "Next version");
-    next.innerHTML = ICON_CHEV_R;
-    next.disabled = !branch.nextLeaf;
-    if (branch.nextLeaf) {
-      const leaf = branch.nextLeaf;
-      next.addEventListener("click", () => void switchBranch(leaf));
-    }
-    nav.appendChild(prev);
-    nav.appendChild(count);
-    nav.appendChild(next);
-    return nav;
-  }
+  /**
+   * ‹n/m› sibling-branch switcher (ChatGPT/Claude-style, the arrows jump to the
+   * deepest leaf of the previous/next sibling branch) and the up/down vote pair.
+   *
+   * Both bodies live in `./message-chrome` (`#320`) — they are pure DOM builders
+   * that read no widget state. `switchBranch` is declared below and hoists.
+   *
+   * `getThreadId` is a GETTER on purpose: a vote is cast on CLICK, long after
+   * the button is built, and `threadId` is reassigned when the server names the
+   * thread. Passing the value here would post the vote against whatever the id
+   * was at render time — silently, since the request still succeeds.
+   */
+  const { buildBranchNav, buildVoteButtons } = createMessageChrome({
+    switchBranch: (leaf) => switchBranch(leaf),
+    getThreadId: () => threadId,
+    ...(opts.vote ? { vote: opts.vote } : {}),
+    ...(opts.voteUpLabel ? { voteUpLabel: opts.voteUpLabel } : {}),
+    ...(opts.voteDownLabel ? { voteDownLabel: opts.voteDownLabel } : {}),
+  });
 
   /** Remove `anchor` and every DOM node after it from the log — the "rewrite from
    *  here onward" a fork (edit / regenerate) does before streaming its branch. */
@@ -2699,55 +2684,6 @@ export function createAiChatWidget(
   /** Turns completed per thread this session — the "never on the first turn"
    *  half of the rule above. */
   const threadTurns = new Map<string, number>();
-
-  function buildVoteButtons(messageId: string, model?: string): HTMLElement {
-    const wrap = el("div", `${PREFIX}-votes`);
-    let cur: 1 | -1 | 0 = 0;
-    const up = el(
-      "button",
-      `${PREFIX}-msgact ${PREFIX}-vote`
-    ) as HTMLButtonElement;
-    const down = el(
-      "button",
-      `${PREFIX}-msgact ${PREFIX}-vote`
-    ) as HTMLButtonElement;
-    up.type = "button";
-    down.type = "button";
-    up.setAttribute("aria-label", opts.voteUpLabel ?? "Helpful");
-    down.setAttribute("aria-label", opts.voteDownLabel ?? "Not helpful");
-    up.title = opts.voteUpLabel ?? "Helpful";
-    down.title = opts.voteDownLabel ?? "Not helpful";
-    up.innerHTML = ICON_THUMB_UP;
-    down.innerHTML = ICON_THUMB_DOWN;
-    const paint = (): void => {
-      up.classList.toggle(`${PREFIX}-vote-on`, cur === 1);
-      down.classList.toggle(`${PREFIX}-vote-on`, cur === -1);
-    };
-    const cast = (next: 1 | -1): void => {
-      if (!opts.vote) return;
-      const value = (cur === next ? 0 : next) as 1 | -1 | 0;
-      const prev = cur;
-      cur = value;
-      paint();
-      // messageId is globally unique; the current threadId scopes the vote.
-      void opts
-        .vote({
-          threadId: threadId ?? "",
-          messageId,
-          value,
-          ...(model ? { model } : {}),
-        })
-        .catch(() => {
-          cur = prev;
-          paint();
-        });
-    };
-    up.addEventListener("click", () => cast(1));
-    down.addEventListener("click", () => cast(-1));
-    wrap.appendChild(up);
-    wrap.appendChild(down);
-    return wrap;
-  }
 
   // Hover action row under a replayed message: EDIT (user) / REGENERATE + VOTE
   // (assistant) + the ‹n/m› switcher. Rendered on hosts that wired `setActiveLeaf`
