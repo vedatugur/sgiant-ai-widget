@@ -168,7 +168,7 @@ export function injectStyles(side: "left" | "right"): void {
  * These two deliberately do NOT flip with the colour scheme, and neither does
  * the bar. --aiw-surface does, which is how the active-icon chip came to paint
  * #161616 on #151D2F in dark mode. */
-.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-font-3xs:10px;--aiw-font-2xs:11px;--aiw-font-xs:12px;--aiw-font-sm:13px;--aiw-font-md:14px;--aiw-font-lg:15px;--aiw-font-xl:16px;--aiw-font-2xl:18px;--aiw-font-3xl:30px;--aiw-radius-2xs:2px;--aiw-radius-xs:4px;--aiw-radius-sm:6px;--aiw-radius-md:8px;--aiw-radius-lg:10px;--aiw-radius-xl:12px;--aiw-radius-2xl:14px;--aiw-radius-3xl:18px;--aiw-radius-pill:999px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -176,43 +176,43 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-rich-in{animation:${PREFIX}-richin var(--duration-base) var(--ease-out)}
 @keyframes ${PREFIX}-tokin{from{opacity:0;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
 .${PREFIX}-tok{animation:${PREFIX}-tokin var(--duration-base) var(--ease-out) forwards}
-.${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid color-mix(in srgb,var(--aiw-accent) 15%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:500;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-activity{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;max-width:92%;border:1px solid color-mix(in srgb,var(--aiw-accent) 15%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:var(--aiw-radius-lg);padding:5px 10px;font-size:var(--aiw-font-xs);font-weight:500;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-activity-done{opacity:.72}
 .${PREFIX}-act-label{color:var(--aiw-text-2)}
-.${PREFIX}-act-agent{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--aiw-accent) 24%,transparent);border-radius:6px;padding:1px 6px}
-.${PREFIX}-act-model{flex:0 0 auto;font-size:9.5px;font-weight:600;letter-spacing:.2px;color:var(--aiw-muted);background:#9aa0a614;border:1px solid #9aa0a630;border-radius:6px;padding:1px 5px;font-variant-numeric:tabular-nums}
+.${PREFIX}-act-agent{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--aiw-accent) 24%,transparent);border-radius:var(--aiw-radius-sm);padding:1px 6px}
+.${PREFIX}-act-model{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:600;letter-spacing:.2px;color:var(--aiw-muted);background:#9aa0a614;border:1px solid #9aa0a630;border-radius:var(--aiw-radius-sm);padding:1px 5px;font-variant-numeric:tabular-nums}
 .${PREFIX}-act-spin{width:11px;height:11px;flex:0 0 auto;border-radius:50%;border:2px solid color-mix(in srgb,var(--aiw-accent) 27%,transparent);border-top-color:var(--aiw-accent);animation:${PREFIX}-spin .7s linear infinite}
 .${PREFIX}-act-ok{color:var(--aiw-ok-text);font-weight:700}
 .${PREFIX}-act-x{color:var(--aiw-danger-text);font-weight:700}
-.${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:12px;padding:9px 11px;font-size:12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-job{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:min(260px,100%);border:1px solid color-mix(in srgb,var(--aiw-accent) 18%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);border-radius:var(--aiw-radius-xl);padding:9px 11px;font-size:var(--aiw-font-xs);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-job-done{opacity:.85}
 .${PREFIX}-job-failed{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg)}
 .${PREFIX}-job-head{display:flex;align-items:center;gap:7px}
 .${PREFIX}-job-title{font-weight:600;color:var(--aiw-text)}
-.${PREFIX}-job-state{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-muted)}
+.${PREFIX}-job-state{margin-left:auto;font-size:var(--aiw-font-3xs);font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--aiw-muted)}
 .${PREFIX}-job-counts{color:var(--aiw-text-2);font-variant-numeric:tabular-nums}
-.${PREFIX}-job-bar{height:4px;border-radius:3px;background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
+.${PREFIX}-job-bar{height:4px;border-radius:var(--aiw-radius-2xs);background:color-mix(in srgb,var(--aiw-accent) 14%,transparent);overflow:hidden}
 /* scaleX, not width (#309). Animating width reflows on every frame; a
    transform is composited. transform-origin:left so it grows from the start of
    the track rather than its middle. */
 .${PREFIX}-job-bar>i{display:block;height:100%;width:100%;transform-origin:left;background:var(--aiw-accent);transition:transform var(--duration-base) var(--ease-out)}
-.${PREFIX}-job-detail{color:var(--aiw-muted);font-size:11px;word-break:break-word}
-.${PREFIX}-job-mirrored{color:var(--aiw-muted);font-size:11px;font-style:italic}
-.${PREFIX}-pane-widget{width:100%;height:100%;overflow:auto;background:var(--aiw-surface);border-radius:12px;padding:16px;box-sizing:border-box}
+.${PREFIX}-job-detail{color:var(--aiw-muted);font-size:var(--aiw-font-2xs);word-break:break-word}
+.${PREFIX}-job-mirrored{color:var(--aiw-muted);font-size:var(--aiw-font-2xs);font-style:italic}
+.${PREFIX}-pane-widget{width:100%;height:100%;overflow:auto;background:var(--aiw-surface);border-radius:var(--aiw-radius-xl);padding:16px;box-sizing:border-box}
 .${PREFIX}-job-flow{list-style:none;margin:6px 0 0;padding:0 0 0 2px;display:flex;flex-direction:column;gap:3px}
-.${PREFIX}-job-ev{position:relative;padding-left:12px;color:var(--aiw-text-2);font-size:11px;line-height:1.35;word-break:break-word}
+.${PREFIX}-job-ev{position:relative;padding-left:12px;color:var(--aiw-text-2);font-size:var(--aiw-font-2xs);line-height:1.35;word-break:break-word}
 .${PREFIX}-job-ev::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:50%;background:var(--aiw-muted)}
 .${PREFIX}-job-ev-decision{color:var(--aiw-text)}
 .${PREFIX}-job-ev-decision::before{background:var(--aiw-accent,currentColor)}
 .${PREFIX}-job-ev-problem{color:var(--aiw-danger-text)}
 .${PREFIX}-job-ev-problem::before{background:currentColor}
 .${PREFIX}-job-flow-all{margin-top:4px}
-.${PREFIX}-job-flow-all>summary{cursor:pointer;color:var(--aiw-muted);font-size:11px;user-select:none}
-.${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed var(--aiw-border-strong);border-radius:9px;padding:4px 10px;font-size:12px;color:var(--aiw-muted);background:var(--aiw-bg)}
+.${PREFIX}-job-flow-all>summary{cursor:pointer;color:var(--aiw-muted);font-size:var(--aiw-font-2xs);user-select:none}
+.${PREFIX}-replay-note{align-self:flex-start;display:inline-flex;align-items:center;border:1px dashed var(--aiw-border-strong);border-radius:var(--aiw-radius-md);padding:4px 10px;font-size:var(--aiw-font-xs);color:var(--aiw-muted);background:var(--aiw-bg)}
 .${PREFIX}-flag-note{align-self:center;border-style:solid;border-color:var(--aiw-danger-border);color:var(--aiw-danger-text);background:var(--aiw-danger-bg);font-weight:600}
 .${PREFIX}-flag-ok{border-color:var(--aiw-ok-border);color:var(--aiw-ok-text);background:var(--aiw-ok-bg)}
-.${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:10.5px;color:var(--aiw-muted);font-variant-numeric:tabular-nums}
-.${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid var(--aiw-border);border-radius:6px;padding:0 5px;line-height:16px}
+.${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:var(--aiw-font-3xs);color:var(--aiw-muted);font-variant-numeric:tabular-nums}
+.${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-sm);padding:0 5px;line-height:16px}
 .${PREFIX}-usage-sep{opacity:.5}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
@@ -263,10 +263,10 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble:active{transform:translateY(0) scale(.96)}
 /* The first-visit variant: a word, not a puzzle. Collapses to the pebble once
    the reader has opened it. */
-.${PREFIX}-bubble-pill{width:auto;height:48px;border-radius:999px;padding:0 18px 0 14px}
+.${PREFIX}-bubble-pill{width:auto;height:48px;border-radius:var(--aiw-radius-pill);padding:0 18px 0 14px}
 .${PREFIX}-bubble-pill .${PREFIX}-ayca{width:22px;height:22px}
 .${PREFIX}-bubble-pill .${PREFIX}-bubble-label{display:block}
-.${PREFIX}-bubble-label{display:none;font:inherit;font-size:14.5px;font-weight:600;white-space:nowrap}
+.${PREFIX}-bubble-label{display:none;font:inherit;font-size:var(--aiw-font-md);font-weight:600;white-space:nowrap}
 /* Only TWO of the six states move, which is what makes movement mean
    something again. */
 .${PREFIX}-bubble-unread{animation:${PREFIX}-pulse var(--duration-slow,420ms) var(--ease-out) 1}
@@ -281,7 +281,7 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-parked{width:40px;height:40px;opacity:.6}
 .${PREFIX}-bubble-parked .${PREFIX}-ayca{width:20px;height:20px}
 /* The unread count and the offline dot — one badge element, two looks. */
-.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#FA712D;color:#FCF7E3;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
+.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:18px;height:18px;padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
 /* GATED. There was no hover:hover query anywhere in this widget, so on a
    touchscreen the lift-and-scale stuck after the tap. The file already carries
@@ -296,7 +296,7 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .${PREFIX}-bubble svg{width:26px;height:26px}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:18px;box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
+.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
    — a scrim over a gradient is a patch, not a decision. On navy the mark
@@ -308,27 +308,27 @@ export function injectStyles(side: "left" | "right"): void {
 /* Question card — the assistant asking the human to decide. Visually distinct
    from a proposal card: this one BLOCKS progress until answered, so it should
    read as something needing you, not as another message. */
-.${PREFIX}-question{margin:8px 0;padding:12px;border-radius:12px;background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-question{margin:8px 0;padding:12px;border-radius:var(--aiw-radius-xl);background:var(--aiw-surface-raised);border:1px solid var(--aiw-border);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-question-critical{border-color:var(--aiw-danger-text);box-shadow:0 0 0 1px color-mix(in srgb,var(--aiw-danger-text) 25%,transparent)}
-.${PREFIX}-question-title{font-size:14px;font-weight:600;margin-bottom:4px;color:var(--aiw-text)}
-.${PREFIX}-question-ctx{font-size:12px;color:var(--aiw-muted);margin-bottom:8px;line-height:1.45}
+.${PREFIX}-question-title{font-size:var(--aiw-font-md);font-weight:600;margin-bottom:4px;color:var(--aiw-text)}
+.${PREFIX}-question-ctx{font-size:var(--aiw-font-xs);color:var(--aiw-muted);margin-bottom:8px;line-height:1.45}
 .${PREFIX}-question-opts{display:flex;flex-direction:column;gap:6px}
-.${PREFIX}-question-opt{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);cursor:pointer;font:inherit;transition:border-color .14s ease,background .14s ease}
+.${PREFIX}-question-opt{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 11px;border-radius:var(--aiw-radius-md);border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);cursor:pointer;font:inherit;transition:border-color .14s ease,background .14s ease}
 .${PREFIX}-question-opt:hover{border-color:var(--aiw-accent);background:var(--aiw-surface-raised)}
 .${PREFIX}-question-opt-on{border-color:var(--aiw-accent);background:var(--aiw-surface-raised)}
-.${PREFIX}-question-opt-label{font-size:13px;font-weight:600}
-.${PREFIX}-question-opt-desc{font-size:12px;color:var(--aiw-muted);line-height:1.4}
+.${PREFIX}-question-opt-label{font-size:var(--aiw-font-sm);font-weight:600}
+.${PREFIX}-question-opt-desc{font-size:var(--aiw-font-xs);color:var(--aiw-muted);line-height:1.4}
 .${PREFIX}-question-free{display:flex;gap:6px;margin-top:2px}
-.${PREFIX}-question-input{flex:1 1 auto;min-width:0;padding:9px 11px;border-radius:9px;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);font:inherit;font-size:13px}
-.${PREFIX}-question-send{padding:9px 14px;border-radius:9px;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+.${PREFIX}-question-input{flex:1 1 auto;min-width:0;padding:9px 11px;border-radius:var(--aiw-radius-md);border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);font:inherit;font-size:var(--aiw-font-sm)}
+.${PREFIX}-question-send{padding:9px 14px;border-radius:var(--aiw-radius-md);border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);font:inherit;font-size:var(--aiw-font-sm);font-weight:600;cursor:pointer;margin-top:6px}
 /* A multi-select confirm with nothing picked has nothing to send — it says so
    rather than looking clickable and doing nothing. */
 .${PREFIX}-question-send:disabled{opacity:.5;cursor:not-allowed}
-.${PREFIX}-question-err{margin-top:8px;font-size:12px;line-height:1.45;color:var(--aiw-danger-text)}
+.${PREFIX}-question-err{margin-top:8px;font-size:var(--aiw-font-xs);line-height:1.45;color:var(--aiw-danger-text)}
 /* Answered: collapsed to the decision, so the transcript reads as a
    conversation rather than a dead form. */
 .${PREFIX}-question-done{border-style:dashed;opacity:.75}
-.${PREFIX}-question-answer{font-size:13px;color:var(--aiw-text-2)}
+.${PREFIX}-question-answer{font-size:var(--aiw-font-sm);color:var(--aiw-text-2)}
 .${PREFIX}-question-answer::before{content:"✓ ";color:var(--aiw-accent-ink)}
 .${PREFIX}-draggable{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .${PREFIX}-draggable:active{cursor:grabbing}
@@ -343,31 +343,31 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-avatar{position:relative;width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#FCF7E3}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
-.${PREFIX}-title{font-weight:700;font-size:15px;letter-spacing:.04em}
-.${PREFIX}-sub{font-size:11px;opacity:.85}
-.${PREFIX}-metachip{align-self:flex-start;margin-top:3px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.22);color:var(--aiw-accent-contrast);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.${PREFIX}-close{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer;flex:0 0 auto}
+.${PREFIX}-title{font-weight:700;font-size:var(--aiw-font-lg);letter-spacing:.04em}
+.${PREFIX}-sub{font-size:var(--aiw-font-2xs);opacity:.85}
+.${PREFIX}-metachip{align-self:flex-start;margin-top:3px;font-size:var(--aiw-font-3xs);font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:var(--aiw-radius-sm);background:rgba(255,255,255,.22);color:var(--aiw-accent-contrast);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.${PREFIX}-close{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);font-size:var(--aiw-font-2xl);line-height:1;width:26px;height:26px;border-radius:var(--aiw-radius-md);cursor:pointer;flex:0 0 auto}
 .${PREFIX}-log{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--aiw-bg);scrollbar-width:thin}
 .${PREFIX}-log:focus-visible{outline:none}
 .${PREFIX}-log::-webkit-scrollbar{width:8px}
-.${PREFIX}-log::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:8px}
+.${PREFIX}-log::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:var(--aiw-radius-md)}
 @keyframes ${PREFIX}-caret{0%,55%{opacity:.85}55.01%,100%{opacity:0}}
-.${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:1px;background:var(--aiw-accent);vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
-.${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-streaming::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:1px;border-radius:var(--aiw-radius-2xs);background:var(--aiw-accent);vertical-align:-2px;animation:${PREFIX}-caret 1.1s steps(1) infinite}
+.${PREFIX}-msg{max-width:85%;padding:9px 12px;border-radius:var(--aiw-radius-2xl);font-size:var(--aiw-font-md);line-height:1.45;white-space:pre-wrap;word-break:break-word;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-msg.${PREFIX}-user{align-self:flex-end;background:var(--aiw-user-bg,color-mix(in srgb,var(--aiw-accent) 76%,${USER_BUBBLE_INK}));color:var(--aiw-user-contrast,#fff);border-bottom-right-radius:4px}
 .${PREFIX}-assistant{align-self:flex-start;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-bottom-left-radius:4px}
 .${PREFIX}-assistant p{margin:0 0 8px}.${PREFIX}-assistant>:last-child{margin-bottom:0}
 .${PREFIX}-assistant h1,.${PREFIX}-assistant h2,.${PREFIX}-assistant h3,.${PREFIX}-assistant h4{margin:10px 0 6px;font-weight:700;line-height:1.25}
-.${PREFIX}-assistant h1{font-size:17px}.${PREFIX}-assistant h2{font-size:16px}.${PREFIX}-assistant h3{font-size:14.5px}.${PREFIX}-assistant h4{font-size:13.5px}
+.${PREFIX}-assistant h1{font-size:var(--aiw-font-xl)}.${PREFIX}-assistant h2{font-size:var(--aiw-font-xl)}.${PREFIX}-assistant h3{font-size:var(--aiw-font-md)}.${PREFIX}-assistant h4{font-size:var(--aiw-font-sm)}
 .${PREFIX}-assistant ul,.${PREFIX}-assistant ol{margin:6px 0;padding-left:20px}
 .${PREFIX}-assistant li{line-height:1.45;margin:2px 0}
 .${PREFIX}-assistant a{color:var(--aiw-accent-ink);text-decoration:underline;text-underline-offset:2px}
-.${PREFIX}-assistant code{background:rgba(0,0,0,.06);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
-.${PREFIX}-assistant pre.md-pre{background:#0d1117;color:#e6edf3;border-radius:10px;padding:10px 12px;overflow:auto;margin:8px 0}
-.${PREFIX}-assistant pre.md-pre code{background:none;padding:0;color:inherit;font-size:12px;white-space:pre}
+.${PREFIX}-assistant code{background:rgba(0,0,0,.06);border-radius:var(--aiw-radius-sm);padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--aiw-font-xs)}
+.${PREFIX}-assistant pre.md-pre{background:#0d1117;color:#e6edf3;border-radius:var(--aiw-radius-lg);padding:10px 12px;overflow:auto;margin:8px 0}
+.${PREFIX}-assistant pre.md-pre code{background:none;padding:0;color:inherit;font-size:var(--aiw-font-xs);white-space:pre}
 .${PREFIX}-assistant blockquote{margin:8px 0;padding:2px 12px;border-left:3px solid color-mix(in srgb,var(--aiw-accent) 40%,transparent);color:var(--aiw-text-2)}
 .${PREFIX}-assistant hr{border:none;border-top:1px solid var(--aiw-border);margin:10px 0}
-.${PREFIX}-assistant table.md-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+.${PREFIX}-assistant table.md-table{width:100%;border-collapse:collapse;font-size:var(--aiw-font-xs);margin:8px 0}
 .${PREFIX}-assistant table.md-table th{text-align:left;font-weight:700;color:var(--aiw-text-2);border-bottom:1px solid var(--aiw-border);padding:5px 8px}
 .${PREFIX}-assistant table.md-table td{border-bottom:1px solid var(--aiw-border-soft);padding:5px 8px}
 .${PREFIX}-assistant strong{font-weight:700}.${PREFIX}-assistant del{opacity:.7}
@@ -376,45 +376,45 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-typing span{width:7px;height:7px;border-radius:50%;background:var(--aiw-accent);animation:${PREFIX}-blink 1.2s infinite}
 .${PREFIX}-typing span:nth-child(2){animation-delay:.2s}
 .${PREFIX}-typing span:nth-child(3){animation-delay:.4s}
-.${PREFIX}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-error-text{font-size:13px;font-weight:600;color:var(--aiw-danger-text)}
-.${PREFIX}-error-detail{font-size:11px;color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word}
+.${PREFIX}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:var(--aiw-radius-2xl);padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-error-text{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-danger-text)}
+.${PREFIX}-error-detail{font-size:var(--aiw-font-2xs);color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word}
 .${PREFIX}-error-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
-.${PREFIX}-error-btn{border:1px solid var(--aiw-danger-border);background:var(--aiw-surface);color:var(--aiw-danger-text);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-error-btn{border:1px solid var(--aiw-danger-border);background:var(--aiw-surface);color:var(--aiw-danger-text);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${PREFIX}-error-retry{background:var(--aiw-accent);border-color:var(--aiw-accent);color:var(--aiw-accent-contrast)}
 .${PREFIX}-error-btn:disabled{opacity:.6;cursor:default}
 /* Quality prompt (#299) — the widget asking, rather than waiting to be told.
    Reads as a quiet aside, not an alert: it must never look like the error card,
    because on a slow-but-good answer nothing has gone wrong. */
-.${PREFIX}-quality{align-self:stretch;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:14px;padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-quality-title{font-size:12.5px;font-weight:600;color:var(--aiw-text);line-height:1.35}
+.${PREFIX}-quality{align-self:stretch;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-2xl);padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-quality-title{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-text);line-height:1.35}
 .${PREFIX}-quality-row{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
-.${PREFIX}-quality-reason{flex:1 1 160px;min-width:0;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);border-radius:9px;padding:7px 10px;font:inherit;font-size:12.5px}
+.${PREFIX}-quality-reason{flex:1 1 160px;min-width:0;border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-md);padding:7px 10px;font:inherit;font-size:var(--aiw-font-xs)}
 .${PREFIX}-quality-reason::placeholder{color:var(--aiw-text-3)}
 .${PREFIX}-quality-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
-.${PREFIX}-quality-send{border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-quality-send{border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${PREFIX}-quality-send:disabled{opacity:.6;cursor:default}
-.${PREFIX}-quality-dismiss{border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-quality-dismiss{border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 /* Answered state: the card collapses to a single line of thanks. */
-.${PREFIX}-quality-done{font-size:12.5px;color:var(--aiw-text-2);font-weight:500}
+.${PREFIX}-quality-done{font-size:var(--aiw-font-xs);color:var(--aiw-text-2);font-weight:500}
 .${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
-.${PREFIX}-suggestion{border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);color:var(--aiw-accent-ink);border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
+.${PREFIX}-suggestion{border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-pill);padding:6px 11px;font-size:var(--aiw-font-xs);font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
 .${PREFIX}-suggestion:hover{background:color-mix(in srgb,var(--aiw-accent) 10%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 40%,transparent)}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
-.${PREFIX}-input{flex:1;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:11px;padding:10px 12px;font-size:14px;outline:none}
+.${PREFIX}-input{flex:1;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
 .${PREFIX}-meter{padding:7px 12px 0;background:var(--aiw-surface)}
-.${PREFIX}-meter-bar{height:4px;border-radius:999px;background:var(--aiw-surface-2);overflow:hidden}
-.${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:999px;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}
-.${PREFIX}-meter-row{display:flex;justify-content:space-between;gap:8px;margin-top:3px;font-size:10.5px;color:var(--aiw-muted)}
-.${PREFIX}-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;font-size:11px;background:var(--aiw-surface);border-top:1px solid var(--aiw-border-soft)}
-.${PREFIX}-status-role{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-weight:600;color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
+.${PREFIX}-meter-bar{height:4px;border-radius:var(--aiw-radius-pill);background:var(--aiw-surface-2);overflow:hidden}
+.${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:var(--aiw-radius-pill);background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}
+.${PREFIX}-meter-row{display:flex;justify-content:space-between;gap:8px;margin-top:3px;font-size:var(--aiw-font-3xs);color:var(--aiw-muted)}
+.${PREFIX}-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;font-size:var(--aiw-font-2xs);background:var(--aiw-surface);border-top:1px solid var(--aiw-border-soft)}
+.${PREFIX}-status-role{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--aiw-radius-pill);font-weight:600;color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
 .${PREFIX}-status-credits{font-weight:600;color:var(--aiw-text-2);font-variant-numeric:tabular-nums}
 .${PREFIX}-status-credits-val{display:inline-block;transition:color .2s ease}
 .${PREFIX}-credits-live{color:var(--aiw-accent-ink)}
 .${PREFIX}-cta{display:flex;justify-content:center;padding:6px 0 2px}
-.${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;color:var(--aiw-accent-contrast);text-decoration:none;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);box-shadow:0 4px 14px color-mix(in srgb,var(--aiw-accent) 25%,transparent)}
-.${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-form-title{font-size:13px;font-weight:600;margin-bottom:8px}
+.${PREFIX}-cta-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:var(--aiw-radius-pill);padding:9px 18px;font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-accent-contrast);text-decoration:none;background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);box-shadow:0 4px 14px color-mix(in srgb,var(--aiw-accent) 25%,transparent)}
+.${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-form-title{font-size:var(--aiw-font-sm);font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
 /* ── Form controls ───────────────────────────────────────────────────────
    Everything the chat can draw as an input goes through ONE token layer
@@ -431,7 +431,7 @@ export function injectStyles(side: "left" | "right"): void {
    the chat's controls. Values stay as var() references, never snapshots, so the
    app's dark-mode class keeps driving them after mount. */
 .${PREFIX}-bubble.${PREFIX}-host-tokens,.${PREFIX}-panel.${PREFIX}-host-tokens{--aiw-field-bg:hsl(var(--card));--aiw-field-fg:hsl(var(--foreground));--aiw-field-border:hsl(var(--input));--aiw-field-placeholder:hsl(var(--muted-foreground));--aiw-field-ring:hsl(var(--ring));--aiw-field-ring-fg:hsl(var(--primary-foreground));--aiw-field-radius:calc(var(--radius) - 2px)}
-.${PREFIX}-field{width:100%;box-sizing:border-box;min-height:40px;padding:8px 12px;font-family:inherit;font-size:14px;line-height:1.45;color:var(--aiw-field-fg);background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:var(--aiw-field-radius);outline:none;box-shadow:inset 0 1px 2px 0 color-mix(in srgb,var(--aiw-field-fg) 5%,transparent);transition:border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-field{width:100%;box-sizing:border-box;min-height:40px;padding:8px 12px;font-family:inherit;font-size:var(--aiw-font-md);line-height:1.45;color:var(--aiw-field-fg);background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:var(--aiw-field-radius);outline:none;box-shadow:inset 0 1px 2px 0 color-mix(in srgb,var(--aiw-field-fg) 5%,transparent);transition:border-color .15s ease,box-shadow .15s ease}
 .${PREFIX}-field::placeholder{color:var(--aiw-field-placeholder);opacity:1}
 .${PREFIX}-field:hover:not(:disabled){border-color:color-mix(in srgb,var(--aiw-field-border) 70%,var(--aiw-field-fg))}
 .${PREFIX}-field:focus{border-color:var(--aiw-field-ring);box-shadow:0 0 0 2px var(--aiw-field-ring)}
@@ -448,10 +448,10 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    it lands the same on a bare input, a checkbox row and a radio GROUP — the
    three shapes buildField can hand back. */
 .${PREFIX}-field-invalid{outline:1px solid var(--aiw-danger-text);outline-offset:2px;border-radius:var(--aiw-field-radius)}
-.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:12.5px;line-height:1.45;color:var(--aiw-danger-text)}
-.${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
+.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:var(--aiw-font-xs);line-height:1.45;color:var(--aiw-danger-text)}
+.${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:var(--aiw-font-sm);line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
 .${PREFIX}-field-check-label{min-width:0}
-.${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:4px;cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:var(--aiw-radius-xs);cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
 .${PREFIX}-check[type=radio]{border-radius:50%}
 .${PREFIX}-check:hover:not(:disabled){border-color:color-mix(in srgb,var(--aiw-field-border) 70%,var(--aiw-field-fg))}
 .${PREFIX}-check:focus-visible{border-color:var(--aiw-field-ring);box-shadow:0 0 0 2px var(--aiw-field-ring)}
@@ -461,27 +461,27 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-check[type=checkbox]:checked::after{content:"";position:absolute;left:4.5px;top:1.5px;width:4px;height:8px;border:solid var(--aiw-field-ring-fg);border-width:0 2px 2px 0;transform:rotate(45deg)}
 .${PREFIX}-check[type=radio]:checked::after{content:"";position:absolute;left:3.5px;top:3.5px;width:7px;height:7px;border-radius:50%;background:var(--aiw-field-ring-fg)}
 .${PREFIX}-check:disabled{opacity:.5;cursor:not-allowed}
-.${PREFIX}-lead-btn{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:11px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
+.${PREFIX}-lead-btn{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:10px 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
 .${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
-.${PREFIX}-lead-ok{font-size:13px;font-weight:600;color:var(--aiw-accent-ink)}
+.${PREFIX}-lead-ok{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-accent-ink)}
 .${PREFIX}-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
-.${PREFIX}-send{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:11px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
+.${PREFIX}-send{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:0 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
-.${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);border-radius:11px;width:38px;line-height:1;cursor:pointer;color:var(--aiw-text-2);transition:border-color .12s,color .12s,background .12s}
+.${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);border-radius:var(--aiw-radius-lg);width:38px;line-height:1;cursor:pointer;color:var(--aiw-text-2);transition:border-color .12s,color .12s,background .12s}
 .${PREFIX}-attach:hover{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-attach:disabled{opacity:.5;cursor:default}
 .${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
 .${PREFIX}-artifacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 10px 0;background:var(--aiw-surface)}
-.${PREFIX}-artifacts-title{font-size:11px;font-weight:600;color:var(--aiw-muted)}
-.${PREFIX}-artifact{display:inline-flex;align-items:center;gap:6px;max-width:200px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:9px;padding:3px 8px;font-size:11px;color:var(--aiw-text-2);white-space:nowrap}
+.${PREFIX}-artifacts-title{font-size:var(--aiw-font-2xs);font-weight:600;color:var(--aiw-muted)}
+.${PREFIX}-artifact{display:inline-flex;align-items:center;gap:6px;max-width:200px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-md);padding:3px 8px;font-size:var(--aiw-font-2xs);color:var(--aiw-text-2);white-space:nowrap}
 .${PREFIX}-artifact-name{overflow:hidden;text-overflow:ellipsis;max-width:130px}
-.${PREFIX}-artifact-save{border:none;background:transparent;color:#0b6cff;font-size:11px;font-weight:600;cursor:pointer;padding:0}
+.${PREFIX}-artifact-save{border:none;background:transparent;color:#0b6cff;font-size:var(--aiw-font-2xs);font-weight:600;cursor:pointer;padding:0}
 .${PREFIX}-artifact-save:disabled{color:var(--aiw-muted);cursor:default}
-.${PREFIX}-att{display:inline-flex;align-items:center;gap:5px;max-width:180px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:9px;padding:3px 8px;font-size:12px;color:var(--aiw-text-2);white-space:nowrap}
+.${PREFIX}-att{display:inline-flex;align-items:center;gap:5px;max-width:180px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-md);padding:3px 8px;font-size:var(--aiw-font-xs);color:var(--aiw-text-2);white-space:nowrap}
 .${PREFIX}-att>span{overflow:hidden;text-overflow:ellipsis}
 .${PREFIX}-atts{display:flex;flex-wrap:wrap;gap:6px;max-width:92%}
 .${PREFIX}-atts.${PREFIX}-user{align-self:flex-end;justify-content:flex-end}
-.${PREFIX}-att-x{border:none;background:transparent;color:var(--aiw-muted);font-size:15px;line-height:1;cursor:pointer;padding:0 0 0 2px}
+.${PREFIX}-att-x{border:none;background:transparent;color:var(--aiw-muted);font-size:var(--aiw-font-lg);line-height:1;cursor:pointer;padding:0 0 0 2px}
 .${PREFIX}-att-x:hover{color:#e11}
 .${PREFIX}-att-err{border-color:var(--aiw-danger-border);background:var(--aiw-danger-bg);color:var(--aiw-danger-text)}
 .${PREFIX}-msgactions{display:inline-flex;align-items:center;gap:6px;margin-top:3px;color:var(--aiw-muted);opacity:.55;transition:opacity .15s ease}
@@ -507,12 +507,12 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-msgactions.${PREFIX}-user{opacity:.75}
 }
 .${PREFIX}-msgactions.${PREFIX}-assistant{align-self:flex-start}
-.${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px 5px;font-size:11px;font-weight:500;cursor:pointer;line-height:1}
+.${PREFIX}-msgact{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:inherit;border-radius:var(--aiw-radius-sm);padding:2px 5px;font-size:var(--aiw-font-2xs);font-weight:500;cursor:pointer;line-height:1}
 .${PREFIX}-msgact:hover{color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent)}
 /* Icon-only variant (edit) — a small, quiet chip (subtle surface + border) that
    is revealed on message hover, then tints ACCENT (not a hard white-on-accent
    fill) on its own hover so it reads as an affordance, not a loud button. */
-.${PREFIX}-msgact-icon{padding:5px;border-radius:8px;color:var(--aiw-muted);background:color-mix(in srgb,var(--aiw-surface) 92%,transparent);border:1px solid var(--aiw-border);transition:color .15s ease,background .15s ease,border-color .15s ease}
+.${PREFIX}-msgact-icon{padding:5px;border-radius:var(--aiw-radius-md);color:var(--aiw-muted);background:color-mix(in srgb,var(--aiw-surface) 92%,transparent);border:1px solid var(--aiw-border);transition:color .15s ease,background .15s ease,border-color .15s ease}
 .${PREFIX}-msgact-icon:hover{color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 12%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 45%,transparent)}
 .${PREFIX}-msgact-icon svg{width:15px;height:15px}
 /* Per-message vote (thumbs) — light icon buttons; the chosen vote stays lit. */
@@ -544,36 +544,36 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 /* 20x20 drawn (14px icon + 3px padding); the .-tap ::before takes the TARGET
    to 24x24. The chat-quality control (#299) being the smallest thing in the
    widget was the sharpest finding in the audit. */
-.${PREFIX}-vote{position:relative;padding:3px;border-radius:6px;color:var(--aiw-muted);background:transparent}
+.${PREFIX}-vote{position:relative;padding:3px;border-radius:var(--aiw-radius-sm);color:var(--aiw-muted);background:transparent}
 .${PREFIX}-vote::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
 .${PREFIX}-vote:hover{color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 10%,transparent)}
 .${PREFIX}-vote-on{color:var(--aiw-accent-ink)}
 .${PREFIX}-vote svg{width:14px;height:14px;display:block}
 .${PREFIX}-branchnav{display:inline-flex;align-items:center;gap:2px;color:inherit;font-variant-numeric:tabular-nums}
-.${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:6px;padding:2px;cursor:pointer;line-height:1}
+.${PREFIX}-branch-btn{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:inherit;border-radius:var(--aiw-radius-sm);padding:2px;cursor:pointer;line-height:1}
 .${PREFIX}-branch-btn:hover:not(:disabled){color:var(--aiw-accent-ink)}
 .${PREFIX}-branch-btn:disabled{opacity:.35;cursor:default}
-.${PREFIX}-branch-count{font-size:11px;padding:0 2px}
+.${PREFIX}-branch-count{font-size:var(--aiw-font-2xs);padding:0 2px}
 .${PREFIX}-edit{display:flex;flex-direction:column;gap:6px;max-width:94%;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-edit.${PREFIX}-user{align-self:stretch}
 /* Edit mode keeps the USER BUBBLE look (same fill + radius), so clicking edit
    doesn't swap the message for a different-looking box — just a subtle focus
    ring, matching the inline-edit request. */
-.${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;caret-color:#fff;box-sizing:border-box;border:1.5px solid transparent;border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+.${PREFIX}-edit-input{width:100%;background:color-mix(in srgb,var(--aiw-accent) 76%,#04191b);color:#fff;caret-color:#fff;box-sizing:border-box;border:1.5px solid transparent;border-radius:var(--aiw-radius-2xl);padding:9px 12px;font-size:var(--aiw-font-md);line-height:1.45;font-family:inherit;resize:none;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
 .${PREFIX}-edit-input::placeholder{color:rgba(255,255,255,.6)}
 .${PREFIX}-edit-input:focus{border-color:rgba(255,255,255,.55);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 28%,transparent)}
 .${PREFIX}-edit-actions{display:flex;justify-content:flex-end;gap:6px}
-.${PREFIX}-edit-cancel{border:none;background:transparent;color:var(--aiw-muted);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-edit-cancel{border:none;background:transparent;color:var(--aiw-muted);border-radius:var(--aiw-radius-pill);padding:5px 11px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${PREFIX}-edit-cancel:hover{background:var(--aiw-surface-2)}
-.${PREFIX}-edit-save{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer}
+.${PREFIX}-edit-save{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-pill);padding:5px 13px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${PREFIX}-edit-save:hover{opacity:.92}
 .${PREFIX}-hactions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
-.${PREFIX}-icon{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.${PREFIX}-icon{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);width:26px;height:26px;border-radius:var(--aiw-radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .${PREFIX}-icon:hover{background:color-mix(in srgb,var(--aiw-header-fg) 28%,transparent)}
 .${PREFIX}-icon-on{background:var(--aiw-header-fg);color:var(--aiw-header-bg)}
 .${PREFIX}-icon-on:hover{background:var(--aiw-header-fg)}
 .${PREFIX}-morewrap{position:relative;display:inline-flex}
-.${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;display:flex;flex-direction:column;min-width:212px;padding:6px;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);
+.${PREFIX}-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:6;display:flex;flex-direction:column;min-width:212px;padding:6px;background:var(--aiw-surface-raised);color:var(--aiw-text);border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-xl);box-shadow:0 12px 34px rgba(15,23,42,.18);
 /* A TRANSITION, not a keyframe, and anchored at the trigger (#309). It was
    an entrance KEYFRAME with no transform-origin, so it grew from its own centre
    instead of from the button that opened it — and because keyframes RESTART
@@ -586,15 +586,15 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--duration-fast) var(--ease-out),transform var(--duration-fast) var(--ease-out),visibility 0s linear var(--duration-fast)}
 .${PREFIX}-menu-open{transform:none;opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
 .${PREFIX}-menu::before{content:"";position:absolute;top:-5px;right:14px;width:10px;height:10px;background:var(--aiw-surface-raised);border-left:1px solid var(--aiw-border);border-top:1px solid var(--aiw-border);transform:rotate(45deg)}
-.${PREFIX}-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;color:var(--aiw-text-2);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:500;cursor:pointer;line-height:1.2}
+.${PREFIX}-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;color:var(--aiw-text-2);border-radius:var(--aiw-radius-md);padding:9px 10px;font-size:var(--aiw-font-sm);font-weight:500;cursor:pointer;line-height:1.2}
 .${PREFIX}-menu-item:hover{background:color-mix(in srgb,var(--aiw-accent) 7%,transparent);color:var(--aiw-accent-ink)}
 .${PREFIX}-menu-item:disabled{opacity:.5;cursor:default}
 .${PREFIX}-menu-ico{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--aiw-text-2)}
 .${PREFIX}-menu-item:hover .${PREFIX}-menu-ico,.${PREFIX}-menu-item-on .${PREFIX}-menu-ico{color:var(--aiw-accent-ink)}
 .${PREFIX}-menu-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.${PREFIX}-menu-state{flex:0 0 auto;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:999px;padding:2px 7px}
+.${PREFIX}-menu-state{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-pill);padding:2px 7px}
 .${PREFIX}-menu-item-on .${PREFIX}-menu-state{color:var(--aiw-accent-contrast);background:var(--aiw-accent)}
-.${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-lg);padding:8px 12px;font-size:var(--aiw-font-sm);font-weight:600;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
 .${PREFIX}-expanded .${PREFIX}-msg{max-width:min(75%,62ch)}
 /* Advanced view — chat column + drivable app pane. The chat column always wraps
@@ -634,10 +634,10 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-bar{padding:6px 5px}
 .${PREFIX}-pane-collapsed .${PREFIX}-pane-collapse{transform:rotate(180deg)}
 .${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border);background:var(--aiw-surface-2);flex:0 0 auto}
-.${PREFIX}-pane-url{font-size:11.5px;color:var(--aiw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.${PREFIX}-pane-url{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 /* Padded gutter around the driven app so it reads as an inset "screen". */
 .${PREFIX}-pane-body{flex:1 1 auto;min-width:0;min-height:0;display:flex;padding:12px}
-.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid var(--aiw-border);border-radius:12px;background:var(--aiw-surface);min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
+.${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-xl);background:var(--aiw-surface);min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
 /* Narrow: stack the app pane on top and the chat (with composer) below. */
 @media (max-width:820px){
   .${PREFIX}-advanced{flex-direction:column-reverse}
@@ -649,26 +649,26 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 }
 
 .${PREFIX}-history{position:absolute;inset:0;background:var(--aiw-surface);display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--aiw-border);font-weight:600;font-size:14px}
-.${PREFIX}-history-back{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);border-radius:9px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--aiw-text-2)}
-.${PREFIX}-history-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--aiw-text-2)}
-.${PREFIX}-history-sep{padding:8px 4px 2px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted)}
-.${PREFIX}-history-item{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid var(--aiw-border);background:var(--aiw-surface-raised);border-radius:10px;padding:10px 12px;cursor:pointer;width:100%}
+.${PREFIX}-history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--aiw-border);font-weight:600;font-size:var(--aiw-font-md)}
+.${PREFIX}-history-back{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);border-radius:var(--aiw-radius-md);padding:5px 11px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;color:var(--aiw-text-2)}
+.${PREFIX}-history-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:var(--aiw-font-sm);color:var(--aiw-text-2)}
+.${PREFIX}-history-sep{padding:8px 4px 2px;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted)}
+.${PREFIX}-history-item{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid var(--aiw-border);background:var(--aiw-surface-raised);border-radius:var(--aiw-radius-lg);padding:10px 12px;cursor:pointer;width:100%}
 .${PREFIX}-history-item:hover{border-color:var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent)}
 .${PREFIX}-history-title{font-weight:600;color:var(--aiw-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.${PREFIX}-history-date{font-size:11px;color:var(--aiw-muted);flex:0 0 auto}
-.${PREFIX}-history-star{font-size:15px;line-height:1;color:#cbcbcb;flex:0 0 auto;padding:0 2px;cursor:pointer}
+.${PREFIX}-history-date{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);flex:0 0 auto}
+.${PREFIX}-history-star{font-size:var(--aiw-font-lg);line-height:1;color:#cbcbcb;flex:0 0 auto;padding:0 2px;cursor:pointer}
 .${PREFIX}-history-star:hover{color:#f59e0b}
-.${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-widget-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
-.${PREFIX}-widget-stat{font-size:30px;font-weight:800;line-height:1.1;color:var(--aiw-text)}
-.${PREFIX}-widget-cap{font-size:13px;color:var(--aiw-text-2);margin-top:2px}
-.${PREFIX}-widget-delta{font-size:12px;font-weight:600;color:var(--aiw-accent-ink);margin-top:4px}
+.${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-widget-title{font-size:var(--aiw-font-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
+.${PREFIX}-widget-stat{font-size:var(--aiw-font-3xl);font-weight:800;line-height:1.1;color:var(--aiw-text)}
+.${PREFIX}-widget-cap{font-size:var(--aiw-font-sm);color:var(--aiw-text-2);margin-top:2px}
+.${PREFIX}-widget-delta{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-accent-ink);margin-top:4px}
 .${PREFIX}-widget-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
 /* Composed UI cards ([[ui:…]]) — tiles the assistant lays out itself. */
-.${PREFIX}-ui{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-ui-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:6px}
-.${PREFIX}-ui-cap{font-size:13px;color:var(--aiw-text-2);margin-bottom:10px}
+.${PREFIX}-ui{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-ui-title{font-size:var(--aiw-font-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:6px}
+.${PREFIX}-ui-cap{font-size:var(--aiw-font-sm);color:var(--aiw-text-2);margin-bottom:10px}
 /* A strip SCROLLS rather than shrinking its tiles: squeezing eight scenes into
    a 340px panel makes every one of them too small to judge, which defeats the
    point of showing them. Snap points keep the scroll landing on whole tiles. */
@@ -685,19 +685,19 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 /* Height leads, width follows from the aspect — so a portrait scene stays
    portrait instead of being letterboxed or cropped to fit a cap. */
 .${PREFIX}-ui-carousel .${PREFIX}-ui-media{height:var(--aiw-cmedia);width:auto;max-width:100%;margin:0 auto}
-.${PREFIX}-ui-carousel-stage{position:relative;overflow:hidden;border-radius:10px}
+.${PREFIX}-ui-carousel-stage{position:relative;overflow:hidden;border-radius:var(--aiw-radius-lg)}
 .${PREFIX}-ui-carousel .${PREFIX}-ui-items{display:flex;gap:0;transition:transform .25s ease;overflow:visible}
 .${PREFIX}-ui-carousel .${PREFIX}-ui-tile{flex:0 0 100%;min-width:100%}
-.${PREFIX}-ui-arrow{position:absolute;top:calc(var(--aiw-cmedia) / 2 - 15px);z-index:2;display:flex;height:30px;width:30px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.${PREFIX}-ui-arrow{position:absolute;top:calc(var(--aiw-cmedia) / 2 - 15px);z-index:2;display:flex;height:30px;width:30px;align-items:center;justify-content:center;border:0;border-radius:var(--aiw-radius-pill);background:rgba(0,0,0,.5);color:#fff;font-size:var(--aiw-font-lg);line-height:1;cursor:pointer}
 .${PREFIX}-ui-arrow:hover{background:rgba(0,0,0,.7)}
 .${PREFIX}-ui-arrow-left{left:6px}
 .${PREFIX}-ui-arrow-right{right:6px}
-.${PREFIX}-ui-counter{position:absolute;right:8px;top:8px;z-index:2;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;font-weight:700}
+.${PREFIX}-ui-counter{position:absolute;right:8px;top:8px;z-index:2;padding:2px 8px;border-radius:var(--aiw-radius-pill);background:rgba(0,0,0,.55);color:#fff;font-size:var(--aiw-font-3xs);font-weight:700}
 /* gap 5px -> 18px: 6px dots with 18px between them put the centres 24px apart,
    which is what the WCAG 2.2 spacing exception actually requires (#308). */
 .${PREFIX}-ui-dots{position:absolute;left:0;right:0;top:calc(var(--aiw-cmedia) - 14px);bottom:auto;z-index:2;display:flex;justify-content:center;gap:18px}
 /* 6x6 drawn, real <button>s. Same treatment: the dot stays 6px, the target is 24. */
-.${PREFIX}-ui-dot{position:relative;height:6px;width:6px;padding:0;border:0;border-radius:999px;background:rgba(255,255,255,.55);cursor:pointer}
+.${PREFIX}-ui-dot{position:relative;height:6px;width:6px;padding:0;border:0;border-radius:var(--aiw-radius-pill);background:rgba(255,255,255,.55);cursor:pointer}
 .${PREFIX}-ui-dot::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px}
 /* The active dot widens to a pill. NO transition on that width (#309): house
    law allows transform and opacity, and scaleX on a 6px circle distorts the
@@ -708,7 +708,7 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-ui-list{display:flex;flex-direction:column;gap:8px}
 .${PREFIX}-ui-list>.${PREFIX}-ui-tile{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:start}
 .${PREFIX}-ui-list .${PREFIX}-ui-media{grid-row:span 3}
-.${PREFIX}-ui-media{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--aiw-surface-2);border:1px solid var(--aiw-border-soft);display:flex;align-items:center;justify-content:center}
+.${PREFIX}-ui-media{position:relative;aspect-ratio:1;border-radius:var(--aiw-radius-lg);overflow:hidden;background:var(--aiw-surface-2);border:1px solid var(--aiw-border-soft);display:flex;align-items:center;justify-content:center}
 .${PREFIX}-ui-a-portrait .${PREFIX}-ui-media{aspect-ratio:4/5}
 .${PREFIX}-ui-a-story .${PREFIX}-ui-media{aspect-ratio:9/16}
 .${PREFIX}-ui-a-landscape .${PREFIX}-ui-media,.${PREFIX}-ui-a-wide .${PREFIX}-ui-media{aspect-ratio:16/9}
@@ -718,8 +718,8 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
    instead of being stretched to fill a square. */
 .${PREFIX}-ui-media:has(> audio.${PREFIX}-ui-media-el){aspect-ratio:auto;padding:8px}
 audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
-.${PREFIX}-ui-media-ph{font-size:11px;color:var(--aiw-muted);text-align:center;padding:0 6px}
-.${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
+.${PREFIX}-ui-media-ph{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);text-align:center;padding:0 6px}
+.${PREFIX}-ui-badge{position:absolute;left:6px;top:6px;padding:2px 7px;border-radius:var(--aiw-radius-pill);font-size:var(--aiw-font-3xs);font-weight:700;letter-spacing:.02em;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
 .${PREFIX}/* The two FILLED badges stay literal on purpose, and are not the bypass the
    audit counted. They are opaque chips carrying the base rule's white text
    (5.43:1 and 7.54:1), so they neither flip with the scheme nor need to:
@@ -729,66 +729,66 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 -ui-badge-ready{background:#16794a}
 .${PREFIX}-ui-badge-running{background:var(--aiw-accent);color:var(--aiw-accent-contrast)}
 .${PREFIX}-ui-badge-failed{background:#a32020}
-.${PREFIX}-ui-tile-title{font-size:12px;font-weight:600;color:var(--aiw-text);margin-top:6px;line-height:1.25}
-.${PREFIX}-ui-tile-cap{font-size:11.5px;color:var(--aiw-text-2);margin-top:2px;line-height:1.3}
+.${PREFIX}-ui-tile-title{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-text);margin-top:6px;line-height:1.25}
+.${PREFIX}-ui-tile-cap{font-size:var(--aiw-font-2xs);color:var(--aiw-text-2);margin-top:2px;line-height:1.3}
 .${PREFIX}-ui-tile-actions,.${PREFIX}-ui-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .${PREFIX}-ui-actions{margin-top:10px}
 .${PREFIX}-ui-act{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
-.${PREFIX}-ui-btn{padding:5px 10px;border-radius:8px;border:1px solid var(--aiw-border-strong);background:var(--aiw-bg);color:var(--aiw-text);font-size:11.5px;font-weight:600;cursor:pointer}
+.${PREFIX}-ui-btn{padding:5px 10px;border-radius:var(--aiw-radius-md);border:1px solid var(--aiw-border-strong);background:var(--aiw-bg);color:var(--aiw-text);font-size:var(--aiw-font-2xs);font-weight:600;cursor:pointer}
 .${PREFIX}-ui-btn:hover{background:var(--aiw-surface-2)}
 .${PREFIX}-ui-btn:disabled{opacity:.5;cursor:default}
 .${PREFIX}-ui-btn-primary{background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-color:transparent}
 .${PREFIX}-ui-btn-danger{color:var(--aiw-danger-text);border-color:color-mix(in srgb,var(--aiw-danger-text) 40%,transparent)}
-.${PREFIX}-ui-btn-ghost{padding:5px 8px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--aiw-muted);font-size:11.5px;font-weight:600;cursor:pointer}
-.${PREFIX}-ui-confirm-q{font-size:11.5px;color:var(--aiw-text-2)}
-.${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:14px;overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-ui-btn-ghost{padding:5px 8px;border-radius:var(--aiw-radius-md);border:1px solid transparent;background:transparent;color:var(--aiw-muted);font-size:var(--aiw-font-2xs);font-weight:600;cursor:pointer}
+.${PREFIX}-ui-confirm-q{font-size:var(--aiw-font-2xs);color:var(--aiw-text-2)}
+.${PREFIX}-preview{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-preview-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border-soft)}
 .${PREFIX}-preview-dots{display:inline-flex;gap:4px}
 .${PREFIX}-preview-dots i{width:9px;height:9px;border-radius:50%;background:#e2e2e2}
 .${PREFIX}-preview-dots i:nth-child(1){background:#ff5f57}
 .${PREFIX}-preview-dots i:nth-child(2){background:#febc2e}
 .${PREFIX}-preview-dots i:nth-child(3){background:#28c840}
-.${PREFIX}-preview-title{font-size:12px;font-weight:600;color:var(--aiw-muted)}
+.${PREFIX}-preview-title{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-muted)}
 .${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:var(--aiw-surface)}
-.${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:12px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2)}
+.${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:var(--aiw-radius-xl);border:1px solid var(--aiw-border);background:var(--aiw-surface-2)}
 .${PREFIX}-proposal-media-holder{position:relative}
 /* NOT --aiw-accent-contrast: this badge sits on 60% black over an image, not on
    the accent, so it must stay light whatever the accent resolves to. Reading the
    accent token here would have turned it navy-on-black the moment #307 made the
    contrast derived. */
-.${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#FCF7E3;font-size:11px;font-weight:600}
+.${PREFIX}-proposal-media-badge{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:var(--aiw-radius-pill);background:rgba(0,0,0,.6);color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:600}
 .${PREFIX}-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
-.${PREFIX}-chip{padding:8px 14px;border-radius:999px;border:1px solid color-mix(in srgb,var(--aiw-accent) 35%,transparent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent);color:var(--aiw-accent-ink);font-size:13px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.${PREFIX}-chip{padding:8px 14px;border-radius:var(--aiw-radius-pill);border:1px solid color-mix(in srgb,var(--aiw-accent) 35%,transparent);background:color-mix(in srgb,var(--aiw-accent) 7%,transparent);color:var(--aiw-accent-ink);font-size:var(--aiw-font-sm);font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .${PREFIX}-chip:hover{background:color-mix(in srgb,var(--aiw-accent) 14%,transparent)}
 .${PREFIX}-chip-on,.${PREFIX}-chip-send{background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-color:transparent}
 .${PREFIX}-chip-send:hover{background:var(--aiw-accent)}
 .${PREFIX}-chip-other{border-style:dashed;background:transparent;color:var(--aiw-muted);border-color:var(--aiw-border-strong)}
 .${PREFIX}-chip:disabled{opacity:.45;cursor:default}
-.${PREFIX}-kpi{border:1px solid var(--aiw-border-soft);border-radius:10px;padding:8px 10px;background:var(--aiw-bg)}
-.${PREFIX}-kpi-v{font-size:18px;font-weight:700;color:var(--aiw-text)}
-.${PREFIX}-kpi-l{font-size:11px;color:var(--aiw-muted);margin-top:1px}
-.${PREFIX}-kpi-d{font-size:11px;font-weight:600;color:var(--aiw-accent-ink);margin-top:2px}
-.${PREFIX}-widget-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.${PREFIX}-kpi{border:1px solid var(--aiw-border-soft);border-radius:var(--aiw-radius-lg);padding:8px 10px;background:var(--aiw-bg)}
+.${PREFIX}-kpi-v{font-size:var(--aiw-font-2xl);font-weight:700;color:var(--aiw-text)}
+.${PREFIX}-kpi-l{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);margin-top:1px}
+.${PREFIX}-kpi-d{font-size:var(--aiw-font-2xs);font-weight:600;color:var(--aiw-accent-ink);margin-top:2px}
+.${PREFIX}-widget-table{width:100%;border-collapse:collapse;font-size:var(--aiw-font-xs)}
 .${PREFIX}-widget-table th{text-align:left;font-weight:700;color:var(--aiw-text-2);border-bottom:1px solid var(--aiw-border);padding:6px 8px}
 .${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:var(--aiw-text)}
-.${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:13.5px;color:var(--aiw-text);display:flex;flex-direction:column;gap:3px}
+.${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:var(--aiw-font-sm);color:var(--aiw-text);display:flex;flex-direction:column;gap:3px}
 .${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
+.${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-lg);padding:9px 14px;font-size:var(--aiw-font-sm);font-weight:600;cursor:pointer}
 .${PREFIX}-nav-btn:hover{background:color-mix(in srgb,var(--aiw-accent) 11%,transparent)}
 .${PREFIX}-nav-btn:disabled{opacity:.7;cursor:default}
-.${PREFIX}-proposal{align-self:stretch;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
-.${PREFIX}-proposal-title{font-size:13px;font-weight:700}
+.${PREFIX}-proposal{align-self:stretch;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 4%,transparent);border-radius:var(--aiw-radius-2xl);padding:12px;display:flex;flex-direction:column;gap:8px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-proposal-title{font-size:var(--aiw-font-sm);font-weight:700}
 .${PREFIX}-proposal-edit{display:flex;flex-direction:column;gap:4px}
-.${PREFIX}-proposal-edit-label{font-size:11.5px;font-weight:600;color:var(--aiw-text-2)}
-.${PREFIX}-proposal-summary{font-size:12.5px;color:var(--aiw-text-2);white-space:pre-wrap;line-height:1.45}
+.${PREFIX}-proposal-edit-label{font-size:var(--aiw-font-2xs);font-weight:600;color:var(--aiw-text-2)}
+.${PREFIX}-proposal-summary{font-size:var(--aiw-font-xs);color:var(--aiw-text-2);white-space:pre-wrap;line-height:1.45}
 /* Storyboard plan inside a confirm card: one row per shot, so the thing the
    renders are bought from is READ rather than skimmed as a paragraph. */
 /* Two lines of the prompt: enough to judge the shot, not so much that four of
    them bury the buttons under the fold. */
-.${PREFIX}-proposal-ok{font-size:13px;font-weight:600;color:var(--aiw-ok-text);display:inline-flex;align-items:center;gap:6px}
-.${PREFIX}-confirm-q{font-size:13px;color:var(--aiw-text-2);margin-bottom:8px}
+.${PREFIX}-proposal-ok{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-ok-text);display:inline-flex;align-items:center;gap:6px}
+.${PREFIX}-confirm-q{font-size:var(--aiw-font-sm);color:var(--aiw-text-2);margin-bottom:8px}
 .${PREFIX}-confirm-row{display:flex;gap:8px}
-.${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:11px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.${PREFIX}-confirm-no{border:1px solid var(--aiw-border-strong);background:var(--aiw-surface-raised);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:9px 14px;font-size:var(--aiw-font-sm);font-weight:600;cursor:pointer}
 ${darkWhenHostSaysSo}
 @media (prefers-color-scheme:dark){${darkWhenNobodySaid}}
 
@@ -818,11 +818,11 @@ ${darkWhenHostSaysSo}
      the name/subtitle drop to a dedicated line below so the title never gets
      squeezed by the action buttons on narrow phones. */
   .${PREFIX}-header{position:relative;padding-top:calc(14px + env(safe-area-inset-top));display:grid;grid-template-columns:auto 1fr;grid-template-areas:"avatar actions" "name name";align-items:center;gap:8px 10px;touch-action:none}
-  .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:4px;background:color-mix(in srgb,var(--aiw-header-fg) 55%,transparent)}
+  .${PREFIX}-header::before{content:"";position:absolute;top:calc(5px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:var(--aiw-radius-xs);background:color-mix(in srgb,var(--aiw-header-fg) 55%,transparent)}
   .${PREFIX}-avatar{grid-area:avatar}
   .${PREFIX}-hactions{grid-area:actions;justify-self:end}
   .${PREFIX}-hname{grid-area:name}
-  .${PREFIX}-title{font-size:16px}
+  .${PREFIX}-title{font-size:var(--aiw-font-xl)}
   .${PREFIX}-log{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
   .${PREFIX}-form{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
   /* iOS auto-zooms the page when a focused field is under 16px, and the zoom
@@ -830,7 +830,7 @@ ${darkWhenHostSaysSo}
      a preference — do not lower it. text-size-adjust stops iOS inflating the
      rest of the text to compensate. */
   .${PREFIX}-input,.${PREFIX}-edit-input,.${PREFIX}-question-input,
-  .${PREFIX}-lead-form input,.${PREFIX}-lead-form textarea{font-size:16px}
+  .${PREFIX}-lead-form input,.${PREFIX}-lead-form textarea{font-size:var(--aiw-font-xl)}
   .${PREFIX}-panel{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   /* While the soft keyboard is up it covers the home indicator, but iOS keeps
      reporting safe-area-inset-bottom as if it were still there — leaving a
