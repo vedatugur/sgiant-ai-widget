@@ -94,15 +94,14 @@ import {
   type FrameTransport,
   type BridgeAction,
 } from "sgiant-ai-agent-bridge";
+// The generic half only. AI_DOMAIN_KEYS / AI_ACTION_DOMAINS / invalidateAiTouched
+// moved to @sgiant/ai-apply on 2026-09-02: they name sgiant's tools and sgiant's
+// React Query keys, which is a description of one product rather than of this
+// widget. What stays carries opaque domain STRINGS this package never interprets.
 export {
-  AI_DOMAIN_KEYS,
-  AI_ACTION_DOMAINS,
-  invalidateAiTouched,
   broadcastAiChange,
   subscribeAiChange,
-  applyAiChange,
   subscribeLiveSync,
-  type QueryInvalidator,
   type AiChangeEvent,
   type LiveSyncOptions,
 } from "./ai-invalidation";
@@ -286,6 +285,27 @@ export interface AiChatWidgetOptions {
    * nav/sidebar link elsewhere in the app can summon the widget.
    */
   openEventName?: string;
+  /**
+   * The status badge's vocabulary, all host-supplied and all optional.
+   *
+   * These were hard-coded to sgiant's own tools until 2026-09-02 — the map
+   * literally listed `run_stats_query` and `list_hotels`. That is host
+   * configuration sitting in a package meant to be generic, the same mistake
+   * `applyProposal` was: harmless while there is one host, nonsense the moment
+   * a stranger installs it and the badge flips to "Analytics" for a tool their
+   * product does not have.
+   *
+   * Omit them all and the badge simply never changes role, which is the right
+   * behaviour for a host that has no such concept.
+   */
+  /** Role id -> display name, e.g. `{ analytics: "Analytics" }`. Unknown ids
+   *  fall back to the id itself, so a missing entry degrades to something
+   *  readable rather than blank. */
+  roleNames?: Record<string, string>;
+  /** Tool name -> role id. Flips the badge as the agent runs that tool. */
+  toolRoles?: Record<string, string>;
+  /** Host action name -> role id. Flips the badge when the action is invoked. */
+  actionRoles?: Record<string, string>;
   /** Bearer token (Clerk session or embed token). Use getToken for refresh. */
   token?: string;
   /** Async token provider — called before each send (overrides `token`). */
@@ -2871,28 +2891,11 @@ export function createAiChatWidget(
   // Authed status bar — remaining credits + the active Copilot role. Shown only
   // when a balance provider is wired (org + admin), independent of the visitor
   // token meter above.
-  const ROLE_NAMES: Record<string, string> = {
-    talk: L("roleTalk"),
-    analytics: L("roleAnalytics"),
-  };
-  // Which role an in-app ACTION belongs to, so the badge reflects the live task.
-  const ACTION_ROLE: Record<string, string> = {
-    "open-dashboards": "analytics",
-    "open-dashboard-builder": "analytics",
-  };
-  // Which role a live TOOL (activity step) belongs to — flips the badge from
-  // Talk to Analytics as the agent actually queries data / builds.
-  const TOOL_ROLE: Record<string, string> = {
-    run_stats_query: "analytics",
-    render_chart: "analytics",
-    list_metrics: "analytics",
-    list_dimensions: "analytics",
-    list_hotels: "analytics",
-    list_connections: "analytics",
-    apply_dashboard: "analytics",
-    save_template: "analytics",
-    platform_ai_stats: "analytics",
-  };
+  // Host-supplied, empty by default. See the option docs above for why these
+  // are no longer a list of sgiant's own tool names.
+  const ROLE_NAMES: Record<string, string> = opts.roleNames ?? {};
+  const ACTION_ROLE: Record<string, string> = opts.actionRoles ?? {};
+  const TOOL_ROLE: Record<string, string> = opts.toolRoles ?? {};
   // Persistent status structure so the credits number can ANIMATE (a live
   // count-down after a turn / count-up after a top-up) instead of snapping.
   const statusEl = el("div", `${PREFIX}-status`);

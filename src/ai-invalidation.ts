@@ -1,80 +1,16 @@
 /**
- * Central registry of the React Query keys each AI-touchable DOMAIN affects, so a
- * Copilot apply-proposal invalidates exactly the right queries and every page
- * reading them repopulates live. This replaces the hardcoded key arrays that were
- * duplicated in each app's `onApplyProposal` — one source of truth, so a new
- * page/domain is wired once and no surface is silently missed.
+ * A cross-tab "the assistant changed something" bus.
  *
- * Over-invalidation is deliberately fine (correctness > a few extra refetches);
- * unknown actions fall back to invalidating everything, so a newly-added apply is
- * never UNDER-invalidated.
+ * Deliberately knows NOTHING about what changed: it carries an account id and a
+ * list of opaque domain strings, and the host decides what they mean. sgiant's
+ * mapping from those strings to query keys lives in `@sgiant/ai-apply`, because
+ * it is a description of sgiant's product rather than of this widget.
  */
 
-/** Query keys each domain's data lives under (all account-scoped: `[key, accountId]`). */
-export const AI_DOMAIN_KEYS: Record<string, string[]> = {
-  brand: ["ai-brand-profile", "brand-versions"],
-  assets: ["asset-media", "asset-folders", "asset-usage", "assets"],
-  account: ["accounts-me", "account-products-activated", "account-settings"],
-  // A finished report must appear in the list without a manual refresh — the
-  // whole point of enqueueing from chat is that the user does not go looking.
-  reports: ["reports", "admin-reports", "report"],
-  // `apply_dashboard` and `save_template` write through the artifact-apply
-  // endpoint rather than through a normal mutation, so nothing else in the app
-  // knows a row appeared. Without these keys the user confirms "Create
-  // dashboard", the chat says it worked, and the Dashboards page they are
-  // looking at stays empty until a manual reload — which reads as a failure.
-  // `dashboard-templates` is NOT account-scoped (the admin page keys it bare),
-  // so `invalidateAiTouched` also invalidates each key un-scoped; see below.
-  dashboards: ["dashboards", "dashboard", "dashboard-view"],
-  templates: ["dashboard-templates"],
-};
-
-/** Which domains each apply-proposal name touches (for scoped invalidation). */
-export const AI_ACTION_DOMAINS: Record<string, string[]> = {
-  add_scraped_media: ["assets"],
-  ingest_website: ["assets"],
-  organize_assets: ["assets"],
-  manage_folders: ["assets"],
-  set_account_settings: ["account"],
-  wp_upsert_post: ["account"],
-  edit_asset: ["assets"],
-  create_asset: ["assets"],
-  share_asset: ["assets"],
-  save_artifact_to_assets: ["assets"],
-  generate_report: ["reports"],
-  apply_dashboard: ["dashboards"],
-  save_template: ["templates", "dashboards"],
-};
-
-/** Minimal shape of a React Query client — avoids a hard dep on @tanstack here. */
-export interface QueryInvalidator {
-  invalidateQueries: (opts: { queryKey: unknown[] }) => unknown;
-}
-
-/**
- * Invalidate every query key the given `domains` touch (default: ALL domains),
- * scoped to the account. After this, any page bound to those queries refetches
- * and its inputs/displays repopulate with the AI's change.
- */
-export function invalidateAiTouched(
-  qc: QueryInvalidator,
-  accountId: string,
-  domains?: string[]
-): void {
-  const chosen = domains ?? Object.keys(AI_DOMAIN_KEYS);
-  const keys = new Set<string>();
-  for (const d of chosen) for (const k of AI_DOMAIN_KEYS[d] ?? []) keys.add(k);
-  for (const key of keys)
-    void qc.invalidateQueries({ queryKey: [key, accountId] });
-}
-
-// --- Cross-tab real-time -------------------------------------------------------
-// An AI change in ONE tab should make EVERY tab of this browser live, on any
-// page. BroadcastChannel is same-origin + browser-native (no server), so the
-// acting tab invalidates locally AND broadcasts; other tabs invalidate on
-// receipt. (Cross-USER / cross-device realtime needs a server push — see
-// docs/realtime-sync.md.)
-const AI_LIVE_CHANNEL = "sgiant-ai-live";
+// Neutral, like the bridge's channel: this ships to people whose product is
+// not sgiant. It is a WIRE value between tabs of one deployment, so a change
+// only costs an old tab and a new tab not seeing each other until reload.
+const AI_LIVE_CHANNEL = "ai-widget-live";
 
 export interface AiChangeEvent {
   accountId: string;
@@ -124,21 +60,6 @@ export function subscribeAiChange(cb: (e: AiChangeEvent) => void): () => void {
     ch.removeEventListener("message", handler);
     ch.close();
   };
-}
-
-/**
- * Apply an AI change everywhere: invalidate THIS tab's queries and broadcast to
- * the others. Call from `onApplyProposal` after the write lands. This is the one
- * entry point a host needs for the full live-refresh behaviour.
- */
-export function applyAiChange(
-  qc: QueryInvalidator,
-  accountId: string,
-  name: string
-): void {
-  const domains = AI_ACTION_DOMAINS[name];
-  invalidateAiTouched(qc, accountId, domains);
-  broadcastAiChange(accountId, domains);
 }
 
 // --- Cross-user real-time (SSE) ------------------------------------------------
