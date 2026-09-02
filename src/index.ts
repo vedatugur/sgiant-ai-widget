@@ -945,16 +945,20 @@ export function createAiChatWidget(
    * same widget mounts on a white app, a cream report and a near-black
    * marketing page, and the mark has to straddle navy on all three.
    */
-  const launcher: Required<LauncherState> = {
-    state: "resting",
-    count: 0,
-    // A reader who has opened it once does not need the word again. Its OWN
-    // key, not the thread cache: that expires after 12 hours by design, and
-    // "has this person ever met the widget" is not a fact that should expire.
-    variant: hasOpenedBefore() ? "pebble" : "pill",
-    ground: "auto",
-  };
-
+  // DECLARED ABOVE `launcher`, and that is a fix rather than a tidy-up.
+  //
+  // `launcher` calls hasOpenedBefore() in its initialiser. While this const sat
+  // BELOW that call, the function read OPENED_KEY inside its temporal dead zone
+  // and threw a ReferenceError on every single construction — and the old
+  // implementation's own `try { … } catch { return true }` swallowed it, because
+  // a TDZ violation IS a ReferenceError. So the catch that exists to survive
+  // blocked storage was silently absorbing a crash, and `hasOpenedBefore()`
+  // answered "true" for everyone: the first-visit pill has never rendered for
+  // any visitor, ever.
+  //
+  // It surfaced only when #320 moved that try/catch into ./storage's readFlag,
+  // which let the error escape to the caller instead — and then only in a
+  // browser, since nothing type-checks or unit-tests initialiser ORDER.
   const OPENED_KEY = `${ns}:opened`;
   function hasOpenedBefore(): boolean {
     // TRUE when storage is unreadable, unlike every other flag in this file:
@@ -965,6 +969,16 @@ export function createAiChatWidget(
   function markOpened(): void {
     writeFlag(OPENED_KEY, true);
   }
+
+  const launcher: Required<LauncherState> = {
+    state: "resting",
+    count: 0,
+    // A reader who has opened it once does not need the word again. Its OWN
+    // key, not the thread cache: that expires after 12 hours by design, and
+    // "has this person ever met the widget" is not a fact that should expire.
+    variant: hasOpenedBefore() ? "pebble" : "pill",
+    ground: "auto",
+  };
 
   function resolveGround(): "light" | "ink" {
     if (launcher.ground !== "auto") return launcher.ground;
