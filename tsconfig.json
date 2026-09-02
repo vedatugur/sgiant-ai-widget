@@ -1,29 +1,36 @@
 {
   "extends": "@sgiant/tsconfig/base.json",
   "compilerOptions": {
-    // Source-only browser package (main/exports → src, like @sgiant/ui and
-    // @sgiant/assets): consumers are bundlers, so no dist is emitted. Bundler
-    // resolution + JSX because this package now imports @sgiant/assets' raw
-    // .tsx sources (the shared apply-proposal helpers), which use
-    // extensionless imports that NodeNext refuses.
-    // An unused import here is a CONSUMER's error without these, because the
-    // shared base sets `strict` but not these two, and only the SPAs turn them
-    // on. This package ships SOURCE, so `tsc --noEmit` here never saw the
-    // orphaned imports two #320 extractions left behind — both surfaced in
-    // apps/ui-org and apps/marketing instead, which is the wrong package, the
-    // wrong person, and one CI round trip later.
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    // A BROWSER package that now EMITS (#306). It shipped source until
+    // 2026-09-02 — `main` pointed at `src/index.ts` and consumers compiled it
+    // under their own tsconfig — which is fine for three SPAs in one workspace
+    // and impossible for a third party who has no workspace and no @sgiant
+    // tsconfig. Publishing needs an artefact, so this emits one.
+    //
+    // ESNext + Bundler, NOT the base's NodeNext: relative imports here are
+    // extensionless (`from "./storage"`), which NodeNext refuses and browsers
+    // cannot resolve. Today's consumers are bundlers, so the emitted ESM is
+    // directly usable. A PLAIN `<script type=module>` artefact additionally
+    // needs the extensions rewritten (see @sgiant/shared's
+    // fix-esm-extensions.mjs, which exists for exactly this) or the UMD bundle
+    // #306 asks for — both belong with that checkbox, not this one.
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "noEmit": true,
-    "composite": false,
-    "declaration": false,
-    "declarationMap": false,
-    "sourceMap": false,
-    "incremental": false
+    "outDir": "./dist",
+    "rootDir": "./src",
+    // `jsx` was here because this package imported @sgiant/assets' raw .tsx
+    // sources. It does not any more — those helpers became @sgiant/asset-actions,
+    // which ships dist — and there is not one .tsx file in src/. Carrying a JSX
+    // setting in a package with no JSX invites someone to add some.
+    //
+    // An unused import is a CONSUMER's error without these two: the shared base
+    // sets `strict` but not these, and only the SPAs turn them on. That cost one
+    // CI round trip when two #320 extractions left orphaned imports that
+    // surfaced in apps/ui-org and apps/marketing — the wrong package and the
+    // wrong person.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
