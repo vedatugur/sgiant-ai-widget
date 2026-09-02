@@ -109,7 +109,15 @@ export {
 // THE single tool-name → endpoint mapping for applying a confirm-gated write
 // proposal — every host (org/admin widget adapters, the full-page panel
 // client) calls this instead of keeping its own copy.
-export { applyProposal, type ApplyProposalCtx } from "./apply-proposal";
+// applyProposal is NOT re-exported here any more (#306). It is the sgiant
+// ADAPTER, not part of the widget core: nothing inside this package calls it —
+// index.ts only ever forwarded it — and it is the single reason the core's
+// import graph reached `@sgiant/asset-actions`. A third party embedding this
+// widget has no asset library and would have been made to carry one.
+//
+// It lives at `@sgiant/ai-widget/sgiant` instead. Same function, same types,
+// one import specifier further away, and the core entry now reaches no
+// @sgiant package for the asset lane at all.
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";
