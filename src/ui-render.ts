@@ -27,7 +27,7 @@ import type { WidgetLabels } from "./labels";
  *
  * These fifteen functions read nine things from the widget's closure. Threading
  * those through as a `ctx` parameter would have meant editing every signature
- * and every call site — and `apps/marketing` compiles this source with
+ * and every call site — and one consumer compiles this source with
  * `noUnusedParameters`, so the handful that do not need `ctx` could not have
  * taken it for uniformity anyway.
  *

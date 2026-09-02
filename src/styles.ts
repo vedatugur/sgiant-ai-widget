@@ -18,7 +18,7 @@ let stylesInjected = false;
  * Does the page around us define the PLATFORM's control variables?
  *
  * When the widget is mounted inside one of our own apps, `--input` / `--ring` /
- * `--card` / … are already on `<html>` (packages/ui/src/styles/globals.css), and
+ * `--card` / … are already on `<html>` (set by the host's own stylesheet), and
  * a text field in chat should be the same object as a text field on the page
  * behind it — same border, same focus ring, same radius, flipping together when
  * the app toggles `.dark`. When the widget is embedded on a customer's site,
@@ -68,7 +68,7 @@ export function hostDefinesPlatformTokens(): boolean {
  * This sheet expressed dark ONLY as `@media (prefers-color-scheme:dark)`, which
  * is right for a widget dropped on a stranger's page and wrong inside our own
  * apps: they carry a light/dark/system switch of their own
- * (packages/ui/src/components/theme.tsx toggles `.dark` on the document
+ * (a host theme toggle flips `.dark` on the document
  * element). A user whose OS was dark and whose app was set to LIGHT got a dark
  * widget in a light app, and the reverse broke exactly as hard. Reported from
  * the product, and no gate could have caught it — nothing type-checks a media
@@ -421,7 +421,7 @@ export function injectStyles(side: "left" | "right"): void {
    (--aiw-field-*) instead of its own hexes and radii, and that layer is
    remapped below to the platform's semantic control variables when the host
    page has them. The geometry (40px tall, 12px inline padding, 14px text, a
-   recessed inner shadow, a 2px focus ring) MIRRORS packages/ui/src/components/
+   recessed inner shadow, a 2px focus ring) MIRRORS the host design system's
    input.tsx — the widget is vanilla DOM in a detached root and cannot import
    the React primitive, so the numbers are copied deliberately; that file is the
    source of truth if they ever move. */

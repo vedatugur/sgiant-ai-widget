@@ -36,7 +36,7 @@ export function isSafeRelPath(path: unknown): path is string {
  * live DOM, so with the decision inline there the single check that keeps a
  * model-authored path out of an un-sandboxed, same-origin, session-bearing
  * iframe was unreachable by any test: deleting it left the whole suite green.
- * Here it is exercised directly (tests/unit/nav-manifest-gate.test.ts) and the
+ * Here it is exercised directly by the host repo's nav-gate test and the
  * call site is pinned by source assertion.
  *
  * Throws rather than returning a verdict: an undefined return from

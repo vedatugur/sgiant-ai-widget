@@ -16,7 +16,7 @@
 import { PREFIX } from "./prefix";
 
 // Copilot — the CRESCENT (#305). "Copilot = moonlight (tr)" is already the
-// comment on ASSISTANT in packages/tokens, and this file's own avatar fallback
+// comment on the ASSISTANT design token, and this file's own avatar fallback
 // was documented as "else a crescent glyph" — describing a mark nobody had
 // drawn. This draws it.
 //

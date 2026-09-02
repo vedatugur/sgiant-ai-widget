@@ -1,6 +1,23 @@
 {
-  "extends": "@sgiant/tsconfig/base.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    // INLINED, not extended. This read `@sgiant/tsconfig/base.json`, which is
+    // published to a PRIVATE registry — a public repo that extends a private
+    // preset does not build for the very people it is published for. The block
+    // below is that preset, minus `module`/`moduleResolution`, which this
+    // package overrides anyway for the reason stated further down.
+    "target": "ES2020",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "composite": true,
+    "incremental": true,
     // A BROWSER package that now EMITS (#306). It shipped source until
     // 2026-09-02 — `main` pointed at `src/index.ts` and consumers compiled it
     // under their own tsconfig — which is fine for three SPAs in one workspace

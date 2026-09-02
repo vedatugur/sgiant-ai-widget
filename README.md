@@ -1,23 +1,60 @@
 # sgiant-ai-widget
 
-Framework-agnostic embeddable AI chatbox. One call mounts a floating chat bubble
+A framework-agnostic, embeddable **AI chat widget**. One call mounts a floating
+bubble and a streaming chat panel into any page.
 
-- streaming panel into any page — the analytics app, or an external customer
-  site.
+No React. No framework. Vanilla DOM, themeable through CSS custom properties,
+and one runtime dependency.
+
+```bash
+npm install sgiant-ai-widget
+```
+
+**[Live example →](https://vedatugur.github.io/sgiant-ai-widget/)** — a plain
+HTML page with no bundler and no build step.
+
+## Two ways in
+
+### As a module (React, Next, Vue, Svelte, plain ESM)
 
 ```ts
 import { createAiChatWidget } from "sgiant-ai-widget";
 
 const chat = createAiChatWidget({
-  endpoint: "https://api.sgiant.io/accounts/acc_123/ai/chat",
-  accountId: "acc_123",
-  getToken: async () => await getClerkToken(), // or a short-lived embed token
-  title: "Ask sgiant",
-  greeting: "Hi! Ask me about your performance.",
+  endpoint: "https://api.example.com/chat",
+  title: "Aria",
+  greeting: "Hi! Ask me anything.",
   accent: "#6d28d9",
 });
 chat.open();
 ```
+
+### As a `<script>` tag, no build step
+
+```html
+<script src="https://unpkg.com/sgiant-ai-widget/dist/sgiant-ai-widget.global.js"></script>
+<script>
+  SgiantAiWidget.createAiChatWidget({ endpoint: "/chat" });
+</script>
+```
+
+The global build bundles its one dependency, so it is a single file. If your
+page already uses a bundler, prefer the module build — it shares that dependency
+instead of carrying a second copy.
+
+## The backend
+
+One POST endpoint that streams newline-delimited JSON. Four frame types matter:
+
+| frame | meaning |
+| --- | --- |
+| `{"type":"text","d":"…"}` | append this text |
+| `{"threadId":"…"}` | name the conversation |
+| `{"type":"done"}` | the turn is over |
+| `{"type":"error","message":"…"}` | the turn failed |
+
+The full contract, including a dependency-free reference server short enough to
+read in one go, is in **[BACKEND.md](./BACKEND.md)**.
 
 ## Theming
 
@@ -102,3 +139,17 @@ endpoint is the next backend step (tracked with the managed-AI build).
 For drop-in `<script>` use on third-party sites, bundle this module to a single
 IIFE/UMD file that exposes `window.SgiantChat.init(opts)` — not yet wired (needs
 the embed-token endpoint first).
+
+## About the `#123` references in the source
+
+The comments cite issue numbers from the private tracker this widget was built
+in, where it lived inside a monorepo until 2026-09-02. They are kept because the
+reasoning around them is worth more than the tidiness of removing it — a comment
+explaining *why* a wire value must not change is useful even when you cannot
+open the ticket it cites.
+
+Nothing behind those numbers is needed to use, read, or modify this package.
+
+## Licence
+
+MIT © Vedat Aydın Uğur

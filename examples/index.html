@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — plain HTML example</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 8rem;
+      }
+      h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      pre { background: rgba(127,127,127,.12); padding: 1rem; border-radius: .5rem; overflow-x: auto; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+      .note { border-left: 3px solid rgba(127,127,127,.4); padding-left: 1rem; opacity: .85; }
+    </style>
+  </head>
+  <body>
+    <h1>sgiant-ai-widget</h1>
+    <p class="sub">A framework-agnostic AI chat widget. This page uses no bundler and no build step.</p>
+
+    <p>Everything below this line is the whole integration. The bubble in the
+      corner is real — open it and send a message.</p>
+
+    <pre><code>&lt;script src="sgiant-ai-widget.global.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  SgiantAiWidget.createAiChatWidget({
+    endpoint: "https://your-backend.example.com/chat",
+  });
+&lt;/script&gt;</code></pre>
+
+    <p class="note"><strong>About this demo:</strong> there is no server behind
+      this page — it is served as a static file. So it installs a small stub that
+      answers the widget's own request format (newline-delimited JSON) with a
+      canned reply, streamed a word at a time. That stub is at the bottom of this
+      file and is about fifteen lines; your real backend replaces it. The
+      protocol it implements is documented in
+      <a href="https://github.com/vedatugur/sgiant-ai-widget/blob/main/BACKEND.md">BACKEND.md</a>.</p>
+
+    <h2>What a backend has to do</h2>
+    <p>Answer one POST with a stream of JSON lines. Four frame types matter:
+      <code>{"type":"text","d":"…"}</code> to append text,
+      <code>{"threadId":"…"}</code> to name the conversation,
+      <code>{"type":"done"}</code> to end the turn, and
+      <code>{"type":"error","message":"…"}</code> if it fails.</p>
+
+    <script>
+      // ---- THE DEMO STUB (not part of the library) --------------------------
+      // A static page has no server, so this answers the widget's fetch itself.
+      // It streams the four frames a real backend sends, so what you see in the
+      // panel is the widget's genuine streaming path, not a mock of the UI.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+
+        const body = JSON.parse(init.body);
+        const reply =
+          "This is the real widget, streaming from a fifteen-line stub in the " +
+          "page source. You said: " + body.content;
+
+        const enc = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            send({ threadId: body.threadId || "demo-thread" });
+            for (const word of reply.split(" ")) {
+              send({ type: "text", d: word + " " });
+              await new Promise((r) => setTimeout(r, 35));
+            }
+            send({ type: "done" });
+            c.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        });
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        // `title` and `subtitle` are TOP-LEVEL options. `labels` is the
+        // translation bag for the widget's own chrome (buttons, placeholders),
+        // and putting these in there silently does nothing — which is how this
+        // example shipped its first version.
+        // `title` is interpolated into other strings ("Ask {name} anything…"),
+        // so it wants to be a NAME, not a sentence. "Ask anything" here produced
+        // the placeholder "Ask Ask anything anything…".
+        title: "Aria",
+        subtitle: "Answers come from this page",
+      });
+    </script>
+  </body>
+</html>

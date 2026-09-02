@@ -1,0 +1,47 @@
+# Publish to public npm when a v* tag is pushed.
+#
+# Tag-gated rather than push-to-main: a version number is a deliberate act, and
+# npm will not let you re-publish over one. `npm ci` + a clean build means the
+# artefact comes from the tag and not from whatever was on someone's laptop.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance: npm records which workflow built the tarball
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+      # The tarball audit. `prepublishOnly` runs it again during publish, but
+      # having it as its own step means a leak fails with a readable log line
+      # rather than inside npm's publish output.
+      - run: npm run audit
+
+      # The tag must match the version being published, or `npm dist-tag` lies
+      # about what v1.2.3 contains for the rest of the package's life.
+      - name: tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          test "$tag" = "$pkg" || {
+            echo "REFUSING: tag $GITHUB_REF_NAME does not match version $pkg"
+            exit 1
+          }
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -246,10 +246,10 @@ export interface WidgetJobView {
 }
 
 export interface AiChatWidgetOptions {
-  /** Streaming chat endpoint (POST). e.g. https://api.sgiant.io/accounts/:id/ai/chat */
+  /** Streaming chat endpoint (POST). e.g. https://api.example.com/accounts/:id/ai/chat */
   endpoint: string;
   /** Media-upload endpoint (POST multipart) for chat attachments — e.g.
-   *  https://api.sgiant.io/accounts/:id/assets/media. When set (authed
+   *  https://api.example.com/accounts/:id/assets/media. When set (authed
    *  surfaces), the composer shows a paperclip so the user can attach files the
    *  assistant reads. Uploads are sent SESSION-scoped (`session=1` + the
    *  current threadId): reachable from the chat history, never filed into the

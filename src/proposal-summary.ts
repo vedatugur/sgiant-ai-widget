@@ -9,7 +9,7 @@
  *
  * What is left is what makes the widget SAFE to publish rather than merely safe
  * for sgiant: every host's own tools land here, and a blank card is a confirm
- * gate that confirms nothing. `tests/unit/proposal-summary.test.ts` pins that.
+ * gate that confirms nothing. the confirm-card tests pin that.
  *
  * A host phrases its own tools by passing `proposalSummary` — return a string to
  * override, or null to fall through to this.

@@ -83,7 +83,7 @@ export interface PageContext {
  * "Any two lowercase letters" is NOT a locale test: `/ai` is a real marketing
  * page, and treating its first segment as a locale rewrote that entry to `/`,
  * which then matched every path with the same segment count. Mirrors
- * apps/marketing/src/i18n/config.ts; the platform `Locale` union types it, so
+ * a host's i18n config; the host's `Locale` union types it, so
  * a locale that is renamed there fails to compile here.
  */
 const LOCALE_SEGMENTS = ["en", "tr"] as const satisfies readonly Locale[];
@@ -323,9 +323,9 @@ export function makePageContext(
 
 // NOTE: `formatPageContext` and `STANDARD_ACTIONS` lived here and were deleted
 // 2026-08-05 with zero callers. Both were client-side twins of things that moved
-// server-side: prompt assembly now runs in apps/api (formatPageContextHint in
+// server-side: prompt assembly runs on the SERVER (a formatPageContextHint in
 // lib/page-context.ts) and the permitted action set is stated in
-// packages/ai-core/src/prompt.ts. Don't rebuild a client catalogue — it drifted
+// the backend's prompt builder). Don't rebuild a client catalogue — it drifted
 // from the live one (12 actions vs 5) the whole time it sat unused.
 
 /**

@@ -12,7 +12,7 @@
  * client check, uploaded fine, showed as a chip, and was silently dropped when
  * the turn resolved it.
  *
- * So the copy is gated instead of trusted: `tests/unit/ai-widget-limits.test.ts`
+ * So the copy is gated instead of trusted: a drift test in the host repo
  * asserts every value here equals its `@sgiant/shared` original. The test is a
  * monorepo devDependency, so it costs the published package nothing and still
  * fails the build the moment the two drift.

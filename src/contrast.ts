@@ -68,7 +68,7 @@ export function contrastRatio(a: string, b: string): number | null {
  *
  * Measured on the accents this repo actually ships: teal → navy 8.41, amber →
  * navy 8.73, orange → navy 5.98, and the violet default → cream 6.62. All four
- * clear 4.5:1, which `tests/unit/aiw-accent-contrast.test.ts` asserts so the
+ * clear 4.5:1, which the host repo's contrast test asserts, so the
  * next brand-colour change cannot quietly undo it.
  */
 export function resolveAccentContrast(accent: string): string | null {
