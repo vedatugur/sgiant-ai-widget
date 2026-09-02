@@ -369,6 +369,22 @@ export interface AiChatWidgetOptions {
    */
   layoutKey?: string;
   /**
+   * Prefix for every key this widget writes to `localStorage`. Defaults to
+   * `"aiw"`, which is deliberately NEUTRAL — it matches the `--aiw-*` custom
+   * properties the stylesheet already uses and names no product.
+   *
+   * It exists because a published widget writes into a stranger's browser
+   * (#306). Keys read `aiw:draft:<persistKey>`, `aiw:sound`, `aiw:opened`; a
+   * host that embeds more than one widget, or wants its own namespace, sets
+   * this.
+   *
+   * CHANGING IT ORPHANS EXISTING DATA rather than migrating it: the old keys
+   * are simply not read any more, so a returning user gets an empty draft and a
+   * default position. sgiant's own surfaces pass `"ayca"` for exactly that
+   * reason — it is what their keys were called before this option existed.
+   */
+  storageNamespace?: string;
+  /**
    * Called when the user clicks "Report issue" on an error state — wire it to
    * your Backoffice/contact endpoint so the admin team gets the failed turn.
    */
@@ -846,15 +862,18 @@ export function createAiChatWidget(
     content: string;
     attachments?: WidgetAtt[];
   };
-  const storeKey = opts.persistKey ? `ayca:v1:${opts.persistKey}` : null;
+  // Every persisted key hangs off this one prefix (#306). Neutral by default:
+  // a published widget must not write a product name into a stranger's browser.
+  const ns = opts.storageNamespace || "aiw";
+  const storeKey = opts.persistKey ? `${ns}:v1:${opts.persistKey}` : null;
   // Remember whether the panel was left open, so a page refresh restores it
   // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
   // Layout prefs (open state + position) use layoutKey so they follow the user
   // across accounts, not persistKey which re-scopes per account (see layoutKey).
   const layoutScope = opts.layoutKey ?? opts.persistKey;
-  const openStateKey = layoutScope ? `ayca:open:${layoutScope}` : null;
+  const openStateKey = layoutScope ? `${ns}:open:${layoutScope}` : null;
   // Keep the UNSENT composer draft across refreshes so typing isn't lost.
-  const draftKey = opts.persistKey ? `ayca:draft:${opts.persistKey}` : null;
+  const draftKey = opts.persistKey ? `${ns}:draft:${opts.persistKey}` : null;
   function saveDraft(v: string): void {
     writeItem(draftKey, v);
   }
@@ -936,7 +955,7 @@ export function createAiChatWidget(
     ground: "auto",
   };
 
-  const OPENED_KEY = `${PREFIX}.opened`;
+  const OPENED_KEY = `${ns}:opened`;
   function hasOpenedBefore(): boolean {
     // TRUE when storage is unreadable, unlike every other flag in this file:
     // show the pebble rather than greeting a returning reader with the
@@ -1117,7 +1136,7 @@ export function createAiChatWidget(
   // Pointer Events (not mouse events) so it works with touch and pen as well as
   // a mouse; the header sets `touch-action:none` so a drag doesn't scroll the
   // page underneath on a touchscreen.
-  const posKey = layoutScope ? `ayca:pos:${layoutScope}` : null;
+  const posKey = layoutScope ? `${ns}:pos:${layoutScope}` : null;
 
   /**
    * Below this width the panel is a FULL-SCREEN bottom sheet (see the
@@ -1447,7 +1466,7 @@ export function createAiChatWidget(
     moreMenu.appendChild(flagItem.btn);
   }
   // Notification sound — a soft chime when a reply arrives (browser-local toggle).
-  const SOUND_KEY = "sg_ayca_sound";
+  const SOUND_KEY = `${ns}:sound`;
   let soundOn = readFlag(SOUND_KEY);
   const soundItem = menuItem(L("notificationSound"));
   const syncSound = (): void => {
@@ -1495,7 +1514,7 @@ export function createAiChatWidget(
   }
   // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
-  const AUTONAV_KEY = "sg_ayca_autonav";
+  const AUTONAV_KEY = `${ns}:autonav`;
   let autoNav = readFlag(AUTONAV_KEY);
   if (opts.autoNavOption) {
     const autoNavItem = menuItem(L("autoNavigate"));
@@ -1788,7 +1807,7 @@ export function createAiChatWidget(
   /** Tracked jobs outlive the page, so they live beside the conversation in
    *  localStorage (same opt-in: no persistKey → in-memory for this session only,
    *  which is exactly today's behaviour minus the refresh). */
-  const jobsKey = opts.persistKey ? `ayca:jobs:${opts.persistKey}` : null;
+  const jobsKey = opts.persistKey ? `${ns}:jobs:${opts.persistKey}` : null;
   const TRACKED_JOB_TTL_MS = 24 * 60 * 60 * 1000;
   /** The card currently drawn for a job id. Re-pointed (not re-created) whenever
    *  the transcript is re-rendered, so a poll always paints the LIVE node. */
@@ -3427,7 +3446,7 @@ export function createAiChatWidget(
   let advFrame: HTMLIFrameElement | null = null;
   let frameUrlLabel: HTMLElement | null = null;
   let collapseBtnEl: HTMLButtonElement | null = null;
-  const advKey = opts.persistKey ? `ayca:adv:${opts.persistKey}` : "";
+  const advKey = opts.persistKey ? `${ns}:adv:${opts.persistKey}` : "";
   const rememberAdvanced = (): void => {
     writeFlag(advKey, advanced);
   };
@@ -3721,7 +3740,7 @@ export function createAiChatWidget(
   // Draggable divider between the chat column and the app pane (advanced view).
   // Drag to resize; the width persists per host so it survives reloads; a
   // double-click resets to the default. Only active in advanced, non-collapsed.
-  const advWidthKey = opts.persistKey ? `ayca:advw:${opts.persistKey}` : "";
+  const advWidthKey = opts.persistKey ? `${ns}:advw:${opts.persistKey}` : "";
   const resizer = el("div", `${PREFIX}-resizer`);
   resizer.setAttribute("role", "separator");
   resizer.setAttribute("aria-orientation", "vertical");
