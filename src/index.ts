@@ -109,15 +109,16 @@ export {
 // THE single tool-name → endpoint mapping for applying a confirm-gated write
 // proposal — every host (org/admin widget adapters, the full-page panel
 // client) calls this instead of keeping its own copy.
-// applyProposal is NOT re-exported here any more (#306). It is the sgiant
-// ADAPTER, not part of the widget core: nothing inside this package calls it —
-// index.ts only ever forwarded it — and it is the single reason the core's
-// import graph reached `@sgiant/asset-actions`. A third party embedding this
-// widget has no asset library and would have been made to carry one.
+// applyProposal is not here, and is no longer in this PACKAGE at all (#306).
+// It maps ~15 sgiant tool names onto sgiant's own REST endpoints — the
+// opposite of embeddable — and was the only reason this package's import graph
+// reached @sgiant/asset-actions, which is GitLab-restricted and so cannot
+// travel into a public repo.
 //
-// It lives at `@sgiant/ai-widget/sgiant` instead. Same function, same types,
-// one import specifier further away, and the core entry now reaches no
-// @sgiant package for the asset lane at all.
+// It moved to `@sgiant/ai-apply`, platform-side. It briefly lived at a
+// `./sgiant` subpath of this package, which got it out of the CORE but not out
+// of the published tarball — a distinction that only matters once the tarball
+// is public, which is the whole point of #306.
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";

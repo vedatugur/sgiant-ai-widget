@@ -8,10 +8,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./sgiant": {
-      "types": "./dist/apply-proposal.d.ts",
-      "default": "./dist/apply-proposal.js"
     }
   },
   "scripts": {
@@ -20,8 +16,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@sgiant/ai-agent-bridge": "1.0.0",
-    "@sgiant/asset-actions": "1.0.0"
+    "@sgiant/ai-agent-bridge": "1.0.0"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",
