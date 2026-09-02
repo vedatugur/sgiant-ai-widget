@@ -105,42 +105,27 @@ export const WIDGET_LABELS = {
   jobEvCancelledBeforeStart: "Cancelled before it started",
   jobEvInterrupted: "Interrupted by a restart — not retried automatically",
   // Proposal confirm cards
-  proposalAddImage: "Add this image to your assets?",
-  proposalEditAsset: "Apply this change to your assets?",
-  proposalSaveFile: "Save these changes to the file?",
-  proposalCreateFile: "Create this file in your library?",
-  proposalShareAsset: "Create a public share link?",
-  proposalSaveArtifact: "Save this to your asset library?",
   // The SEVEN write tools that used to hit the generic English fallback
   // ("Apply this change?") — including generate_report, the most expensive
   // confirm in the product. The widget's contract is that visible copy lives
   // here so a host can translate it; a `??` literal in the render path is
   // outside that contract and untranslatable by construction.
-  proposalGenerateReport: "Generate this report?",
-  proposalIngestWebsite: "Import this website into your assets?",
-  proposalRunBrowserFlow: "Run this browser flow?",
-  proposalSetAccountSettings: "Save these account settings?",
-  proposalManageFolders: "Apply these folder changes?",
-  proposalApplyDashboard: "Apply this dashboard?",
-  proposalSaveTemplate: "Save this as a template?",
-  proposalWordpressDraft: "Save this WordPress draft?",
+  /**
+   * The card title for a write proposal the host has not named.
+   *
+   * The fifteen sgiant-specific titles that sat beside this — and the six
+   * report-card labels — moved to @sgiant/ai-apply on 2026-09-02, along with
+   * the branches that used them. A package a stranger installs should not ship
+   * one company's tool vocabulary. Hosts pass their own via `proposalTitles`.
+   */
   proposalGeneric: "Apply this change?",
   // The generate_report confirm card. These were four hardcoded English lines
   // in `proposalSummary` — on a card the user reads before spending minutes of
   // model time, in a widget whose whole contract is that visible copy lives
   // here so it can be translated.
-  reportCardTitle: "Title: {title}",
-  reportCardPeriod: "Period: {from} → {to}",
-  reportCardAllAccounts: "Covers EVERY account (platform-wide data).",
-  reportCardNAccounts: "Covers {count} accounts' data.",
-  reportCardOutcome:
-    "Opens as a live page you can watch build. Its figures are frozen at build time; download a PDF from the page whenever you want one.",
-  reportCardBackground:
-    "Runs in the background — a notification arrives when it's ready.",
   artifactsTitle: "This chat's files:",
   artifactSave: "Save",
   artifactSaving: "Saving…",
-  proposalApiRequest: "Apply this platform action?",
   apply: "Apply",
   dismiss: "Dismiss",
   applying: "Applying…",

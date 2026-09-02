@@ -123,7 +123,10 @@ import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";
 import { PREFIX } from "./prefix";
 import { createUiRenderers } from "./ui-render";
-import { createProposalSummary } from "./proposal-summary";
+import { genericProposalSummary } from "./proposal-summary";
+// Exported so a host can fall back to it deliberately, and so the sgiant
+// phrasing in @sgiant/ai-apply can end every branch with the same floor.
+export { genericProposalSummary } from "./proposal-summary";
 import {
   addMsg,
   attIcon,
@@ -285,6 +288,26 @@ export interface AiChatWidgetOptions {
    * nav/sidebar link elsewhere in the app can summon the widget.
    */
   openEventName?: string;
+  /**
+   * How the host phrases a confirm card for its OWN write tools.
+   *
+   * The card is the security boundary — the user approves the sentence, not the
+   * tool call — so a host that has write tools should supply both of these.
+   * Anything not covered falls through to a generic renderer that describes the
+   * call from its arguments, which is what makes an unrecognised tool safe
+   * rather than blank.
+   *
+   * sgiant's own fifteen branches live in `@sgiant/ai-apply`; they were in here
+   * until 2026-09-02, naming sgiant tools to people embedding a chat bubble.
+   */
+  /** Tool name -> card TITLE. Falls back to the `proposalGeneric` label. */
+  proposalTitles?: Record<string, string>;
+  /** Tool name + args -> card BODY. Return null to use the generic renderer. */
+  proposalSummary?: (
+    name: string,
+    args: Record<string, unknown>
+  ) => string | null;
+
   /**
    * The status badge's vocabulary, all host-supplied and all optional.
    *
@@ -4334,7 +4357,15 @@ export function createAiChatWidget(
 
   // Confirm-card copy for write-tool proposals lives in ./proposal-summary
   // (#320). Pure text formatting, so it is testable without a widget.
-  const { proposalSummary, PROPOSAL_LABELS } = createProposalSummary(L);
+  // Host-supplied, with the generic renderer as the floor. `|| ` not `?? ` on
+  // purpose: a host returning "" means "nothing worth saying", and an empty
+  // card would be a confirm gate that confirms nothing.
+  const PROPOSAL_LABELS: Record<string, string> = opts.proposalTitles ?? {};
+  const proposalSummary = (
+    name: string,
+    args: Record<string, unknown>
+  ): string =>
+    opts.proposalSummary?.(name, args) || genericProposalSummary(args);
   /**
    * Render a `question` frame — the assistant asking the human to DECIDE.
    *
