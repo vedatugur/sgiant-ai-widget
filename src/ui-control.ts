@@ -1,5 +1,5 @@
 /**
- * The pure-DOM UI-control primitives now live in `@sgiant/ai-agent-bridge` (the
+ * The pure-DOM UI-control primitives now live in `sgiant-ai-agent-bridge` (the
  * generic, open-source-shareable package that both this widget and the framed
  * agent depend on). This module re-exports them so the widget's existing imports
  * (`./ui-control`) keep working unchanged — one source of truth, no duplication.
@@ -16,4 +16,4 @@ export {
   type UiControlAction,
   type AiTargetInfo,
   type OperateAction,
-} from "@sgiant/ai-agent-bridge";
+} from "sgiant-ai-agent-bridge";

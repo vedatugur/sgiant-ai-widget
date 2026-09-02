@@ -93,7 +93,7 @@ import {
   createFrameTransport,
   type FrameTransport,
   type BridgeAction,
-} from "@sgiant/ai-agent-bridge";
+} from "sgiant-ai-agent-bridge";
 export {
   AI_DOMAIN_KEYS,
   AI_ACTION_DOMAINS,
@@ -443,7 +443,7 @@ export interface AiChatWidgetOptions {
    * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
    * full-screen split: the chat on the left and the app in an <iframe> on the
    * right that Copilot can DRIVE (highlight / fill / click) via the postMessage
-   * agent bridge (`@sgiant/ai-agent-bridge`). The framed page must mount the
+   * agent bridge (`sgiant-ai-agent-bridge`). The framed page must mount the
    * agent (`mountAiAgent`). `getAdvancedUrl()` returns the embed URL for the
    * CURRENT page; `getAdvancedUrl(path)` returns it for an account-relative path
    * (used to navigate the frame). Omit to disable advanced view.

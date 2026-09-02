@@ -16,7 +16,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@sgiant/ai-agent-bridge": "1.0.0"
+    "sgiant-ai-agent-bridge": "1.0.0"
   },
   "devDependencies": {
     "@sgiant/tsconfig": "*",
