@@ -15,7 +15,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node scripts/fix-esm-extensions.mjs",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
@@ -29,5 +29,6 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "type": "module"
 }
