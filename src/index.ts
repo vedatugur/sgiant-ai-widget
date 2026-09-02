@@ -34,6 +34,14 @@ export {
 // Used locally too (the block above only RE-exports for consumers): the
 // auto-navigate gate needs to know what counts as navigation.
 import {
+  readFlag,
+  readItem,
+  readJson,
+  writeFlag,
+  writeItem,
+  writeJson,
+} from "./storage";
+import {
   CHAT_ATTACHMENT_MAX_AV_BYTES,
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
@@ -840,29 +848,13 @@ export function createAiChatWidget(
   // Keep the UNSENT composer draft across refreshes so typing isn't lost.
   const draftKey = opts.persistKey ? `ayca:draft:${opts.persistKey}` : null;
   function saveDraft(v: string): void {
-    if (!draftKey) return;
-    try {
-      if (v) localStorage.setItem(draftKey, v);
-      else localStorage.removeItem(draftKey);
-    } catch {
-      /* storage blocked */
-    }
+    writeItem(draftKey, v);
   }
   function loadDraft(): string {
-    if (!draftKey) return "";
-    try {
-      return localStorage.getItem(draftKey) ?? "";
-    } catch {
-      return "";
-    }
+    return readItem(draftKey);
   }
   function rememberOpen(isOpen: boolean): void {
-    if (!openStateKey) return;
-    try {
-      localStorage.setItem(openStateKey, isOpen ? "1" : "0");
-    } catch {
-      /* storage blocked — non-fatal */
-    }
+    writeFlag(openStateKey, isOpen);
   }
   const history: StoredMsg[] = [];
   /**
@@ -877,42 +869,32 @@ export function createAiChatWidget(
    */
   const RESTORE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   function loadState(): void {
-    if (!storeKey) return;
-    try {
-      const raw = localStorage.getItem(storeKey);
-      if (!raw) return;
-      const s = JSON.parse(raw) as {
-        threadId?: string;
-        messages?: StoredMsg[];
-        savedAt?: number;
-      };
-      // No stamp (a pre-cutoff save) counts as stale — the greeting wins.
-      if (
-        typeof s.savedAt !== "number" ||
-        Date.now() - s.savedAt > RESTORE_MAX_AGE_MS
-      ) {
-        return;
-      }
-      threadId = s.threadId;
-      if (Array.isArray(s.messages)) history.push(...s.messages);
-    } catch {
-      /* corrupt/unavailable storage — start fresh */
+    type Saved = {
+      threadId?: string;
+      messages?: StoredMsg[];
+      savedAt?: number;
+    };
+    const s = readJson<Saved>(
+      storeKey,
+      (v): v is Saved => Boolean(v) && typeof v === "object"
+    );
+    if (!s) return;
+    // No stamp (a pre-cutoff save) counts as stale — the greeting wins.
+    if (
+      typeof s.savedAt !== "number" ||
+      Date.now() - s.savedAt > RESTORE_MAX_AGE_MS
+    ) {
+      return;
     }
+    threadId = s.threadId;
+    if (Array.isArray(s.messages)) history.push(...s.messages);
   }
   function saveState(): void {
-    if (!storeKey) return;
-    try {
-      localStorage.setItem(
-        storeKey,
-        JSON.stringify({
-          threadId,
-          messages: history.slice(-40),
-          savedAt: Date.now(),
-        })
-      );
-    } catch {
-      /* storage full/blocked — non-fatal */
-    }
+    writeJson(storeKey, {
+      threadId,
+      messages: history.slice(-40),
+      savedAt: Date.now(),
+    });
   }
   loadState();
 
@@ -948,20 +930,13 @@ export function createAiChatWidget(
 
   const OPENED_KEY = `${PREFIX}.opened`;
   function hasOpenedBefore(): boolean {
-    try {
-      return localStorage.getItem(OPENED_KEY) === "1";
-    } catch {
-      // Blocked storage: show the pebble rather than greeting a returning
-      // reader with the first-visit pill on every page.
-      return true;
-    }
+    // TRUE when storage is unreadable, unlike every other flag in this file:
+    // show the pebble rather than greeting a returning reader with the
+    // first-visit pill on every page load.
+    return readFlag(OPENED_KEY, true);
   }
   function markOpened(): void {
-    try {
-      localStorage.setItem(OPENED_KEY, "1");
-    } catch {
-      /* non-fatal */
-    }
+    writeFlag(OPENED_KEY, true);
   }
 
   function resolveGround(): "light" | "ink" {
@@ -1197,27 +1172,16 @@ export function createAiChatWidget(
     panel.style.bottom = "auto";
   };
 
-  const readPos = (): { x: number; y: number } | null => {
-    if (!posKey) return null;
-    try {
-      const raw = localStorage.getItem(posKey);
-      if (!raw) return null;
-      const p = JSON.parse(raw) as { x?: number; y?: number };
-      if (typeof p?.x !== "number" || typeof p?.y !== "number") return null;
-      return { x: p.x, y: p.y };
-    } catch {
-      return null;
-    }
-  };
+  const readPos = (): { x: number; y: number } | null =>
+    readJson(
+      posKey,
+      (v): v is { x: number; y: number } =>
+        typeof (v as { x?: unknown })?.x === "number" &&
+        typeof (v as { y?: unknown })?.y === "number"
+    );
 
   const savePos = (p: { x: number; y: number } | null): void => {
-    if (!posKey) return;
-    try {
-      if (p) localStorage.setItem(posKey, JSON.stringify(p));
-      else localStorage.removeItem(posKey);
-    } catch {
-      /* storage full or blocked — position just won't persist */
-    }
+    writeJson(posKey, p);
   };
 
   const header = el("div", `${PREFIX}-header`);
@@ -1476,12 +1440,7 @@ export function createAiChatWidget(
   }
   // Notification sound — a soft chime when a reply arrives (browser-local toggle).
   const SOUND_KEY = "sg_ayca_sound";
-  let soundOn = false;
-  try {
-    soundOn = window.localStorage.getItem(SOUND_KEY) === "1";
-  } catch {
-    /* storage blocked */
-  }
+  let soundOn = readFlag(SOUND_KEY);
   const soundItem = menuItem(L("notificationSound"));
   const syncSound = (): void => {
     soundItem.ico.innerHTML = soundOn ? ICON_BELL : ICON_BELL_OFF;
@@ -1491,11 +1450,7 @@ export function createAiChatWidget(
   syncSound();
   soundItem.btn.addEventListener("click", () => {
     soundOn = !soundOn;
-    try {
-      window.localStorage.setItem(SOUND_KEY, soundOn ? "1" : "0");
-    } catch {
-      /* storage blocked */
-    }
+    writeFlag(SOUND_KEY, soundOn);
     syncSound();
     if (soundOn) maybeDing(true); // preview on enable
   });
@@ -1533,12 +1488,7 @@ export function createAiChatWidget(
   // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
   const AUTONAV_KEY = "sg_ayca_autonav";
-  let autoNav = false;
-  try {
-    autoNav = window.localStorage.getItem(AUTONAV_KEY) === "1";
-  } catch {
-    /* storage blocked */
-  }
+  let autoNav = readFlag(AUTONAV_KEY);
   if (opts.autoNavOption) {
     const autoNavItem = menuItem(L("autoNavigate"));
     autoNavItem.ico.innerHTML = ICON_COMPASS;
@@ -1551,11 +1501,7 @@ export function createAiChatWidget(
     syncAutoNav();
     autoNavItem.btn.addEventListener("click", () => {
       autoNav = !autoNav;
-      try {
-        window.localStorage.setItem(AUTONAV_KEY, autoNav ? "1" : "0");
-      } catch {
-        /* storage blocked */
-      }
+      writeFlag(AUTONAV_KEY, autoNav);
       syncAutoNav();
     });
     moreMenu.appendChild(autoNavItem.btn);
@@ -1994,37 +1940,26 @@ export function createAiChatWidget(
   }
 
   function loadTrackedJobs(): TrackedJob[] {
-    if (!jobsKey) return [];
-    try {
-      const raw = localStorage.getItem(jobsKey);
-      if (!raw) return [];
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      const cutoff = Date.now() - TRACKED_JOB_TTL_MS;
-      return parsed.filter(
-        (j): j is TrackedJob =>
-          Boolean(j) &&
-          typeof j === "object" &&
-          typeof (j as TrackedJob).jobId === "string" &&
-          typeof (j as TrackedJob).threadId === "string" &&
-          typeof (j as TrackedJob).at === "number" &&
-          (j as TrackedJob).at > cutoff
-      );
-      // NOTE the absent `kind` check: an entry written by the previous build
-      // has none, and rejecting it would drop the card for work that is still
-      // running across the deploy. `trackedRef` below defaults it.
-    } catch {
-      return []; // corrupt/unavailable storage — nothing to re-attach
-    }
+    const parsed = readJson<unknown[]>(jobsKey, (v): v is unknown[] =>
+      Array.isArray(v)
+    );
+    if (!parsed) return [];
+    const cutoff = Date.now() - TRACKED_JOB_TTL_MS;
+    // NOTE the absent `kind` check: an entry written by the previous build has
+    // none, and rejecting it would drop the card for work that is still running
+    // across the deploy. `trackedRef` below defaults it.
+    return parsed.filter(
+      (j): j is TrackedJob =>
+        Boolean(j) &&
+        typeof j === "object" &&
+        typeof (j as TrackedJob).jobId === "string" &&
+        typeof (j as TrackedJob).threadId === "string" &&
+        typeof (j as TrackedJob).at === "number" &&
+        (j as TrackedJob).at > cutoff
+    );
   }
   function saveTrackedJobs(jobs: TrackedJob[]): void {
-    if (!jobsKey) return;
-    try {
-      if (jobs.length) localStorage.setItem(jobsKey, JSON.stringify(jobs));
-      else localStorage.removeItem(jobsKey);
-    } catch {
-      /* storage blocked — the card still works for this session */
-    }
+    writeJson(jobsKey, jobs.length ? jobs : null);
   }
   /** The ref a stored entry refers to — `kind` defaults to "job" for entries
    *  written before reports had their own source. */
@@ -3486,12 +3421,7 @@ export function createAiChatWidget(
   let collapseBtnEl: HTMLButtonElement | null = null;
   const advKey = opts.persistKey ? `ayca:adv:${opts.persistKey}` : "";
   const rememberAdvanced = (): void => {
-    if (!advKey) return;
-    try {
-      localStorage.setItem(advKey, advanced ? "1" : "0");
-    } catch {
-      /* storage blocked */
-    }
+    writeFlag(advKey, advanced);
   };
 
   const setFrameUrlLabel = (url: string): void => {
@@ -3800,22 +3730,11 @@ export function createAiChatWidget(
   const setChatWidth = (px: number, persist: boolean): void => {
     const w = clampChatWidth(px);
     panel.style.setProperty("--aiw-chatw", `${w}px`);
-    if (persist && advWidthKey) {
-      try {
-        localStorage.setItem(advWidthKey, String(w));
-      } catch {
-        /* storage blocked */
-      }
-    }
+    if (persist) writeItem(advWidthKey, String(w));
   };
   const restoreChatWidth = (): void => {
-    if (!advWidthKey) return;
-    try {
-      const raw = localStorage.getItem(advWidthKey);
-      if (raw) setChatWidth(parseInt(raw, 10), false);
-    } catch {
-      /* storage blocked */
-    }
+    const raw = readItem(advWidthKey);
+    if (raw) setChatWidth(parseInt(raw, 10), false);
   };
   let resizing = false;
   const onResizeMove = (e: PointerEvent): void => {
@@ -3840,13 +3759,7 @@ export function createAiChatWidget(
   // Double-click the divider → reset to the default width.
   resizer.addEventListener("dblclick", () => {
     panel.style.removeProperty("--aiw-chatw");
-    if (advWidthKey) {
-      try {
-        localStorage.removeItem(advWidthKey);
-      } catch {
-        /* storage blocked */
-      }
-    }
+    writeItem(advWidthKey, null);
   });
 
   const openAdvanced = (): void => {
@@ -4202,13 +4115,9 @@ export function createAiChatWidget(
   // Order matters — advanced is a layout of the OPEN panel, so it can only be
   // entered after open(). openAdvanced() no-ops without `getAdvancedUrl`, so a
   // host that doesn't offer the view is unaffected.
-  try {
-    if (openStateKey && localStorage.getItem(openStateKey) === "1") {
-      open();
-      if (advKey && localStorage.getItem(advKey) === "1") openAdvanced();
-    }
-  } catch {
-    /* storage blocked — start closed */
+  if (readFlag(openStateKey)) {
+    open();
+    if (readFlag(advKey)) openAdvanced();
   }
 
   form.addEventListener("submit", (e) => {
