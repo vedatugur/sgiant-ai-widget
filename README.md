@@ -1,4 +1,4 @@
-# @sgiant/ai-widget
+# sgiant-ai-widget
 
 Framework-agnostic embeddable AI chatbox. One call mounts a floating chat bubble
 
@@ -6,7 +6,7 @@ Framework-agnostic embeddable AI chatbox. One call mounts a floating chat bubble
   site.
 
 ```ts
-import { createAiChatWidget } from "@sgiant/ai-widget";
+import { createAiChatWidget } from "sgiant-ai-widget";
 
 const chat = createAiChatWidget({
   endpoint: "https://api.sgiant.io/accounts/acc_123/ai/chat",
