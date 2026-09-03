@@ -505,6 +505,21 @@ export interface AiChatWidgetOptions {
    */
   autoNavOption?: boolean;
   /**
+   * How long the launcher sits untouched before it starts to doze — a pair of
+   * drifting zeds, and nothing else.
+   *
+   * NOT the resting state. Resting must stay still: the launcher redraw exists
+   * because the old one "stacked eight simultaneous effects at rest, so an
+   * unread reply and an idle corner animated about equally — it was loud at rest
+   * and had nothing left to say". Dozing is a DIFFERENT state that a person has
+   * to earn by leaving, so a still corner remains the normal case and an unread
+   * badge still means something.
+   *
+   * Any pointer, key, focus or scroll wakes it, as does opening the panel or any
+   * state that is not resting. 0 disables it entirely. Default 60s.
+   */
+  dozeAfterMs?: number;
+  /**
    * Offer an "auto-apply" toggle, and decide what it is allowed to apply.
    *
    * A PREDICATE, NOT A BOOLEAN, and that is the design. The widget does not know
@@ -1235,11 +1250,42 @@ export function createAiChatWidget(
     );
   }
 
+  // Assigned once the panel exists. A no-op until then, because `panel` is
+  // declared BELOW this point and reaching it eagerly would be a temporal dead
+  // zone — the same trap that took the whole widget down earlier in this file's
+  // history when a toggle read `advanced` while the menu was being built.
+  let wake: () => void = () => {};
+
   function setLauncher(next: LauncherState): void {
     Object.assign(launcher, next);
     applyLauncher();
+    wake();
   }
   const panel = el("div", `${PREFIX}-panel`);
+
+  // DOZING — earned by absence, not shown by default. See `dozeAfterMs`.
+  const dozeAfter = opts.dozeAfterMs ?? 60_000;
+  let dozeTimer: ReturnType<typeof setTimeout> | null = null;
+  function doze(): void {
+    // Only a RESTING, closed launcher may doze. A working or unread one has
+    // something to say, and saying it while asleep is a contradiction.
+    if (launcher.state !== "resting" || panel.style.display !== "none") return;
+    bubble.classList.add(`${PREFIX}-bubble-dozing`);
+  }
+  wake = (): void => {
+    bubble.classList.remove(`${PREFIX}-bubble-dozing`);
+    if (dozeTimer) clearTimeout(dozeTimer);
+    dozeTimer = dozeAfter > 0 ? setTimeout(doze, dozeAfter) : null;
+  };
+  if (dozeAfter > 0) {
+    // On the DOCUMENT and passive: a wake-up that only fired over the launcher
+    // itself would let the corner sleep while its owner worked two inches away,
+    // and the widget must not be the reason a page scrolls badly.
+    for (const ev of ["pointerdown", "pointermove", "keydown", "scroll", "focusin"]) {
+      document.addEventListener(ev, wake, { passive: true });
+    }
+    wake();
+  }
   // Theme: the stylesheet is written entirely against --aiw-* custom
   // properties, with light defaults + a prefers-color-scheme:dark token block
   // baked into the sheet. Only what the host EXPLICITLY passed goes inline on

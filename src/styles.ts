@@ -304,6 +304,18 @@ export function injectStyles(side: "left" | "right"): void {
    spilled 12px out of each side. Measured, not guessed. */
 .${PREFIX}-bubble.${PREFIX}-bubble-parked svg{width:var(--aiw-launcher-parked-icon);height:var(--aiw-launcher-parked-icon)}
 /* The unread count and the offline dot — one badge element, two looks. */
+/* DOZING. Two zeds drifting off the shoulder after a long absence — see
+   dozeAfterMs. Deliberately NOT the resting state: resting must stay still,
+   because the launcher redraw exists to stop an idle corner competing with an
+   unread reply. Dozing is earned by leaving, so a still corner is still the
+   normal case.
+   PSEUDO-ELEMENTS, not markup: the launcher is a button, and decorative text
+   inside it lands in its accessible name. Content on ::before never enters the
+   accessibility tree at all. */
+.${PREFIX}-bubble-dozing::before,.${PREFIX}-bubble-dozing::after{content:"z";position:absolute;top:2px;left:54%;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;color:currentColor;opacity:0;pointer-events:none}
+.${PREFIX}-bubble-dozing::before{animation:${PREFIX}-zz 3.6s var(--ease-out) infinite}
+.${PREFIX}-bubble-dozing::after{font-size:8px;animation:${PREFIX}-zz 3.6s var(--ease-out) 1.2s infinite}
+@keyframes ${PREFIX}-zz{0%{opacity:0;transform:translate(0,0) rotate(-6deg) scale(.7)}18%{opacity:.8}70%{opacity:.3}100%{opacity:0;transform:translate(10px,-16px) rotate(12deg) scale(1.05)}}
 .${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:var(--aiw-launcher-dot);height:var(--aiw-launcher-dot);padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
 /* GATED. There was no hover:hover query anywhere in this widget, so on a
@@ -926,6 +938,7 @@ ${darkWhenHostSaysSo}
 @keyframes ${PREFIX}-sheetup{from{opacity:0}to{opacity:1}}
 @keyframes ${PREFIX}-float{0%,100%{transform:none}}
 @keyframes ${PREFIX}-pulse{0%,100%{opacity:1}}
+@keyframes ${PREFIX}-zz{0%,100%{opacity:0}}
 @keyframes ${PREFIX}-blink{0%,100%{opacity:1}}
 @keyframes ${PREFIX}-blink2{0%,100%{opacity:1}}
 @keyframes ${PREFIX}-caret{0%,100%{opacity:1}}

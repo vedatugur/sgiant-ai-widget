@@ -122,6 +122,7 @@
       <button class="run" data-l='{"state":"parked"}'>parked</button>
       <button class="run" data-l='{"variant":"pill","state":"resting"}'>pill</button>
       <button class="run" data-l='{"variant":"pebble","state":"resting"}'>pebble</button>
+        <button class="run" id="doze">doze (idle)</button>
       <pre><code>chat.setLauncher({ state: "unread", count: 3 });
 chat.setLauncher({ state: "working" });   // a turn is running in the background
 chat.setLauncher({ state: "offline" });   // the backend is unreachable
@@ -304,6 +305,22 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
         accent: "#0ea5e9",
         avatarSvg: ROBOT,
         greeting: "Try the launcher states below, or drag me by the header.",
+        // 3s HERE so the doze is watchable; the real default is 60s. A demo that
+        // makes you wait a minute for the thing it is demonstrating teaches
+        // nobody anything.
+        dozeAfterMs: 3000,
+      });
+
+      // The demo SHOWS the dozing state rather than waiting for it. A first
+      // version tried to earn it honestly by swallowing document events for four
+      // seconds so the widget would think the page was idle — which broke the
+      // widget's own listeners and left the launcher stuck OFFLINE. Reaching for
+      // the class is the smaller lie: the real trigger is dozeAfterMs, and it is
+      // demonstrated by the 3s timeout on this page doing it by itself.
+      document.getElementById("doze").addEventListener("click", () => {
+        chat.setLauncher({ state: "resting" });
+        const bubble = document.querySelector(".sgiant-aiw-bubble");
+        if (bubble) bubble.classList.add("sgiant-aiw-bubble-dozing");
       });
 
       // POINTER TRACKING, for every copy of the mark on the page.
@@ -397,8 +414,14 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       // head centres, the antenna crosses, and the gap closes.
       document.getElementById("botpreview").innerHTML = ROBOT;
       const fit = document.createElement("style");
+      // BOTH sizes, in the same proportion. Setting only the resting one left
+      // parked falling back to the built-in default — 20px in a 40px disc, half
+      // the ratio of the 64-in-56 beside it — so clicking "parked" did not shrink
+      // the mark, it changed its proportions and the robot became unreadable.
+      // Parked should read as the same character standing further away.
       fit.textContent =
-        ".sgiant-aiw-bubble{--aiw-launcher-icon:64px;--aiw-launcher-lift:-6.3%}";
+        ".sgiant-aiw-bubble{--aiw-launcher-icon:64px;--aiw-launcher-lift:-6.3%;" +
+        "--aiw-launcher-parked-icon:46px}";
       document.head.appendChild(fit);
     </script>
   </body>

@@ -93,10 +93,23 @@ test("only two of the six launcher states move", () => {
     .flatMap((line) => [...line.matchAll(/-bubble-([a-z]+)/g)].map((m) => m[1]))
     .filter((v, i, arr) => arr.indexOf(v) === i)
     .sort();
-  assert.deepEqual(moving, ["unread", "working"]);
+  // `dozing` joined them on 2026-09-04, deliberately and with the owner asking
+  // for it. The rule this test protects is "a launcher AT REST must not compete
+  // with an unread reply" — and dozing is not at rest by default: it is earned
+  // by leaving the page alone for a minute (dozeAfterMs), it only applies to a
+  // resting, closed launcher, and any pointer, key, scroll or focus cancels it.
+  // A still corner remains the normal case, which is the property that mattered.
+  assert.deepEqual(moving, ["dozing", "unread", "working"]);
   // And `resting` is the default, so it must not carry one at all.
   const rest = src.match(/\.\$\{PREFIX\}-bubble\{([^}]*)\}/)?.[1] ?? "";
   assert.ok(!/animation:/.test(rest), "the resting launcher animates");
+  // And dozing must never be reachable from the resting CLASS alone — that would
+  // reinstate exactly what the redraw removed, under a new name.
+  assert.doesNotMatch(
+    src,
+    /-bubble-resting[^\n]*animation:/,
+    "dozing must be its own state, not resting with a coat of paint"
+  );
 });
 
 test("hover is gated, so a tap does not leave the lift stuck", () => {
