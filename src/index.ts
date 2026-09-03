@@ -158,6 +158,7 @@ export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 // transform, server payload in and render items out, with no DOM and no
 // host context — the shape #306 needs more of.
 import { type LoadedThreadItem, type ReplayMessageItem } from "./replay";
+import { startMarkMotion, type MarkMotionHandle } from "./mark-motion";
 export { buildThreadReplay } from "./replay";
 export type { LoadedThreadItem } from "./replay";
 
@@ -519,6 +520,17 @@ export interface AiChatWidgetOptions {
    * state that is not resting. 0 disables it entirely. Default 60s.
    */
   dozeAfterMs?: number;
+  /**
+   * The mark leans toward the pointer, and its eyes follow — in the launcher,
+   * in the chat header, everywhere it is drawn.
+   *
+   * It reads optional hooks out of whatever `avatarSvg` you supply and skips
+   * what is missing: `.pl` / `.pr` for eyes, `.ping` / `.glint` for parallax
+   * layers. A mark with none of them still gets the tilt.
+   *
+   * Off under prefers-reduced-motion and on coarse pointers, without asking.
+   */
+  markMotion?: boolean;
   /**
    * Offer an "auto-apply" toggle, and decide what it is allowed to apply.
    *
@@ -1277,6 +1289,20 @@ export function createAiChatWidget(
     if (dozeTimer) clearTimeout(dozeTimer);
     dozeTimer = dozeAfter > 0 ? setTimeout(doze, dozeAfter) : null;
   };
+  // The mark's physics, for EVERY copy of it — launcher and chat header alike.
+  // It lived in an example page first, which meant the demo mark followed the
+  // cursor while the identical mark in the chat header sat still.
+  let motion: MarkMotionHandle | null = null;
+  if (opts.markMotion !== false) {
+    motion = startMarkMotion(() => {
+      const hosts: HTMLElement[] = [bubble];
+      panel
+        .querySelectorAll<HTMLElement>(`.${PREFIX}-avatar`)
+        .forEach((n) => hosts.push(n));
+      return hosts;
+    });
+  }
+
   if (dozeAfter > 0) {
     // On the DOCUMENT and passive: a wake-up that only fired over the launcher
     // itself would let the corner sleep while its owner worked two inches away,
@@ -3338,6 +3364,25 @@ export function createAiChatWidget(
   // Restore an unsent draft from a prior session; keep it in sync as they type.
   input.value = loadDraft();
   input.addEventListener("input", () => saveDraft(input.value));
+  // WHILE YOU TYPE, IT WATCHES WHAT YOU TYPE. The mark stops following the
+  // pointer and looks at the composer instead — the small courtesy of appearing
+  // to read over your shoulder, and a clearer signal than any spinner that the
+  // thing is attending to you rather than to the page.
+  //
+  // Released on blur and when the field empties, so the mark goes back to the
+  // cursor rather than staring at an empty box forever.
+  const watchComposer = (): void => {
+    if (!motion) return;
+    const r = input.getBoundingClientRect();
+    motion.attend(
+      input.value.trim() || document.activeElement === input
+        ? { x: r.left + r.width * 0.18, y: r.top + r.height / 2 }
+        : null
+    );
+  };
+  input.addEventListener("input", watchComposer);
+  input.addEventListener("focus", watchComposer);
+  input.addEventListener("blur", () => motion?.attend(null));
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");

@@ -253,6 +253,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <filter id="aiwbot-soft" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="1.6"/>
     </filter>
+    <clipPath id="aiwbot-headclip"><rect x="8" y="12" width="32" height="30" rx="7.5"/></clipPath>
     <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="4.5"/></clipPath>
   </defs>
   <!-- Two shadows, because one cannot be both. The wide soft one places the
@@ -271,6 +272,17 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-fill)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-ao)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-key)"/>
+    <!-- FACES, not shading. A box reads as a box because separate planes meet at
+         an edge and jump in value; smoothing across that edge is exactly what
+         made this look like a rounded rectangle lit from the corner. The top
+         plane is angled in at its lower corners so the form has perspective
+         rather than being a flat band. -->
+    <g clip-path="url(#aiwbot-headclip)">
+      <path d="M8 12 H40 L36.4 19.4 H11.6 Z" fill="#ffffff" opacity=".2"/>
+      <path d="M40 12 V42 L33.4 38.2 V19 Z" fill="#05070f" opacity=".2"/>
+      <path d="M11.6 19.4 H36.4" stroke="#ffffff" stroke-opacity=".28" stroke-width=".5" fill="none"/>
+      <path d="M33.4 19 V38.2" stroke="#05070f" stroke-opacity=".3" stroke-width=".5" fill="none"/>
+    </g>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
     <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="5" fill="#05070f" opacity=".42"/>
     <rect x="12" y="17" width="24" height="14" rx="4.5" fill="url(#aiwbot-visor)"/>
@@ -323,79 +335,41 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
         if (bubble) bubble.classList.add("sgiant-aiw-bubble-dozing");
       });
 
-      // POINTER TRACKING, for every copy of the mark on the page.
-      //
-      // Targets are re-queried EVERY FRAME because the widget can be destroyed
-      // and recreated underneath us; a reference captured once points at a
-      // launcher that no longer exists.
-      (function track() {
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-        let px = 0, py = 0, raf = 0, seen = false;
-        const springs = new WeakMap();
-
-        function step(el, tx, ty) {
-          let st = springs.get(el);
-          if (!st) springs.set(el, (st = { x: 0, y: 0, vx: 0, vy: 0 }));
-          // A spring, not an ease. Stiffness pulls toward the target, damping
-          // bleeds the velocity, so it arrives with a little overshoot and
-          // settles. An ease only ever decays, which is why it never reads as
-          // physical.
-          const K = 0.14, D = 0.76;
-          st.vx = (st.vx + (tx - st.x) * K) * D;
-          st.vy = (st.vy + (ty - st.y) * K) * D;
-          st.x += st.vx; st.y += st.vy;
-          return st;
-        }
-
-        function paint(svg, host) {
+      // The widget now carries the physics itself (markMotion), so the launcher
+      // and the chat header track without this page doing anything. This block
+      // only drives the big PREVIEW, which is not a widget-owned element.
+      (function previewMotion() {
+        const host = document.getElementById("botpreview");
+        const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let px = 0, py = 0, raf = 0;
+        const s = { x: 0, y: 0, vx: 0, vy: 0 };
+        function frame() {
+          const svg = host && host.querySelector("svg");
+          if (!svg) { raf = 0; return; }
           const r = host.getBoundingClientRect();
-          if (!r.width) return false;
           const tx = Math.max(-1, Math.min(1, (px - (r.left + r.width / 2)) / (r.width * 1.6)));
           const ty = Math.max(-1, Math.min(1, (py - (r.top + r.height / 2)) / (r.height * 1.6)));
-          const st = step(svg, tx, ty);
+          s.vx = (s.vx + (tx - s.x) * 0.14) * 0.76;
+          s.vy = (s.vy + (ty - s.y) * 0.14) * 0.76;
+          s.x += s.vx; s.y += s.vy;
           svg.style.transform =
-            "perspective(420px) rotateY(" + (st.x * 9).toFixed(2) +
-            "deg) rotateX(" + (-st.y * 7).toFixed(2) + "deg)";
-          svg.querySelectorAll(".ping").forEach((n) => {
-            n.style.transform = "translate(" + (st.x * 1.8).toFixed(2) + "px," + (st.y * 1.1).toFixed(2) + "px)";
-          });
-          svg.querySelectorAll(".glint").forEach((n) => {
-            n.style.transform = "translate(" + (st.x * 2.6).toFixed(2) + "px," + (st.y * 1.6).toFixed(2) + "px)";
-          });
-          // Eyes travel furthest, clamped in viewBox units so it holds at any
-          // rendered size — a pupil that leaves its socket stops being an eye.
-          const ex = Math.max(-1.5, Math.min(1.5, st.x * 2.6));
-          const ey = Math.max(-1.1, Math.min(1.1, st.y * 2.0));
+            "perspective(420px) rotateY(" + (s.x * 9).toFixed(2) +
+            "deg) rotateX(" + (-s.y * 7).toFixed(2) + "deg)";
+          const ex = Math.max(-1.5, Math.min(1.5, s.x * 2.6));
+          const ey = Math.max(-1.1, Math.min(1.1, s.y * 2));
           const pl = svg.querySelector(".pl"), pr = svg.querySelector(".pr");
-          // The near eye travels further: two eyes converging on one point do
-          // not move by the same amount, and matching them is what makes drawn
-          // eyes look glassy.
-          if (pl) pl.setAttribute("transform", "translate(" + (ex * (st.x < 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
-          if (pr) pr.setAttribute("transform", "translate(" + (ex * (st.x > 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
-          return Math.abs(st.vx) + Math.abs(st.vy) > 0.0004 ||
-                 Math.abs(tx - st.x) + Math.abs(ty - st.y) > 0.002;
+          if (pl) pl.setAttribute("transform", "translate(" + (ex * (s.x < 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
+          if (pr) pr.setAttribute("transform", "translate(" + (ex * (s.x > 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
+          raf = (Math.abs(s.vx) + Math.abs(s.vy) > 0.0004 ||
+                 Math.abs(tx - s.x) + Math.abs(ty - s.y) > 0.002)
+            ? requestAnimationFrame(frame) : 0;
         }
-
-        function frame() {
-          let busy = false;
-          const preview = document.getElementById("botpreview");
-          const psvg = preview && preview.querySelector("svg");
-          if (psvg) busy = paint(psvg, preview) || busy;
-          const bubble = document.querySelector(".sgiant-aiw-bubble");
-          const bsvg = bubble && bubble.querySelector("svg");
-          if (bsvg) busy = paint(bsvg, bubble) || busy;
-          raf = busy ? requestAnimationFrame(frame) : 0;
-        }
-
         window.addEventListener("mousemove", (e) => {
-          if (reduce.matches) return;
-          px = e.clientX; py = e.clientY; seen = true;
+          if (still.matches) return;
+          px = e.clientX; py = e.clientY;
           if (!raf) raf = requestAnimationFrame(frame);
         }, { passive: true });
-        // Exposed so a check can assert the tracker EXISTS. The previous version
-        // was deleted by an unrelated edit and nothing noticed, because the test
-        // looked for pupils in the DOM rather than for the code that moves them.
-        window.__aiwTrack = { paint, frame, seen: () => seen };
+        window.__aiwTrack = { frame, seen: () => true };
       })();
 
       document.querySelectorAll("button.run[data-l]").forEach((b) => {
