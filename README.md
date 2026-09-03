@@ -31,7 +31,7 @@ npm install sgiant-ai-widget
   `data-ai-target`.
 - **[Real charts →](https://vedatugur.github.io/sgiant-ai-widget/charts.html)**
   — animated bars, an animated line with a comparison overlay, and a donut,
-  drawn with no chart library at all through `renderChartFallback`.
+  drawn with no chart library at all.
 - **[Theming →](https://vedatugur.github.io/sgiant-ai-widget/theming.html)** —
   launcher geometry as custom properties, and an inline SVG brand mark.
 
@@ -63,6 +63,40 @@ chat.open();
 The global build bundles its one dependency, so it is a single file. If your
 page already uses a bundler, prefer the module build — it shares that dependency
 instead of carrying a second copy.
+
+## Charts, if you have no chart library
+
+The widget draws a stat tile for a `kpi` and a table for anything else. That is
+deliberate: a host with real chart components should mount those through
+`renderDataWidget`, and a core carrying a second implementation would charge
+every consumer for one they do not use.
+
+For surfaces with neither — a WordPress admin page, a plain embed — there is an
+**opt-in** renderer:
+
+```ts
+import { createChartFallback } from "sgiant-ai-widget/charts";
+createAiChatWidget({ renderChartFallback: createChartFallback() });
+```
+
+```html
+<!-- or with no build step at all: a separate 3.8 kB bundle -->
+<script src="https://unpkg.com/sgiant-ai-widget/dist/sgiant-ai-widget-charts.global.js"></script>
+<script>
+  SgiantAiWidget.createAiChatWidget({
+    renderChartFallback: SgiantAiWidgetCharts.createChartFallback(),
+  });
+</script>
+```
+
+It draws `time_series`, `breakdown` and `donut`, reading your `--aiw-*` tokens
+so a chart follows the theme. It **throws** for `kpi`, `table`, `pivot_grid`,
+`heatmap`, `scatter` and `content` — which the widget catches and renders with
+its built-in instead. A bad heatmap made of rectangles is worse than a readable
+table of the same numbers.
+
+It is a floor, not a charting library. Nothing in the main entry point
+references it, so it costs zero bytes unless you ask for it.
 
 ## The backend
 

@@ -158,6 +158,10 @@ test("every entry point in package.json has a source file behind it (#306)", () 
   // real producer rather than against a file that will never exist.
   const GENERATED: Record<string, string> = {
     "./dist/sgiant-ai-widget.global.js": "scripts/build-global.mjs",
+    // The chart renderer's own global. It is a SEPARATE bundle on purpose: the
+    // widget core does not contain it, and the audience that needs it is the one
+    // with no bundler to reach the `./charts` subpath with.
+    "./dist/sgiant-ai-widget-charts.global.js": "scripts/build-global.mjs",
   };
   for (const [target, producer] of Object.entries(GENERATED))
     if (targets.includes(target))

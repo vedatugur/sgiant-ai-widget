@@ -20,30 +20,46 @@ import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
 
-const result = await build({
-  entryPoints: ["src/index.ts"],
-  outfile: `dist/${pkg.name}.global.js`,
-  bundle: true,
-  // IIFE, not UMD: the audience is a plain <script> tag. A UMD wrapper also
-  // answers to CommonJS loaders, which nothing in a browser is, and it makes
-  // the file harder to read for the one case it is FOR.
-  format: "iife",
-  globalName: "SgiantAiWidget",
-  platform: "browser",
-  target: ["es2020"],
-  minify: true,
-  sourcemap: true,
-  // Same floor as the ESM build's tsconfig target, so the two artefacts do not
-  // silently support different browsers.
-  legalComments: "none",
-  banner: {
-    js: `/*! ${pkg.name} ${pkg.version} — MIT — ${pkg.homepage} */`,
+/**
+ * Two globals, not one.
+ *
+ * The chat widget is the whole point and stays lean — the chart renderer is an
+ * opt-in subpath and is NOT in it. But a subpath is only reachable with a
+ * bundler, and the audience for the fallback renderer is precisely the audience
+ * with no bundler: a WordPress admin page, a plain embed. So it gets its own
+ * global too, and a page that wants charts loads two script tags instead of
+ * paying for charts it never draws.
+ */
+const TARGETS = [
+  { entry: "src/index.ts", out: `dist/${pkg.name}.global.js`, global: "SgiantAiWidget" },
+  {
+    entry: "src/charts.ts",
+    out: `dist/${pkg.name}-charts.global.js`,
+    global: "SgiantAiWidgetCharts",
   },
-  metafile: true,
-});
+];
 
-const out = result.metafile.outputs[`dist/${pkg.name}.global.js`];
-console.log(
-  `${pkg.name}: global build ${(out.bytes / 1024).toFixed(1)} kB ` +
-    `(window.SgiantAiWidget.createAiChatWidget)`
-);
+for (const t of TARGETS) {
+  const result = await build({
+    entryPoints: [t.entry],
+    outfile: t.out,
+    bundle: true,
+    // IIFE, not UMD: the audience is a plain <script> tag. A UMD wrapper also
+    // answers to CommonJS loaders, which nothing in a browser is, and it makes
+    // the file harder to read for the one case it is FOR.
+    format: "iife",
+    globalName: t.global,
+    platform: "browser",
+    target: ["es2020"],
+    minify: true,
+    sourcemap: true,
+    legalComments: "none",
+    banner: { js: `/*! ${pkg.name} ${pkg.version} — MIT — ${pkg.homepage} */` },
+    metafile: true,
+  });
+  const out = result.metafile.outputs[t.out];
+  console.log(
+    `${pkg.name}: ${t.out.replace("dist/", "")} ${(out.bytes / 1024).toFixed(1)} kB ` +
+      `(window.${t.global})`
+  );
+}

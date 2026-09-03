@@ -356,20 +356,28 @@ mountAiAgent();                     // no-op unless framed
             .join(", "),
       });
 
-      // The handle exposes open/close/toggle/destroy/registerRenderer/setLauncher
-      // — deliberately no programmatic `send`, since a message the user did not
-      // type is not a turn they asked for. So these buttons drive the widget's
-      // OWN composer, exactly as a person would: fill it, then press Send.
-      function ask(text) {
+      // Wait for the composer instead of guessing at frames.
+      //
+      // Two requestAnimationFrames looked like enough and was not: on the FIRST
+      // open the panel is built and its greeting rendered asynchronously, so the
+      // input existed but a value written into it did not survive. The symptom
+      // was a button that did nothing on a fresh page and worked once you had
+      // typed a message yourself — which reads as a flaky demo rather than a
+      // race, and cost a fair amount of looking in the wrong place.
+      //
+      // So: poll briefly for a composer that ACCEPTS a value, then send.
+      function ask(text, tries = 40) {
         const input = document.querySelector(".sgiant-aiw-input");
         const send = document.querySelector(".sgiant-aiw-send");
-        if (!input || !send) return false;
-        input.value = text;
-        // The composer enables Send from an input event, not from .value being
-        // assigned — assigning alone leaves the button disabled.
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        send.click();
-        return true;
+        if (input && send && !send.disabled) {
+          input.value = text;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          if (input.value === text) {
+            send.click();
+            return;
+          }
+        }
+        if (tries > 0) requestAnimationFrame(() => ask(text, tries - 1));
       }
 
       document.querySelectorAll("button.run").forEach((b) => {
@@ -377,9 +385,7 @@ mountAiAgent();                     // no-op unless framed
           pending = b.dataset.demo;
           chat.open();
           // One frame for the panel to mount before its composer exists.
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => ask(`Show me the ${pending} demo`))
-          );
+          ask(`Show me the ${pending} demo`);
         });
       });
     </script>

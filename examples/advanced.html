@@ -180,21 +180,34 @@ createAiChatWidget({ getAdvancedUrl: () =&gt; "/app" });</code></pre>
           `(${name} on ${data.target} was not routed to the frame — open Advanced view first.)`,
       });
 
-      function ask(text) {
+      // Wait for the composer instead of guessing at frames.
+      //
+      // Two requestAnimationFrames looked like enough and was not: on the FIRST
+      // open the panel is built and its greeting rendered asynchronously, so the
+      // input existed but a value written into it did not survive. The symptom
+      // was a button that did nothing on a fresh page and worked once you had
+      // typed a message yourself — which reads as a flaky demo rather than a
+      // race, and cost a fair amount of looking in the wrong place.
+      //
+      // So: poll briefly for a composer that ACCEPTS a value, then send.
+      function ask(text, tries = 40) {
         const input = document.querySelector(".sgiant-aiw-input");
         const send = document.querySelector(".sgiant-aiw-send");
-        if (!input || !send) return;
-        input.value = text;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        send.click();
+        if (input && send && !send.disabled) {
+          input.value = text;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          if (input.value === text) {
+            send.click();
+            return;
+          }
+        }
+        if (tries > 0) requestAnimationFrame(() => ask(text, tries - 1));
       }
       document.querySelectorAll("button.run").forEach((b) => {
         b.addEventListener("click", () => {
           pending = b.dataset.demo;
           chat.open();
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => ask(`Run the ${pending} scenario`))
-          );
+          ask(`Run the ${pending} scenario`);
         });
       });
     </script>
