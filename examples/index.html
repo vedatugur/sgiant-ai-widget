@@ -39,6 +39,16 @@
       protocol it implements is documented in
       <a href="https://github.com/vedatugur/sgiant-ai-widget/blob/main/BACKEND.md">BACKEND.md</a>.</p>
 
+    <h2>More examples</h2>
+    <ul>
+      <li><a href="./capabilities.html">Beyond streaming text</a> — activity
+        steps, a question, a confirm-gated write, chips, a form the model
+        designed, a card with actions, and your own renderer. Each one runs a
+        real turn, with the JSON that produced it beside it.</li>
+      <li><a href="./theming.html">Theming and the brand mark</a> — launcher
+        geometry as CSS custom properties, and an inline SVG mark.</li>
+    </ul>
+
     <h2>What a backend has to do</h2>
     <p>Answer one POST with a stream of JSON lines. Four frame types matter:
       <code>{"type":"text","d":"…"}</code> to append text,

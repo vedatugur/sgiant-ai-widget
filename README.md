@@ -10,8 +10,17 @@ and one runtime dependency.
 npm install sgiant-ai-widget
 ```
 
-**[Live example →](https://vedatugur.github.io/sgiant-ai-widget/)** — a plain
-HTML page with no bundler and no build step.
+**Live examples**, all plain HTML with no bundler and no build step:
+
+- **[Quick start →](https://vedatugur.github.io/sgiant-ai-widget/)** — a
+  `<script src>` tag and one call.
+- **[Beyond streaming text →](https://vedatugur.github.io/sgiant-ai-widget/capabilities.html)**
+  — live activity steps, the assistant asking the human to decide, a
+  confirm-gated write, suggestion chips, a form the model designed, a card with
+  its own actions, and a renderer you register yourself. Every demo runs a real
+  turn and shows the JSON that produced it.
+- **[Theming →](https://vedatugur.github.io/sgiant-ai-widget/theming.html)** —
+  launcher geometry as custom properties, and an inline SVG brand mark.
 
 ## Two ways in
 

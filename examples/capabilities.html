@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — beyond streaming text</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body {
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem;
+      }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo {
+        border: 1px solid var(--line); border-radius: .6rem;
+        padding: 1.1rem 1.2rem; margin: 1.1rem 0;
+      }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre {
+        background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem;
+        overflow-x: auto; margin: 0; font-size: .82em;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run {
+        font: inherit; font-size: .9em; cursor: pointer; margin-bottom: .7rem;
+        padding: .4rem .9rem; border-radius: .4rem;
+        border: 1px solid var(--line); background: transparent; color: inherit;
+      }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+    </style>
+  </head>
+  <body>
+    <h1>Beyond streaming text</h1>
+    <p class="sub">The widget renders more than a reply. Each button below runs a
+      real turn — the JSON beside it is exactly what the backend sent.</p>
+
+    <p class="note">This page is static, so a stub in its source answers the
+      widget's fetch with the frames shown. Nothing is faked in the UI: what you
+      see is the widget's own rendering of those frames, which is the point.
+      Open the bubble, then press a button.</p>
+
+    <div class="demo">
+      <h2>Live activity steps</h2>
+      <p>A long turn says what it is doing. Each step goes
+        <code>running</code> → <code>ok</code>, in place.</p>
+      <button class="run" data-demo="activity">Run</button>
+      <pre><code>{"type":"activity","name":"search","label":"Searching bookings","status":"running"}
+{"type":"activity","name":"search","label":"Searching bookings","status":"ok"}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>The assistant asks the human to decide</h2>
+      <p>A <code>question</code> frame renders choices. The answer goes back as
+        the next turn, so the model does not guess.</p>
+      <button class="run" data-demo="question">Run</button>
+      <pre><code>{"type":"question","prompt":"Which period should I compare against?",
+ "options":[{"id":"yoy","label":"Same month last year"},
+            {"id":"prev","label":"Previous month","description":"Shorter, noisier"}]}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>A confirm-gated write</h2>
+      <p>The model <em>proposes</em>; the user applies. The card is the security
+        boundary — everything the host would send is on it, and an unrecognised
+        tool still renders its arguments rather than a blank card.</p>
+      <button class="run" data-demo="proposal">Run</button>
+      <pre><code>{"type":"tool_proposal","name":"publish_page",
+ "args":{"slug":"/autumn-offer","title":"Autumn offer","visibility":"public"}}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>Suggestion chips</h2>
+      <p>Emitted inline in the text as a directive, not as a frame.</p>
+      <button class="run" data-demo="chips">Run</button>
+      <pre><code>[[chips:{"options":["Show me last week","Compare to last year","Export CSV"]}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>A form the model designed</h2>
+      <p>The fields are declared by the turn, not hardcoded in the UI — so a new
+        question needs no frontend release. The widget only draws it when the
+        host passes <code>onWidgetAction</code>: a form with nowhere to submit is
+        worse than no form, so the directive stays inert text without one.</p>
+      <button class="run" data-demo="form">Run</button>
+      <pre><code>[[form:{"action":"book","title":"Request a callback","submit":"Send",
+  "fields":[{"name":"name","label":"Your name","type":"text"},
+            {"name":"email","label":"Email","type":"email"},
+            {"name":"when","label":"Best time","type":"select",
+             "options":["Morning","Afternoon","Evening"]},
+            {"name":"notes","label":"Anything else?","type":"textarea"}]}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>A card with its own actions</h2>
+      <p>Items carry a status and buttons. An action can require confirmation
+        before the host is called.</p>
+      <button class="run" data-demo="ui">Run</button>
+      <pre><code>[[ui:{"title":"Three drafts are ready","layout":"list",
+  "items":[{"id":"a","title":"Autumn offer","caption":"Ready to publish",
+            "status":"ready",
+            "actions":[{"name":"say","label":"Summarise",
+                        "data":{"text":"Summarise the autumn offer"}},
+                       {"name":"publish","label":"Publish","variant":"primary",
+                        "confirm":"Publish this page?"}]}]}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>Your own renderer — the open extension point</h2>
+      <p>Register a tag and the widget hands you a DOM node and the parsed JSON.
+        This is how you render your product's own cards without forking.</p>
+      <button class="run" data-demo="custom">Run</button>
+      <pre><code>createAiChatWidget({
+  renderers: {
+    weather: (host, spec) =&gt; { host.textContent = `${spec.city}: ${spec.temp}°C`; },
+  },
+});
+
+// the model then emits:
+[[weather:{"city":"Antalya","temp":24}]]</code></pre>
+    </div>
+
+    <script>
+      // ---- THE DEMO STUB (not part of the library) ------------------------
+      // Answers the widget's own POST with the frames shown above, chosen by
+      // the message text. A real backend replaces this; the protocol is in
+      // BACKEND.md.
+      const FRAMES = {
+        activity: [
+          { type: "text", d: "Let me look that up.\n\n" },
+          { type: "activity", name: "search", label: "Searching bookings", status: "running" },
+          { type: "activity", name: "search", label: "Searching bookings", status: "ok" },
+          { type: "activity", name: "chart", label: "Building the chart", status: "running" },
+          { type: "activity", name: "chart", label: "Building the chart", status: "ok" },
+          { type: "text", d: "Done — 412 bookings in the period." },
+        ],
+        question: [
+          { type: "text", d: "I can compare two ways.\n\n" },
+          {
+            type: "question",
+            prompt: "Which period should I compare against?",
+            options: [
+              { id: "yoy", label: "Same month last year" },
+              { id: "prev", label: "Previous month", description: "Shorter, noisier" },
+            ],
+          },
+        ],
+        proposal: [
+          { type: "text", d: "Here is what I would publish.\n\n" },
+          {
+            type: "tool_proposal",
+            name: "publish_page",
+            args: { slug: "/autumn-offer", title: "Autumn offer", visibility: "public" },
+          },
+        ],
+        chips: [
+          { type: "text", d: "What would you like next?\n\n" },
+          { type: "text", d: '[[chips:{"options":["Show me last week","Compare to last year","Export CSV"]}]]' },
+        ],
+        form: [
+          { type: "text", d: "Happy to arrange that.\n\n" },
+          {
+            type: "text",
+            d:
+              '[[form:{"action":"book","title":"Request a callback","submit":"Send",' +
+              '"fields":[{"name":"name","label":"Your name","type":"text"},' +
+              '{"name":"email","label":"Email","type":"email"},' +
+              '{"name":"when","label":"Best time","type":"select","options":["Morning","Afternoon","Evening"]},' +
+              '{"name":"notes","label":"Anything else?","type":"textarea"}]}]]',
+          },
+        ],
+        ui: [
+          { type: "text", d: "Three drafts are ready.\n\n" },
+          {
+            type: "text",
+            d:
+              '[[ui:{"title":"Three drafts are ready","layout":"list","items":[' +
+              '{"id":"a","title":"Autumn offer","caption":"Ready to publish","status":"ready",' +
+              '"actions":[{"name":"say","label":"Summarise","data":{"text":"Summarise the autumn offer"}},' +
+              '{"name":"publish","label":"Publish","variant":"primary","confirm":"Publish this page?"}]},' +
+              '{"id":"b","title":"Winter teaser","caption":"Still drafting","status":"running"}]}]]',
+          },
+        ],
+        custom: [
+          { type: "text", d: "Here is today, rendered by YOUR code:\n\n" },
+          { type: "text", d: '[[weather:{"city":"Antalya","temp":24}]]' },
+        ],
+      };
+
+      let pending = "activity";
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const frames = FRAMES[pending] ?? [{ type: "text", d: "Pick a demo above." }];
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream({
+            async start(c) {
+              const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+              send({ threadId: "capabilities-demo" });
+              for (const f of frames) {
+                send(f);
+                await new Promise((r) => setTimeout(r, 260));
+              }
+              send({ type: "done" });
+              c.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        );
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Nova",
+        subtitle: "Capability tour",
+        accent: "#7c3aed",
+        // The open extension point: a tag the widget has never heard of, drawn
+        // entirely by this page.
+        renderers: {
+          weather: (host, spec) => {
+            host.style.cssText =
+              "display:inline-flex;gap:.5rem;align-items:baseline;padding:.5rem .8rem;" +
+              "border-radius:.5rem;background:rgba(124,58,237,.12);font-weight:600";
+            host.textContent = `${spec.city} — ${spec.temp}°C`;
+          },
+        },
+        // Applying a proposal is the HOST's job. A real one calls your API;
+        // this returns the sentence the card shows on success.
+        onApplyProposal: async (name, args) =>
+          `Published ${args.slug} (${name} handled by this page).`,
+        // REQUIRED for [[form:…]] and for a card's action buttons. Without it
+        // the widget deliberately refuses to draw a form — a form with nowhere
+        // to submit is worse than no form — and the directive stays as text.
+        // This example shipped without it, and the form silently did not render.
+        onWidgetAction: async (action, data) =>
+          `Received "${action}" with ${Object.keys(data).length} field(s): ` +
+          Object.entries(data)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(", "),
+      });
+
+      // The handle exposes open/close/toggle/destroy/registerRenderer/setLauncher
+      // — deliberately no programmatic `send`, since a message the user did not
+      // type is not a turn they asked for. So these buttons drive the widget's
+      // OWN composer, exactly as a person would: fill it, then press Send.
+      function ask(text) {
+        const input = document.querySelector(".sgiant-aiw-input");
+        const send = document.querySelector(".sgiant-aiw-send");
+        if (!input || !send) return false;
+        input.value = text;
+        // The composer enables Send from an input event, not from .value being
+        // assigned — assigning alone leaves the button disabled.
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        send.click();
+        return true;
+      }
+
+      document.querySelectorAll("button.run").forEach((b) => {
+        b.addEventListener("click", () => {
+          pending = b.dataset.demo;
+          chat.open();
+          // One frame for the panel to mount before its composer exists.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => ask(`Show me the ${pending} demo`))
+          );
+        });
+      });
+    </script>
+  </body>
+</html>
