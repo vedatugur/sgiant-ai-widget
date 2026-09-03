@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — past chats</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run { font: inherit; font-size: .9em; cursor: pointer; margin: 0 .5rem .7rem 0;
+        padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        padding:.25rem .55rem; border-radius:.35rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600; background:rgba(127,127,127,.16); }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./automation.html">Automation</a>
+      <a href="./history.html" aria-current="page">Past chats</a>
+      <a href="./ui.html">Chrome</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
+
+    <h1>Past chats</h1>
+    <p class="sub">
+      History is <strong>entirely the host's</strong>. The widget stores no
+      conversations; it asks, and shows what it is given. Open the widget and use
+      the history control in the header.
+    </p>
+
+    <div class="demo">
+      <h2>Two functions, and the widget has no history without them</h2>
+      <p>
+        This is the part that is easy to forget, because nothing complains. Mount
+        the widget without them and it works perfectly — it streams, it answers,
+        it remembers the current thread — and every past conversation is
+        invisible. It happened on our own hub: threads were being saved
+        server-side for weeks and nothing there ever asked for them.
+      </p>
+      <pre><code>createAiChatWidget({
+  listThreads: () =&gt; api("/accounts/123/ai/threads"),
+  loadThread: async (id) =&gt;
+    buildThreadReplay(await api(`/accounts/123/ai/threads/${id}/messages`)),
+});</code></pre>
+      <p class="note">
+        <code>listThreads</code> returns <code>{ id, title?, updatedAt?,
+        starred? }</code>. <code>loadThread</code> returns the messages oldest
+        first — pass them through <code>buildThreadReplay</code> and charts and
+        tables come back too, not just the text.
+      </p>
+    </div>
+
+    <div class="demo">
+      <h2>Whose history?</h2>
+      <p>
+        The widget does not decide. Point these at an account-scoped endpoint and
+        a person sees their own conversations for that account; point them at a
+        staff endpoint and they see their own across accounts. Our hub and our
+        dashboard deliberately read <em>different</em> lists — a staff chat about
+        an account should not appear in that account member's history.
+      </p>
+    </div>
+
+    <div class="demo">
+      <h2>Try it</h2>
+      <p>
+        Three canned conversations, served from this page. Open the widget, then
+        the history control in the header.
+      </p>
+      <button class="run" id="open">Open the widget</button>
+    </div>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      // The same fifteen-line stub as the other pages, plus canned history.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const body = JSON.parse(init.body);
+        const enc = new TextEncoder();
+        const reply = "Open the history control in the header to reopen one of " +
+          "the three past conversations. You said: " + body.content;
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            send({ threadId: body.threadId || "demo-thread" });
+            for (const w of reply.split(" ")) {
+              send({ type: "text", d: w + " " });
+              await new Promise((r) => setTimeout(r, 28));
+            }
+            send({ type: "done" });
+            c.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "application/x-ndjson" } });
+      };
+
+      const DAY = 86400000;
+      const THREADS = [
+        { id: "t-1", title: "Which room types are unmatched?", updatedAt: new Date(Date.now() - 2 * 3600e3).toISOString(), starred: true },
+        { id: "t-2", title: "Draft a post about the new sea-view suite", updatedAt: new Date(Date.now() - DAY).toISOString() },
+        { id: "t-3", title: "Why did occupancy dip last weekend?", updatedAt: new Date(Date.now() - 6 * DAY).toISOString() },
+      ];
+      const MESSAGES = {
+        "t-1": [
+          { role: "user", content: "Which room types are unmatched?" },
+          { role: "assistant", content: "Seventeen, and they cluster: **Hideaway hotel** carries eight of them. Unmatched types sell nights against zero capacity, so the per-type occupancy reads wrong while the hotel's overall figure stays correct." },
+        ],
+        "t-2": [
+          { role: "user", content: "Draft a post about the new sea-view suite" },
+          { role: "assistant", content: "Drafted and saved — it is waiting in your drafts, not published. Ask me to change the tone or the length and I will revise it there." },
+        ],
+        "t-3": [
+          { role: "user", content: "Why did occupancy dip last weekend?" },
+          { role: "assistant", content: "It did not, quite: two room types went unmatched on Friday, so their nights fell out of the per-type view. The house figure was flat." },
+        ],
+      };
+
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Copilot",
+        subtitle: "History demo",
+        accent: "#0ea5e9",
+        greeting: "Three past conversations are loaded — open the history control above.",
+        // The widget renders whatever these resolve to. No history is kept here.
+        listThreads: async () => THREADS,
+        loadThread: async (id) => MESSAGES[id] ?? [],
+        // Omit `starThread` and the star disappears from the history panel —
+        // every one of these is opt-in, and the UI follows what the host wired.
+        starThread: async (id) => {
+          const t = THREADS.find((x) => x.id === id);
+          if (t) t.starred = !t.starred;
+          return { starred: !!t?.starred };
+        },
+      });
+      document.getElementById("open").addEventListener("click", () => chat.open());
+    </script>
+  </body>
+</html>
