@@ -67,7 +67,7 @@ ${a}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
    theme option worked, because it writes INLINE styles.
    Caught by MEASURING a themed page rather than looking at it: the bubble
    reported 56x56 while the page asked for 72. */
-:where(.${e}-bubble),:where(.${e}-panel){${cr()}--aiw-font-3xs:10px;--aiw-font-2xs:11px;--aiw-font-xs:12px;--aiw-font-sm:13px;--aiw-font-md:14px;--aiw-font-lg:15px;--aiw-font-xl:16px;--aiw-font-2xl:18px;--aiw-font-3xl:30px;--aiw-radius-2xs:2px;--aiw-radius-xs:4px;--aiw-radius-sm:6px;--aiw-radius-md:8px;--aiw-radius-lg:10px;--aiw-radius-xl:12px;--aiw-radius-2xl:14px;--aiw-radius-3xl:18px;--aiw-radius-pill:999px;--aiw-launcher-size:56px;--aiw-launcher-offset:18px;--aiw-launcher-offset-sm:16px;--aiw-launcher-icon:26px;--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:22px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+:where(.${e}-bubble),:where(.${e}-panel){${cr()}--aiw-font-3xs:10px;--aiw-font-2xs:11px;--aiw-font-xs:12px;--aiw-font-sm:13px;--aiw-font-md:14px;--aiw-font-lg:15px;--aiw-font-xl:16px;--aiw-font-2xl:18px;--aiw-font-3xl:30px;--aiw-radius-2xs:2px;--aiw-radius-xs:4px;--aiw-radius-sm:6px;--aiw-radius-md:8px;--aiw-radius-lg:10px;--aiw-radius-xl:12px;--aiw-radius-2xl:14px;--aiw-radius-3xl:18px;--aiw-radius-pill:999px;--aiw-launcher-size:56px;--aiw-launcher-offset:18px;--aiw-launcher-offset-sm:16px;--aiw-launcher-icon:26px;--aiw-launcher-lift:0%;--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:22px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${e}-spin{to{transform:rotate(360deg)}}
 @keyframes ${e}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${e}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -154,11 +154,21 @@ ${a}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
    place saying the same thing. #88 ("I can't see any chatbox") is answered by
    the disc's own contrast (navy on white is 16.82:1) and, on a first visit, by
    the named pill below \u2014 a word rather than a puzzle. */
-.${e}-bubble{position:fixed;bottom:var(--aiw-launcher-offset);${t}:var(--aiw-launcher-offset);z-index:48;width:var(--aiw-launcher-size);height:var(--aiw-launcher-size);border:none;border-radius:50%;background:#151D2F;color:#FCF7E3;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:0 6px 20px rgba(21,29,47,.22);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
-/* 26 in 56. The mark was 34 at first and the object read flat \u2014 a disc with a
-   shape stamped on it rather than a mark sitting in space. The ratio is the
-   richness here, not an effect. */
-.${e}-bubble .${e}-ayca{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${e}-bubble{position:fixed;bottom:var(--aiw-launcher-offset);${t}:var(--aiw-launcher-offset);z-index:48;width:var(--aiw-launcher-size);height:var(--aiw-launcher-size);border:none;border-radius:50%;background:#151D2F;color:#FCF7E3;cursor:pointer;overflow:visible;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:0 6px 20px rgba(21,29,47,.22);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
+/* 26 in 56 BY DEFAULT, and the ratio is deliberate: the built-in mark was tried
+   at 34 and the object read flat \u2014 a disc with a shape stamped on it. Measured
+   again at 48 while trying to make a mark BREAK the disc, and the default mark
+   simply filled it and looked cropped. That is the lesson: the ratio is tuned to
+   the mark, so it cannot be a global.
+   --aiw-launcher-lift is the opt-in. A host with a TALL mark \u2014 one with an
+   antenna or ears, where the art has headroom inside its own viewBox \u2014 can
+   raise it past the edge and get a character peeking over the disc instead of
+   printed on it. Default 0%, so nobody gets it by accident.
+   overflow:visible is what allows it \u2014 and note the backticks that used to be
+   around that word broke the build: this stylesheet IS a template literal, so a
+   backtick in a comment ends the string. */
+.${e}-bubble .${e}-ayca{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${e}-bubble:hover .${e}-ayca{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
 .${e}-bubble:active{transform:translateY(0) scale(.96)}
 /* The first-visit variant: a word, not a puzzle. Collapses to the pebble once
    the reader has opened it. */
@@ -194,7 +204,12 @@ ${a}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
 }
 .${e}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${e}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.${e}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon)}
+/* ANY svg in the launcher, not just the built-in mark. The lift used to live
+   only on the built-in class, so a host that supplied its own avatarSvg got
+   the SIZE token and silently not the lift \u2014 the two halves of one feature
+   keyed to different selectors. Measured: 44px applied, translate did not. */
+.${e}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${e}-bubble:hover svg{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
 .${e}-panel{position:fixed;bottom:20px;${t}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${e}-rise var(--duration-fast) var(--ease-out);}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive

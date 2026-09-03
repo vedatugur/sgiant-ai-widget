@@ -37,6 +37,8 @@
       .avatar-copy { font-size: .92em; }
       .avatar-copy p { margin: .55rem 0; }
       .avatar-copy::after { content: ""; display: block; clear: both; }
+      .markrow { display: flex; flex-wrap: wrap; gap: .4rem; margin: .2rem 0 .9rem; }
+      .markrow .mark[aria-pressed="true"] { background: rgba(127,127,127,.2); font-weight: 600; }
       /* Below ~46rem the mark would leave three words a line. Full width, centred,
          text above and below — the stack is the honest layout at that size. */
       @media (max-width: 46rem) {
@@ -85,6 +87,21 @@
           stops read as a smoother surface, and the banding is what made the
           earlier shell look like paper.</p>
       </div>
+      <p>Three marks, same option. The launcher takes whatever SVG you hand it,
+        so the character is yours — swap one in and the corner of the page changes
+        without touching anything else.</p>
+      <div class="markrow">
+        <button class="run mark" data-mark="robot">Robot</button>
+        <button class="run mark" data-mark="orb">Orb</button>
+        <button class="run mark" data-mark="spark">Spark</button>
+      </div>
+      <p class="note" style="margin-bottom:1rem">A <strong>tall</strong> mark — one
+        with an antenna, where the art has headroom inside its own viewBox — can
+        set <code>--aiw-launcher-lift</code> and rise past the disc's edge, so it
+        reads as a character peeking over rather than a shape printed on. The
+        default is <code>0%</code>: the built-in mark was measured at 34 and then
+        48 in a 56px disc and read flat and then cropped, so the ratio is tuned to
+        the mark and cannot be a global.</p>
       <p class="note">It ends with a <code>prefers-reduced-motion</code> guard
         that stops every animation. A permanently moving thing in the corner of
         someone's screen is an accessibility problem, not a flourish — if you
@@ -250,6 +267,34 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     </g>
   </g>
 </svg>`;
+      // Two more marks, to show the option takes ANY svg. Both are deliberately
+      // simpler than the robot: a mark does not need a face, and at 56px any
+      // detail below about 3px of stroke is lost anyway.
+      const ORB = '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">'
+        + '<defs>'
+        + '<radialGradient id="orb-b" cx=".34" cy=".28" r=".75">'
+        + '<stop offset="0%" stop-color="#ffffff"/>'
+        + '<stop offset="42%" stop-color="currentColor"/>'
+        + '<stop offset="100%" stop-color="#0b1327"/></radialGradient>'
+        + '<radialGradient id="orb-s" cx=".3" cy=".24" r=".28">'
+        + '<stop offset="0%" stop-color="#ffffff" stop-opacity=".95"/>'
+        + '<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'
+        + '</defs>'
+        + '<ellipse cx="24" cy="43" rx="11" ry="1.8" fill="#0a0e1a" opacity=".25"/>'
+        + '<circle cx="24" cy="24" r="16" fill="url(#orb-b)"/>'
+        + '<ellipse cx="18.5" cy="17.5" rx="6.5" ry="5" fill="url(#orb-s)"/>'
+        + '<circle cx="24" cy="24" r="16" fill="none" stroke="#ffffff" stroke-opacity=".22"/>'
+        + '</svg>';
+      const SPARK = '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">'
+        + '<style>.sp{animation:sp 3s ease-in-out infinite;transform-origin:24px 24px}'
+        + '@keyframes sp{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:.86}}'
+        + '@media (prefers-reduced-motion:reduce){.sp{animation:none}}</style>'
+        + '<path class="sp" d="M24 6 L27.6 18.4 L40 22 L27.6 25.6 L24 38 L20.4 25.6 L8 22 L20.4 18.4 Z" fill="currentColor"/>'
+        + '<circle cx="35" cy="12" r="2.2" fill="currentColor" opacity=".65"/>'
+        + '<circle cx="13" cy="33" r="1.5" fill="currentColor" opacity=".45"/>'
+        + '</svg>';
+      const MARKS = { robot: ROBOT, orb: ORB, spark: SPARK };
+
       document.getElementById("botpreview").innerHTML = ROBOT;
 
       const chat = SgiantAiWidget.createAiChatWidget({
@@ -261,12 +306,56 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
         greeting: "Try the launcher states below, or drag me by the header.",
       });
 
-      document.querySelectorAll("button.run").forEach((b) => {
+      document.querySelectorAll("button.run[data-l]").forEach((b) => {
         b.addEventListener("click", () => {
-          chat.setLauncher(JSON.parse(b.dataset.l));
-          chat.close();
+          live.setLauncher(JSON.parse(b.dataset.l));
+          live.close();
         });
       });
+
+      // Swapping the mark REMOUNTS: `avatarSvg` is read at creation, so
+      // destroy-and-recreate is the honest demonstration rather than reaching
+      // into the widget's DOM behind its back.
+      let live = chat;
+      function useMark(name) {
+        document.getElementById("botpreview").innerHTML = MARKS[name];
+        document.querySelectorAll(".mark").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.dataset.mark === name))
+        );
+        live.destroy();
+        live = SgiantAiWidget.createAiChatWidget({
+          endpoint: "/demo-chat",
+          title: "Nova",
+          subtitle: "Chrome tour",
+          accent: "#0ea5e9",
+          avatarSvg: MARKS[name],
+          greeting: "Try the launcher states below, or drag me by the header.",
+        });
+        // TARGET THE BUBBLE, not :root. The tokens are declared ON the bubble
+        // through `:where()` — zero specificity, so a host RULE can win, but an
+        // inherited value cannot: a declaration on the element always beats
+        // inheritance no matter how weak its selector. Setting these on
+        // documentElement read back correctly and changed nothing on screen,
+        // which is exactly the trap `:where()` exists to make survivable.
+        //
+        // Only the robot has headroom above its head, so only the robot is
+        // lifted past the disc. A lift on a mark that fills its own viewBox just
+        // shoves it off-centre.
+        let sheet = document.getElementById("markvars");
+        if (!sheet) {
+          sheet = document.createElement("style");
+          sheet.id = "markvars";
+          document.head.appendChild(sheet);
+        }
+        sheet.textContent =
+          name === "robot"
+            ? ".sgiant-aiw-bubble{--aiw-launcher-icon:44px;--aiw-launcher-lift:-22%}"
+            : ".sgiant-aiw-bubble{--aiw-launcher-icon:26px;--aiw-launcher-lift:0%}";
+      }
+      document.querySelectorAll(".mark").forEach((b) =>
+        b.addEventListener("click", () => useMark(b.dataset.mark))
+      );
+      useMark("robot");
     </script>
   </body>
 </html>
