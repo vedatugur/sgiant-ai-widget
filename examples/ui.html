@@ -19,7 +19,13 @@
         padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
       button.run:hover { background: rgba(127,127,127,.14); }
       .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
-      .bigbot { width: 128px; height: 128px; color: #7dd3fc; float: right; margin: 0 0 1rem 1.4rem; }
+      /* CENTRED, not floated. Floated right it competed with the paragraph for
+         the same line and the text ragged around it; the eye had to choose. Given
+         its own band with copy above and below, it reads as the subject of the
+         card rather than as decoration beside one. */
+      .bigbot { width: 168px; height: 168px; color: #7dd3fc; margin: .5rem auto 1.2rem; }
+      .avatar-copy { font-size: .93em; }
+      .avatar-copy p { margin: .55rem 0; }
       nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
       nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
         border:1px solid var(--line); border-radius:.4rem; padding:.28rem .7rem; }
@@ -45,15 +51,23 @@
 
     <div class="demo">
       <h2>An animated avatar, in pure SVG</h2>
+      <div class="avatar-copy">
+        <p>The mark in the corner of this page is the one shown here: a small robot
+          with a lit shell, eyes that blink under fixed catchlights, a glint that
+          crosses the visor, and an antenna that pings. It is
+          <strong>one inline SVG string</strong> passed as <code>avatarSvg</code>
+          — no images, no library, no requests.</p>
+      </div>
       <div class="bigbot" id="botpreview"></div>
-      <p>The mark in the corner of this page is the one shown here: a small robot
-        with a gradient shell for depth, eyes that blink, a visor highlight that
-        drifts, and an antenna that pings. It is <strong>one inline SVG string</strong>
-        passed as <code>avatarSvg</code> — no images, no library, no requests.</p>
-      <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
-        the SVG, so it travels with the mark. The eyes and the antenna use
-        <code>currentColor</code> and take the widget's accent, while the shell
-        keeps its own metal — a mark can mix both.</p>
+      <div class="avatar-copy">
+        <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
+          the SVG, so it travels with the mark. The eyes and the antenna use
+          <code>currentColor</code> and take the widget's accent, while the shell
+          keeps its own metal — a mark can mix both.</p>
+        <p>The catchlights sit <em>outside</em> the blinking group on purpose: a
+          specular highlight belongs to the light, not to the eye, so it holds
+          position while the eye moves under it and squashes as the lid crosses.</p>
+      </div>
       <p class="note">It ends with a <code>prefers-reduced-motion</code> guard
         that stops every animation. A permanently moving thing in the corner of
         someone's screen is an accessibility problem, not a flourish — if you
