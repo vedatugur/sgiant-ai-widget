@@ -19,6 +19,10 @@ npm install sgiant-ai-widget
   confirm-gated write, suggestion chips, a form the model designed, a card with
   its own actions, and a renderer you register yourself. Every demo runs a real
   turn and shows the JSON that produced it.
+- **[The chrome →](https://vedatugur.github.io/sgiant-ai-widget/ui.html)** —
+  launcher states (`resting`, `unread`, `working`, `offline`, `parked`) driven
+  live, what the user can do to the panel, and an animated robot avatar that is
+  one inline SVG with its own `prefers-reduced-motion` guard.
 - **[Advanced mode →](https://vedatugur.github.io/sgiant-ai-widget/advanced.html)**
   — the assistant highlighting, filling and clicking inside a real app in an
   iframe, driven over
