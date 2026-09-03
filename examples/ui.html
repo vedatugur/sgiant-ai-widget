@@ -159,9 +159,9 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       const ROBOT = `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" class="aiwbot">
   <style>
     .aiwbot .bob { animation: aiwbot-bob 3.6s ease-in-out infinite; transform-origin: 24px 32px; }
-    .aiwbot .eye { animation: aiwbot-blink 5s ease-in-out infinite; transform-origin: center; }
+    .aiwbot .eye { animation: aiwbot-blink 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
     .aiwbot .eye.r { animation-delay: .05s; }
-    .aiwbot .spec { animation: aiwbot-spec 5s ease-in-out infinite; transform-origin: center; }
+    .aiwbot .spec { animation: aiwbot-spec 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
     .aiwbot .spec.r { animation-delay: .05s; }
     .aiwbot .glint { animation: aiwbot-glint 6s cubic-bezier(.45,0,.55,1) infinite; }
     .aiwbot .ping { animation: aiwbot-ping 2.8s ease-out infinite; transform-origin: 24px 8px; }
@@ -227,7 +227,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <filter id="aiwbot-soft" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="1.6"/>
     </filter>
-    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="6"/></clipPath>
+    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="4.5"/></clipPath>
   </defs>
   <!-- Two shadows, because one cannot be both. The wide soft one places the
        object in the room; the tight dark one under the chin is contact, and it is
@@ -241,23 +241,23 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <!-- A SQUIRCLE, not a pill with ears. Removing the side pods and the mouth
          bar took four shapes out and cost nothing: what read as "robot" was
          always the visor and the two lights. -->
-    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-body)"/>
-    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-key)"/>
-    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
-    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="6.6" fill="#05070f" opacity=".42"/>
-    <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-visor)"/>
-    <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-bevel)"/>
+    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-body)"/>
+    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-key)"/>
+    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
+    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="5" fill="#05070f" opacity=".42"/>
+    <rect x="12" y="17" width="24" height="14" rx="4.5" fill="url(#aiwbot-visor)"/>
+    <rect x="12" y="17" width="24" height="14" rx="4.5" fill="url(#aiwbot-bevel)"/>
     <!-- Each eye is a SOCKET that stays put and a pupil that moves inside it.
          The socket is the dark recess the eye sits in; without it a travelling
          pupil looks like a dot sliding across a face. -->
-    <ellipse cx="19.6" cy="24" rx="3.1" ry="3.5" fill="#05070f" opacity=".55"/>
-    <ellipse cx="28.4" cy="24" rx="3.1" ry="3.5" fill="#05070f" opacity=".55"/>
-    <g class="pupil pl"><ellipse cx="19.6" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye"/></g>
-    <g class="pupil pr"><ellipse cx="28.4" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye r"/></g>
+    <rect x="16.5" y="20.5" width="6.2" height="7" rx="2.1" fill="#05070f" opacity=".55"/>
+    <rect x="25.3" y="20.5" width="6.2" height="7" rx="2.1" fill="#05070f" opacity=".55"/>
+    <g class="pupil pl"><rect x="17.2" y="21.1" width="4.8" height="5.8" rx="1.6" fill="currentColor" class="eye"/></g>
+    <g class="pupil pr"><rect x="26" y="21.1" width="4.8" height="5.8" rx="1.6" fill="currentColor" class="eye r"/></g>
     <!-- Catchlights stay OUTSIDE both the pupil group and the blink group: the
          highlight belongs to the light, so the eye travels under it. -->
-    <ellipse cx="18.8" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec"/>
-    <ellipse cx="27.6" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec r"/>
+    <rect x="18.1" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec"/>
+    <rect x="26.9" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec r"/>
     <g clip-path="url(#aiwbot-visorclip)">
       <rect x="18" y="15" width="11" height="19" fill="url(#aiwbot-glintg)"
             transform="rotate(15 24 24)" class="glint"/>
