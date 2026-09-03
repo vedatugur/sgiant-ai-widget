@@ -275,6 +275,81 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
         greeting: "Try the launcher states below, or drag me by the header.",
       });
 
+      // POINTER TRACKING, for every copy of the mark on the page.
+      //
+      // Targets are re-queried EVERY FRAME because the widget can be destroyed
+      // and recreated underneath us; a reference captured once points at a
+      // launcher that no longer exists.
+      (function track() {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let px = 0, py = 0, raf = 0, seen = false;
+        const springs = new WeakMap();
+
+        function step(el, tx, ty) {
+          let st = springs.get(el);
+          if (!st) springs.set(el, (st = { x: 0, y: 0, vx: 0, vy: 0 }));
+          // A spring, not an ease. Stiffness pulls toward the target, damping
+          // bleeds the velocity, so it arrives with a little overshoot and
+          // settles. An ease only ever decays, which is why it never reads as
+          // physical.
+          const K = 0.14, D = 0.76;
+          st.vx = (st.vx + (tx - st.x) * K) * D;
+          st.vy = (st.vy + (ty - st.y) * K) * D;
+          st.x += st.vx; st.y += st.vy;
+          return st;
+        }
+
+        function paint(svg, host) {
+          const r = host.getBoundingClientRect();
+          if (!r.width) return false;
+          const tx = Math.max(-1, Math.min(1, (px - (r.left + r.width / 2)) / (r.width * 1.6)));
+          const ty = Math.max(-1, Math.min(1, (py - (r.top + r.height / 2)) / (r.height * 1.6)));
+          const st = step(svg, tx, ty);
+          svg.style.transform =
+            "perspective(420px) rotateY(" + (st.x * 9).toFixed(2) +
+            "deg) rotateX(" + (-st.y * 7).toFixed(2) + "deg)";
+          svg.querySelectorAll(".ping").forEach((n) => {
+            n.style.transform = "translate(" + (st.x * 1.8).toFixed(2) + "px," + (st.y * 1.1).toFixed(2) + "px)";
+          });
+          svg.querySelectorAll(".glint").forEach((n) => {
+            n.style.transform = "translate(" + (st.x * 2.6).toFixed(2) + "px," + (st.y * 1.6).toFixed(2) + "px)";
+          });
+          // Eyes travel furthest, clamped in viewBox units so it holds at any
+          // rendered size — a pupil that leaves its socket stops being an eye.
+          const ex = Math.max(-1.5, Math.min(1.5, st.x * 2.6));
+          const ey = Math.max(-1.1, Math.min(1.1, st.y * 2.0));
+          const pl = svg.querySelector(".pl"), pr = svg.querySelector(".pr");
+          // The near eye travels further: two eyes converging on one point do
+          // not move by the same amount, and matching them is what makes drawn
+          // eyes look glassy.
+          if (pl) pl.setAttribute("transform", "translate(" + (ex * (st.x < 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
+          if (pr) pr.setAttribute("transform", "translate(" + (ex * (st.x > 0 ? 1.12 : 0.9)).toFixed(3) + "," + ey.toFixed(3) + ")");
+          return Math.abs(st.vx) + Math.abs(st.vy) > 0.0004 ||
+                 Math.abs(tx - st.x) + Math.abs(ty - st.y) > 0.002;
+        }
+
+        function frame() {
+          let busy = false;
+          const preview = document.getElementById("botpreview");
+          const psvg = preview && preview.querySelector("svg");
+          if (psvg) busy = paint(psvg, preview) || busy;
+          const bubble = document.querySelector(".sgiant-aiw-bubble");
+          const bsvg = bubble && bubble.querySelector("svg");
+          if (bsvg) busy = paint(bsvg, bubble) || busy;
+          raf = busy ? requestAnimationFrame(frame) : 0;
+        }
+
+        window.addEventListener("mousemove", (e) => {
+          if (reduce.matches) return;
+          px = e.clientX; py = e.clientY; seen = true;
+          if (!raf) raf = requestAnimationFrame(frame);
+        }, { passive: true });
+        // Exposed so a check can assert the tracker EXISTS. The previous version
+        // was deleted by an unrelated edit and nothing noticed, because the test
+        // looked for pupils in the DOM rather than for the code that moves them.
+        window.__aiwTrack = { paint, frame, seen: () => seen };
+      })();
+
       document.querySelectorAll("button.run[data-l]").forEach((b) => {
         b.addEventListener("click", () => {
           chat.setLauncher(JSON.parse(b.dataset.l));
