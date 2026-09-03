@@ -505,6 +505,32 @@ export interface AiChatWidgetOptions {
    */
   autoNavOption?: boolean;
   /**
+   * Offer an "auto-apply" toggle, and decide what it is allowed to apply.
+   *
+   * A PREDICATE, NOT A BOOLEAN, and that is the design. The widget does not know
+   * which of a host's write tools are recoverable: saving a WordPress DRAFT and
+   * publishing a page arrive here as the same shape. Only the host knows, so the
+   * host says — a proposal is auto-applied ONLY when the toggle is on AND this
+   * returns true for it. Everything else keeps its Apply button unchanged.
+   *
+   * WHAT IT WILL NEVER DO, whatever this returns: run an in-app ACTION carrying
+   * a `confirm`, or an `operate` action (filling or clicking on the user's
+   * behalf). Those are confirm-gated by construction and this option does not
+   * reach them. Auto-apply covers PROPOSALS only.
+   *
+   * Off by default, browser-local, per user. Omit it and no toggle appears and
+   * nothing is ever auto-applied — which is what every host had before this.
+   */
+  autoApplyOption?: (name: string, args: Record<string, unknown>) => boolean;
+  /**
+   * Offer a "How automation works" panel in the More menu, explaining what the
+   * automation toggles do and — more usefully — what they will never do.
+   * Defaults to true whenever either toggle is offered: a switch that changes
+   * what an assistant may do on your behalf should explain itself where it is
+   * thrown, not in documentation nobody opens.
+   */
+  automationHelp?: boolean;
+  /**
    * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
    * full-screen split: the chat on the left and the app in an <iframe> on the
    * right that Copilot can DRIVE (highlight / fill / click) via the postMessage
@@ -808,6 +834,8 @@ import {
   ICON_EXPAND,
   ICON_COLLAPSE,
   ICON_COMPASS,
+  ICON_BOLT,
+  ICON_HELP_CIRCLE,
   ICON_ADVANCED,
   ICON_CHEVRON_R,
   ICON_DOWNLOAD,
@@ -1692,24 +1720,135 @@ export function createAiChatWidget(
   }
   // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
+  // DECLARED HERE, not with the rest of the advanced-view state further down.
+  // The auto-navigate toggle reads it while the header menu is being built, and
+  // a `let` declared after that point is in its temporal dead zone at that
+  // moment — accessing it threw "Cannot access 'advanced' before
+  // initialization" and took the WHOLE widget down on mount, not just the
+  // toggle. Caught by opening the examples page; no test asserted the widget
+  // mounts with these options set, which is the more useful gap.
+  let advanced = false;
   const AUTONAV_KEY = `${ns}:autonav`;
   let autoNav = readFlag(AUTONAV_KEY);
+  // Auto-apply: proposals the host has classified as safe are applied without
+  // the user pressing Apply. Off by default and browser-local, like auto-nav.
+  const AUTOAPPLY_KEY = `${ns}:autoapply`;
+  let autoApply = readFlag(AUTOAPPLY_KEY);
+  let syncAutomation = (): void => {};
   if (opts.autoNavOption) {
     const autoNavItem = menuItem(L("autoNavigate"));
     autoNavItem.ico.innerHTML = ICON_COMPASS;
     const syncAutoNav = (): void => {
-      autoNavItem.setState(autoNav);
-      autoNavItem.btn.title = autoNav
-        ? L("autoNavOnHint")
-        : L("autoNavOffHint");
+      // ADVANCED MODE PINS IT ON, and now says so instead of lying about it.
+      // Advanced has always auto-run pure navigation unconditionally — the guard
+      // downstream reads `(autoNav || advanced)` — so a toggle showing "off"
+      // there was describing behaviour that was not happening. Pinned and
+      // disabled is the honest rendering of what the code already does.
+      const pinned = advanced;
+      autoNavItem.setState(pinned || autoNav);
+      (autoNavItem.btn as HTMLButtonElement).disabled = pinned;
+      autoNavItem.btn.title = pinned
+        ? L("autoNavPinnedHint")
+        : autoNav
+          ? L("autoNavOnHint")
+          : L("autoNavOffHint");
     };
     syncAutoNav();
     autoNavItem.btn.addEventListener("click", () => {
+      if (advanced) return;
       autoNav = !autoNav;
       writeFlag(AUTONAV_KEY, autoNav);
       syncAutoNav();
     });
     moreMenu.appendChild(autoNavItem.btn);
+    const prevNav = syncAutomation;
+    syncAutomation = (): void => {
+      prevNav();
+      syncAutoNav();
+    };
+  }
+  // Auto-apply — PROPOSALS ONLY, and only those the host says are safe. Never
+  // pinned by advanced mode: advanced makes the assistant faster at moving
+  // around, which is not a reason to let it write without being asked.
+  if (opts.autoApplyOption) {
+    const autoApplyItem = menuItem(L("autoApply"));
+    autoApplyItem.ico.innerHTML = ICON_BOLT;
+    const syncAutoApply = (): void => {
+      autoApplyItem.setState(autoApply);
+      autoApplyItem.btn.title = autoApply
+        ? L("autoApplyOnHint")
+        : L("autoApplyOffHint");
+    };
+    syncAutoApply();
+    autoApplyItem.btn.addEventListener("click", () => {
+      autoApply = !autoApply;
+      writeFlag(AUTOAPPLY_KEY, autoApply);
+      syncAutoApply();
+    });
+    moreMenu.appendChild(autoApplyItem.btn);
+    const prevApply = syncAutomation;
+    syncAutomation = (): void => {
+      prevApply();
+      syncAutoApply();
+    };
+  }
+  // "How automation works" — the explainer.
+  //
+  // WHY IT IS IN THE MENU AND NOT IN DOCS. These two switches change what an
+  // assistant may do on someone's behalf. The person deciding is standing in a
+  // dropdown, not reading a manual, and "Auto-apply — on/off" tells them nothing
+  // about what is still going to ask them first. The panel is deliberately
+  // heavier on what NEVER happens than on what does: that is the part a person
+  // needs to trust the switch, and the part they cannot infer from the label.
+  const offersAutomation = Boolean(opts.autoNavOption || opts.autoApplyOption);
+  if (offersAutomation && opts.automationHelp !== false) {
+    const helpItem = menuItem(L("automationHelp"));
+    helpItem.ico.innerHTML = ICON_HELP_CIRCLE;
+    // No on/off state — it is a door, not a switch.
+    helpItem.btn.querySelector(`.${PREFIX}-menu-state`)?.remove();
+    helpItem.btn.addEventListener("click", () => {
+      // `setMenu(false)`, not a class the menu does not use. The first version
+      // removed `-more-open` from the wrapper; the menu is opened by toggling
+      // `-menu-open` on the MENU, so the dropdown stayed up on top of the panel
+      // it had just opened. Nothing threw — it just looked wrong, which is why
+      // it took opening the page to see.
+      setMenu(false);
+      const sheet = el("div", `${PREFIX}-automation`);
+      const card = el("div", `${PREFIX}-automation-card`);
+      const h = el("h3", `${PREFIX}-automation-title`);
+      h.textContent = L("automationHelpTitle");
+      card.appendChild(h);
+      const lines: string[] = [];
+      if (opts.autoNavOption) {
+        lines.push(advanced ? L("automationHelpNavPinned") : L("automationHelpNav"));
+      }
+      if (opts.autoApplyOption) lines.push(L("automationHelpApply"));
+      lines.push(L("automationHelpNever"));
+      lines.push(L("automationHelpLocal"));
+      for (const text of lines) {
+        const para = el("p", `${PREFIX}-automation-line`);
+        para.textContent = text;
+        card.appendChild(para);
+      }
+      const close = el("button", `${PREFIX}-automation-close`) as HTMLButtonElement;
+      close.type = "button";
+      close.textContent = L("automationHelpClose");
+      const dismiss = (): void => sheet.remove();
+      close.addEventListener("click", dismiss);
+      // Click-outside and Escape both close it — a panel that traps someone who
+      // opened it out of curiosity teaches them not to open things.
+      sheet.addEventListener("click", (e) => {
+        if (e.target === sheet) dismiss();
+      });
+      sheet.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Escape") dismiss();
+      });
+      card.appendChild(close);
+      sheet.appendChild(card);
+      panel.appendChild(sheet);
+      close.focus();
+    });
+    moreMenu.appendChild(helpItem.btn);
   }
   // The "More" menu holds the secondary controls; drop it into the header after
   // the primary actions (new chat / history), before expand + close.
@@ -3600,7 +3739,6 @@ export function createAiChatWidget(
   // that Copilot drives via the agent bridge. Navigation moves the FRAME; on-page
   // actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
   // hit the app the user is watching — not the parent shell behind the overlay.
-  let advanced = false;
   let advancedFull = false;
   let paneCollapsed = false;
   let transport: FrameTransport | null = null;
@@ -4875,6 +5013,21 @@ export function createAiChatWidget(
     wrap.appendChild(row);
     log.appendChild(wrap);
     scrollDown(true);
+    // AUTO-APPLY — three conditions, all required, and each one is a decision.
+    //
+    //  1. the user turned it on. Off by default, browser-local, theirs.
+    //  2. the HOST says this particular write is safe to apply unasked. The
+    //     widget cannot tell a draft from a publish — they arrive here as the
+    //     same shape — so it never guesses; no predicate means nothing applies.
+    //  3. the card asks the user for NOTHING. `fields` are inputs the assistant
+    //     explicitly requested; applying past them would answer a question that
+    //     was put to the person, using whatever the model guessed.
+    //
+    // The card is still rendered and still says what happened. Auto-apply
+    // removes a click, not the record of the change.
+    if (autoApply && !fields.length && opts.autoApplyOption?.(name, args)) {
+      apply.click();
+    }
   }
 
   /**

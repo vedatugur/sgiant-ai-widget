@@ -59,6 +59,26 @@ export const WIDGET_LABELS = {
   autoNavigate: "Auto-navigate",
   autoNavOnHint: "Copilot opens pages for you — click to turn off",
   autoNavOffHint: "Copilot asks before opening pages — click to turn on",
+  autoNavPinnedHint:
+    "Advanced view always opens pages itself — this cannot be turned off here",
+  autoApply: "Auto-apply",
+  autoApplyOnHint:
+    "Copilot applies safe changes for you — click to turn off",
+  autoApplyOffHint:
+    "Copilot asks before applying any change — click to turn on",
+  automationHelp: "How automation works",
+  automationHelpTitle: "What Copilot may do on its own",
+  automationHelpNav:
+    "Auto-navigate — Copilot opens pages by itself. Only pages: anything that changes something still asks.",
+  automationHelpNavPinned:
+    "In Advanced view Copilot always opens pages itself. That is what Advanced view is, so it cannot be switched off here.",
+  automationHelpApply:
+    "Auto-apply — Copilot applies changes this site has marked as safe to undo, such as saving a draft, without asking each time.",
+  automationHelpNever:
+    "Never done automatically, whatever these are set to: publishing, deleting, anything that costs credits, and anything that types or clicks on your behalf. Those always ask you first.",
+  automationHelpLocal:
+    "Both settings live in this browser only. They are yours, not the site's, and other people see their own.",
+  automationHelpClose: "Close",
   // Status bar (Copilot role + credits)
   roleTalk: "Talk",
   roleAnalytics: "Analytics",

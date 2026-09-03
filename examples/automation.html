@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — automation: what it may do on its own</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run { font: inherit; font-size: .9em; cursor: pointer; margin: 0 .5rem .7rem 0;
+        padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      table { border-collapse: collapse; width: 100%; font-size: .9em; margin: .6rem 0 0; }
+      th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { font-weight: 600; opacity: .75; }
+      td.no { opacity: .95; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        padding:.25rem .55rem; border-radius:.35rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600; background:rgba(127,127,127,.16); }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./automation.html" aria-current="page">Automation</a>
+      <a href="./ui.html">Chrome</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
+
+    <h1>Automation</h1>
+    <p class="sub">
+      Two switches decide what the assistant may do without asking you. Open the
+      widget, then <strong>More → How automation works</strong> — the panel is
+      part of the widget, not this page.
+    </p>
+
+    <div class="demo">
+      <h2>The rule, before the options</h2>
+      <p>
+        A control that changes what an assistant may do on your behalf should be
+        able to say so where you throw it. These are the lines the widget will
+        not cross, whatever the toggles are set to:
+      </p>
+      <table>
+        <tr><th>Always automatic when enabled</th><th class="no">Never automatic</th></tr>
+        <tr>
+          <td>Opening a page (pure navigation, no state change)</td>
+          <td class="no">Anything carrying a <code>confirm</code></td>
+        </tr>
+        <tr>
+          <td>Applying a write the <em>host</em> classified as safe</td>
+          <td class="no">Typing or clicking on your behalf (<code>operate</code>)</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td class="no">A card that asked you for input</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="demo">
+      <h2>Auto-navigate</h2>
+      <p>
+        Off by default, stored in this browser, per person. In
+        <strong>advanced view</strong> it is pinned ON and the toggle is
+        disabled — advanced view has always driven the frame itself, and a
+        switch reading “off” while doing it was the UI telling a lie.
+      </p>
+      <pre><code>createAiChatWidget({ autoNavOption: true });</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>Auto-apply</h2>
+      <p>
+        A <strong>predicate, not a boolean</strong>. The widget cannot tell a
+        draft from a publish — they arrive as the same shape — so it never
+        guesses. The host says which writes are safe to apply unasked, and a
+        host that passes nothing gets no toggle and no auto-apply.
+      </p>
+      <pre><code>createAiChatWidget({
+  // Recoverable writes only. Everything else keeps its Apply button.
+  autoApplyOption: (name) =&gt;
+    name === "wp_upsert_post" || name === "save_artifact_to_assets",
+});</code></pre>
+      <p class="note">
+        Three conditions must all hold before anything is applied: the person
+        turned it on, the host returned true for that specific write, and the
+        card asked for nothing. Fields on a card are the assistant asking
+        <em>you</em> — applying past them answers your question with a guess.
+      </p>
+    </div>
+
+    <div class="demo">
+      <h2>Try it</h2>
+      <p>
+        The bubble in the corner is the real widget with both options set. Open
+        <strong>More</strong> to see the toggles and the explainer panel.
+      </p>
+      <button class="run" id="ask">Open the widget</button>
+    </div>
+
+    <script>
+      // Same fifteen-line stub as the other pages: this site is static, so the
+      // page answers the widget's own newline-delimited JSON protocol itself.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const body = JSON.parse(init.body);
+        const reply =
+          "Open More → How automation works to see what these switches do, " +
+          "and what they will never do. You said: " + body.content;
+        const enc = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            send({ threadId: body.threadId || "demo-thread" });
+            for (const word of reply.split(" ")) {
+              send({ type: "text", d: word + " " });
+              await new Promise((r) => setTimeout(r, 28));
+            }
+            send({ type: "done" });
+            c.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        });
+      };
+    </script>
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Copilot",
+        subtitle: "Automation demo",
+        accent: "#0ea5e9",
+        greeting: "Open More to see the two switches and what they promise.",
+        autoNavOption: true,
+        // Deliberately narrow, and that is the point of a predicate: this demo
+        // would auto-apply a draft and would not auto-apply a publish.
+        autoApplyOption: (name) =>
+          name === "wp_upsert_post" || name === "save_artifact_to_assets",
+        onApplyProposal: async (name) => "Applied " + name + " (demo).",
+      });
+      // The handle exposes open/close/toggle/destroy/setLauncher/registerRenderer
+      // — there is no `send`. Opening is the honest button: the point of this
+      // page is the More menu, not a scripted message.
+      document.getElementById("ask").addEventListener("click", () => chat.open());
+    </script>
+  </body>
+</html>

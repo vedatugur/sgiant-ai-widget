@@ -607,6 +607,20 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-menu-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .${PREFIX}-menu-state{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-pill);padding:2px 7px}
 .${PREFIX}-menu-item-on .${PREFIX}-menu-state{color:var(--aiw-accent-contrast);background:var(--aiw-accent)}
+/* The automation explainer. A sheet INSIDE the panel, not a page-level modal:
+   the widget may be embedded in someone else's admin, and a fixed overlay there
+   would dim their page to explain our setting. */
+.${PREFIX}-automation{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:14px;background:color-mix(in srgb,var(--aiw-surface,#161616) 88%,transparent);backdrop-filter:blur(4px)}
+.${PREFIX}-automation-card{width:100%;max-width:340px;max-height:100%;overflow:auto;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-lg,14px);background:var(--aiw-surface-raised,var(--aiw-surface,#1d1d1d));padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.28)}
+.${PREFIX}-automation-title{margin:0 0 10px;font-size:var(--aiw-font-sm);font-weight:700;color:var(--aiw-text)}
+/* A disabled toggle must still read as ON when it is pinned — greyed-out text
+   that says "on" is how a person concludes the label is lying. */
+.${PREFIX}-menu-item:disabled{cursor:default}
+.${PREFIX}-menu-item:disabled .${PREFIX}-menu-label{opacity:.72}
+.${PREFIX}-automation-line{margin:0 0 9px;font-size:var(--aiw-font-xs);line-height:1.5;color:var(--aiw-muted)}
+.${PREFIX}-automation-line:last-of-type{margin-bottom:12px}
+.${PREFIX}-automation-close{width:100%;padding:8px 12px;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius,10px);background:transparent;color:var(--aiw-text);font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
+.${PREFIX}-automation-close:hover{background:var(--aiw-surface-2,rgba(127,127,127,.16))}
 .${PREFIX}-autonav{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-lg);padding:8px 12px;font-size:var(--aiw-font-sm);font-weight:600;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 40px)}
 .${PREFIX}-expanded .${PREFIX}-msg{max-width:min(75%,62ch)}
