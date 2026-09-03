@@ -116,12 +116,12 @@
         the rest stays. Each button below closes the panel, because the launcher
         is only visible when the panel is shut.</p>
       <button class="run" data-l='{"state":"resting"}'>resting</button>
-      <button class="run" data-l='{"state":"unread","count":3}'>unread · 3</button>
+      <button class="run" data-l='{"state":"unread","count":3,"variant":"pebble"}'>unread · 3</button>
       <button class="run" data-l='{"state":"working"}'>working</button>
       <button class="run" data-l='{"state":"offline"}'>offline</button>
       <button class="run" data-l='{"state":"parked"}'>parked</button>
-      <button class="run" data-l='{"variant":"pill"}'>pill</button>
-      <button class="run" data-l='{"variant":"pebble"}'>pebble</button>
+      <button class="run" data-l='{"variant":"pill","state":"resting"}'>pill</button>
+      <button class="run" data-l='{"variant":"pebble","state":"resting"}'>pebble</button>
       <pre><code>chat.setLauncher({ state: "unread", count: 3 });
 chat.setLauncher({ state: "working" });   // a turn is running in the background
 chat.setLauncher({ state: "offline" });   // the backend is unreachable
@@ -214,6 +214,31 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       <stop offset="86%"  stop-color="#000000" stop-opacity="0"/>
       <stop offset="100%" stop-color="#000000" stop-opacity=".5"/>
     </linearGradient>
+    <!-- GLASS HAS THICKNESS. A brow shadow falling INTO the top of the visor,
+         and a bounce pooling at the bottom where light returns off the inside of
+         the far wall. Together they say "a cavity with a lens over it" — a flat
+         dark panel with eyes on it says nothing. -->
+    <linearGradient id="aiwbot-brow" x1=".5" y1="0" x2=".5" y2=".55">
+      <stop offset="0%"   stop-color="#000000" stop-opacity=".62"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="aiwbot-pool" x1=".5" y1="1" x2=".5" y2=".45">
+      <stop offset="0%"   stop-color="#7fa9ff" stop-opacity=".22"/>
+      <stop offset="100%" stop-color="#7fa9ff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- FILL LIGHT from the opposite side. One light makes a shape readable; a
+         second, cooler and much weaker, is what stops the shadow side going
+         dead and reads as a room rather than a spotlight. -->
+    <linearGradient id="aiwbot-fill" x1="1" y1=".35" x2=".45" y2=".8">
+      <stop offset="0%"   stop-color="#bcd2ff" stop-opacity=".3"/>
+      <stop offset="100%" stop-color="#bcd2ff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Ambient occlusion along the very bottom of the shell, where least light
+         reaches. Without it the head reads as evenly lit from every angle. -->
+    <linearGradient id="aiwbot-ao" x1=".5" y1="1" x2=".5" y2=".72">
+      <stop offset="0%"   stop-color="#05070f" stop-opacity=".4"/>
+      <stop offset="100%" stop-color="#05070f" stop-opacity="0"/>
+    </linearGradient>
     <linearGradient id="aiwbot-glintg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
       <stop offset="48%"  stop-color="#e2ecff" stop-opacity=".85"/>
@@ -242,6 +267,8 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
          bar took four shapes out and cost nothing: what read as "robot" was
          always the visor and the two lights. -->
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-body)"/>
+    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-fill)"/>
+    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-ao)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-key)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
     <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="5" fill="#05070f" opacity=".42"/>
@@ -258,6 +285,10 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
          highlight belongs to the light, so the eye travels under it. -->
     <rect x="18.1" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec"/>
     <rect x="26.9" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec r"/>
+    <g clip-path="url(#aiwbot-visorclip)">
+      <rect x="12" y="17" width="24" height="7" fill="url(#aiwbot-brow)"/>
+      <rect x="12" y="25" width="24" height="6" fill="url(#aiwbot-pool)"/>
+    </g>
     <g clip-path="url(#aiwbot-visorclip)">
       <rect x="18" y="15" width="11" height="19" fill="url(#aiwbot-glintg)"
             transform="rotate(15 24 24)" class="glint"/>

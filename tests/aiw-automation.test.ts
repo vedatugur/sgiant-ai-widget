@@ -127,3 +127,26 @@ test("both settings are described as browser-local, because they are", () => {
   assert.match(labels, /automationHelpLocal:[\s\S]{0,120}browser/i);
   assert.match(widgetSrc, /AUTOAPPLY_KEY = `\$\{ns\}:autoapply`/);
 });
+
+test("no backticks inside the stylesheet's comments", () => {
+  // THE STYLESHEET IS A TEMPLATE LITERAL, so a backtick anywhere in it — including
+  // inside a /* comment */ — ends the string and breaks the build with a parse
+  // error pointing at a line that looks fine. I did this THREE TIMES in one
+  // session, twice in comments that were themselves warning about it, which is
+  // the clearest possible argument for a check instead of care.
+  // Scoped to the CSS STRING, not the whole file: the module's own JSDoc sits
+  // outside the literal and may use backticks freely. Checking everything was
+  // this test's first rule and it flagged three innocent doc comments — a guard
+  // that cries wolf gets deleted, which would leave the real hazard unwatched.
+  const src = readFileSync("src/styles.ts", "utf8");
+  const from = src.indexOf("const css = `");
+  assert.ok(from > 0, "the stylesheet template literal must be findable");
+  const cssBody = src.slice(from + "const css = `".length);
+  const comments = cssBody.match(/\/\*[\s\S]*?\*\//g) ?? [];
+  const offenders = comments.filter((c) => c.includes("`"));
+  assert.deepEqual(
+    offenders.map((c) => c.slice(0, 60)),
+    [],
+    "a backtick in a comment terminates the CSS template literal"
+  );
+});

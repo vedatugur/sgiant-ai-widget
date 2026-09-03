@@ -278,19 +278,18 @@ export function injectStyles(side: "left" | "right"): void {
    overflow:visible is what allows it — and note the backticks that used to be
    around that word broke the build: this stylesheet IS a template literal, so a
    backtick in a comment ends the string. */
-.${PREFIX}-bubble .${PREFIX}-ayca{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
-.${PREFIX}-bubble:hover .${PREFIX}-ayca{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
+/* Superseded by the .bubble svg rules below, which reach ANY mark. */
 .${PREFIX}-bubble:active{transform:translateY(0) scale(.96)}
 /* The first-visit variant: a word, not a puzzle. Collapses to the pebble once
    the reader has opened it. */
 .${PREFIX}-bubble-pill{width:auto;height:var(--aiw-launcher-pill-height);border-radius:var(--aiw-radius-pill);padding:0 18px 0 14px}
-.${PREFIX}-bubble-pill .${PREFIX}-ayca{width:var(--aiw-launcher-pill-icon);height:var(--aiw-launcher-pill-icon)}
+.${PREFIX}-bubble.${PREFIX}-bubble-pill svg{width:var(--aiw-launcher-pill-icon);height:var(--aiw-launcher-pill-icon)}
 .${PREFIX}-bubble-pill .${PREFIX}-bubble-label{display:block}
 .${PREFIX}-bubble-label{display:none;font:inherit;font-size:var(--aiw-font-md);font-weight:600;white-space:nowrap}
 /* Only TWO of the six states move, which is what makes movement mean
    something again. */
 .${PREFIX}-bubble-unread{animation:${PREFIX}-pulse var(--duration-slow,420ms) var(--ease-out) 1}
-.${PREFIX}-bubble-working .${PREFIX}-ayca{animation:${PREFIX}-breathe 2.4s var(--ease-in-out) infinite}
+.${PREFIX}-bubble.${PREFIX}-bubble-working svg{animation:${PREFIX}-breathe 2.4s var(--ease-in-out) infinite}
 .${PREFIX}-bubble-offline{opacity:.72}
 /* A DOT, not the count badge in grey. It reuses the same element, and the
    count's geometry (18px min-width plus 5px of padding, sized for two digits)
@@ -299,7 +298,11 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{min-width:0;width:var(--aiw-launcher-dot-sm);height:var(--aiw-launcher-dot-sm);padding:0;top:4px;background:var(--aiw-muted);box-shadow:0 0 0 2px #151D2F}
 .${PREFIX}-bubble-offline.${PREFIX}-on-ink .${PREFIX}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
 .${PREFIX}-bubble-parked{width:var(--aiw-launcher-parked-size);height:var(--aiw-launcher-parked-size);opacity:.6}
-.${PREFIX}-bubble-parked .${PREFIX}-ayca{width:var(--aiw-launcher-parked-icon);height:var(--aiw-launcher-parked-icon)}
+/* BOTH classes, so the state beats the base rule. They had equal specificity
+   and the generic .bubble svg rule is written LATER in this sheet, so it won
+   every time: parked shrank its disc to 40px while the mark stayed at 64 and
+   spilled 12px out of each side. Measured, not guessed. */
+.${PREFIX}-bubble.${PREFIX}-bubble-parked svg{width:var(--aiw-launcher-parked-icon);height:var(--aiw-launcher-parked-icon)}
 /* The unread count and the offline dot — one badge element, two looks. */
 .${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:var(--aiw-launcher-dot);height:var(--aiw-launcher-dot);padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
@@ -311,7 +314,11 @@ export function injectStyles(side: "left" | "right"): void {
    interactive" after the shadow and the pointer. */
 @media (hover: hover) and (pointer: fine){
 .${PREFIX}-bubble:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(21,29,47,.3)}
-.${PREFIX}-bubble:hover .${PREFIX}-ayca{transform:rotate(-12deg)}
+/* The hover rotate is GONE. It set transform on the same element as the
+   lift, so whichever rule won, the other silently did nothing — and it was
+   keyed to the built-in mark's class, so a host with its own avatarSvg never
+   saw either. Hover is the lift alone now, which composes with the pointer
+   tracking instead of fighting it. */
 }
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}

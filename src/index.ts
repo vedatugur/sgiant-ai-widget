@@ -1210,7 +1210,9 @@ export function createAiChatWidget(
     const label = bubble.querySelector(
       `.${PREFIX}-bubble-label`
     ) as HTMLElement | null;
-    for (const s of ["unread", "working", "offline", "parked"]) {
+    // "resting" is the ABSENCE of the others, so it never carried a class —
+    // and a state you cannot select is a state you cannot decorate.
+    for (const s of ["resting", "unread", "working", "offline", "parked"]) {
       bubble.classList.toggle(`${PREFIX}-bubble-${s}`, launcher.state === s);
     }
     bubble.classList.toggle(
