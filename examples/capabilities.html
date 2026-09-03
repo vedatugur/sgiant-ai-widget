@@ -117,6 +117,61 @@
     </div>
 
     <div class="demo">
+      <h2>Statistics — a chart frame, and what you actually get</h2>
+      <p>A <code>render_chart</code> frame carries <code>spec</code> (the model's
+        arguments) and <code>rows</code> (the data). The widget never fetches
+        anything itself — your backend decides what the numbers are.</p>
+      <p>What draws them is a cascade of four, each falling through to the next:
+        the advanced pane, a host React renderer
+        (<code>renderDataWidget</code>), a host chart library
+        (<code>renderChartFallback</code>), and finally the built-in degrade.
+        <strong>This page passes none of them</strong>, so both buttons below
+        show the last tier — exactly what an embed with no chart library gets
+        out of the box: a stat tile for a <code>kpi</code>, a table for
+        everything else.</p>
+      <button class="run" data-demo="kpi">Run — kpi</button>
+      <button class="run" data-demo="table">Run — rows</button>
+      <pre><code>{"type":"widget","spec":{"title":"Revenue this month","chartType":"kpi"},
+ "rows":[{"metric":"revenue","value":"€48,210"}]}
+
+{"type":"widget","spec":{"title":"Bookings by channel","chartType":"bar"},
+ "rows":[{"channel":"Direct","bookings":182},
+         {"channel":"Booking.com","bookings":147},
+         {"channel":"Expedia","bookings":83}]}</code></pre>
+      <p class="note">To draw a real chart, pass
+        <code>renderChartFallback(host, spec, rows)</code> and use any library
+        you like — it is handed a DOM node and the data, and returns an optional
+        disposer. If it throws, the widget falls through to the built-in rather
+        than losing the turn.</p>
+    </div>
+
+    <div class="demo">
+      <h2>Advanced mode — the assistant driving your app</h2>
+      <p>Pass <code>getAdvancedUrl</code> and the header gains a control that
+        opens your own app beside the chat, in an iframe. The assistant can then
+        highlight, scroll to, focus, fill and click things in it — with the user
+        watching each action.</p>
+      <p>That is a separate package,
+        <a href="https://www.npmjs.com/package/sgiant-ai-agent-bridge"><code>sgiant-ai-agent-bridge</code></a>:
+        <code>mountAiAgent()</code> runs <em>inside</em> your page and publishes
+        the controls you mark with <code>data-ai-target</code>; the widget drives
+        them from the parent. Selectors never cross the wire — only ids you
+        opted in.</p>
+      <pre><code>// in the widget host
+createAiChatWidget({ getAdvancedUrl: () =&gt; "/app" });
+
+// in the page being driven
+import { mountAiAgent } from "sgiant-ai-agent-bridge";
+mountAiAgent();                     // no-op unless framed
+
+&lt;button data-ai-target="save-profile"&gt;Save&lt;/button&gt;</code></pre>
+      <p class="note">Not demonstrated live on this page: it needs a second app
+        to drive, and a static example that framed itself would prove less than
+        the four lines above already say. The bridge's own README shows both
+        halves.</p>
+    </div>
+
+    <div class="demo">
       <h2>Your own renderer — the open extension point</h2>
       <p>Register a tag and the widget hands you a DOM node and the parsed JSON.
         This is how you render your product's own cards without forking.</p>
@@ -194,6 +249,28 @@
               '"actions":[{"name":"say","label":"Summarise","data":{"text":"Summarise the autumn offer"}},' +
               '{"name":"publish","label":"Publish","variant":"primary","confirm":"Publish this page?"}]},' +
               '{"id":"b","title":"Winter teaser","caption":"Still drafting","status":"running"}]}]]',
+          },
+        ],
+        kpi: [
+          { type: "text", d: "Revenue is up on last month.\n\n" },
+          {
+            // `widget`, not `text` — the chart frame has its own type, and
+            // sending it as text renders nothing at all.
+            type: "widget",
+            spec: { title: "Revenue this month", chartType: "kpi" },
+            rows: [{ metric: "revenue", value: "\u20ac48,210" }],
+          },
+        ],
+        table: [
+          { type: "text", d: "Here is the split by channel.\n\n" },
+          {
+            type: "widget",
+            spec: { title: "Bookings by channel", chartType: "bar" },
+            rows: [
+              { channel: "Direct", bookings: 182 },
+              { channel: "Booking.com", bookings: 147 },
+              { channel: "Expedia", bookings: 83 },
+            ],
           },
         ],
         custom: [

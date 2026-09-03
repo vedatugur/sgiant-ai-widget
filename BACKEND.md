@@ -72,7 +72,7 @@ The widget understands more frames, and each one is inert if you never send it:
 `usage` (token counts for the session meter), `quota` (a free-visitor
 allowance), `activity` (live "running → ok" steps for a long turn), `question`
 (the assistant asking the human to choose), `tool_proposal` (a confirm-gated
-write), chart frames carrying `spec` + `rows`, and `meta` (which model wrote the
+write), **`widget`** (a chart: `spec` + `rows`, plus optional `comparisonRows` for a prior-period overlay — note the type is `widget`, not `chart`), and `meta` (which model wrote the
 turn). Their exact fields are the `StreamFrame` interface in `src/dom.ts`, which
 is the only place they are defined.
 
@@ -87,6 +87,8 @@ is the list:
 | `activity` | `label` **and** `status` |
 | `tool_proposal` | `name`, plus a host that passes `onApplyProposal` |
 | `meta` | `isStaff` **and** `modelLabel` |
+
+The **type name** matters as much as the fields. A chart is `type: "widget"`; sent as `type: "text"` with a `spec` it renders nothing, silently. Every type the widget acts on is named in this document, and a test asserts that.
 
 This table is checked against the code by
 `tests/frame-contract-documented.test.ts`, which reads the guards rather than

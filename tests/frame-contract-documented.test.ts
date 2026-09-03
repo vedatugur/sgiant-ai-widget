@@ -88,3 +88,26 @@ test("an incomplete question frame warns instead of vanishing", () => {
     "the incomplete-question warning is gone — a dropped frame is silent again"
   );
 });
+
+test("every frame TYPE the widget acts on is named in BACKEND.md", () => {
+  // The fields test above would not have caught this: a chart frame is
+  // `type: "widget"`, needs no extra field, and BACKEND.md described it only as
+  // "chart frames carrying spec + rows" — never naming the type. A demo written
+  // from that document sent `type: "text"` with a spec and rendered nothing,
+  // silently, which is the same failure mode as the missing questionId.
+  const src = readFileSync(join(ROOT, "src/index.ts"), "utf8");
+  const doc = readFileSync(join(ROOT, "BACKEND.md"), "utf8");
+
+  const types = new Set(
+    [...src.matchAll(/frame\.type === "([a-z_]+)"/g)].map((m) => m[1])
+  );
+  assert.ok(types.size >= 5, `only found ${types.size} frame types — matcher broken`);
+
+  const undocumented = [...types].filter((t) => !doc.includes(`\`${t}\``));
+  assert.deepEqual(
+    undocumented,
+    [],
+    `these frame types are handled by the widget and never named in BACKEND.md. ` +
+      `A backend author cannot send a frame whose type they were never told.`
+  );
+});
