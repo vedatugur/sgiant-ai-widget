@@ -23,9 +23,20 @@
          the same line and the text ragged around it; the eye had to choose. Given
          its own band with copy above and below, it reads as the subject of the
          card rather than as decoration beside one. */
-      .bigbot { width: 168px; height: 168px; color: #7dd3fc; margin: .5rem auto 1.2rem; }
-      .avatar-copy { font-size: .93em; }
-      .avatar-copy p { margin: .55rem 0; }
+      .bigbot { width: 168px; height: 168px; color: #7dd3fc; margin: 0 auto; flex: 0 0 auto; }
+      /* Copy on BOTH flanks, the mark between them. Centring it with text only
+         above and below left two empty columns either side — the page got wider
+         and said less. A three-track row uses that width, and the mark still sits
+         in the middle rather than pushed against an edge. */
+      .avatar-row { display: flex; align-items: center; gap: 1.4rem; margin: .6rem 0 1rem; }
+      .avatar-copy { font-size: .9em; flex: 1 1 0; min-width: 0; }
+      .avatar-copy p { margin: .5rem 0; }
+      /* One column below ~46rem: three tracks in a phone's width is four words a
+         line, which is worse than the stack it replaced. */
+      @media (max-width: 46rem) {
+        .avatar-row { display: block; }
+        .bigbot { margin: .6rem auto 1rem; }
+      }
       nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
       nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
         border:1px solid var(--line); border-radius:.4rem; padding:.28rem .7rem; }
@@ -51,22 +62,24 @@
 
     <div class="demo">
       <h2>An animated avatar, in pure SVG</h2>
-      <div class="avatar-copy">
-        <p>The mark in the corner of this page is the one shown here: a small robot
-          with a lit shell, eyes that blink under fixed catchlights, a glint that
-          crosses the visor, and an antenna that pings. It is
-          <strong>one inline SVG string</strong> passed as <code>avatarSvg</code>
-          — no images, no library, no requests.</p>
-      </div>
-      <div class="bigbot" id="botpreview"></div>
-      <div class="avatar-copy">
-        <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
-          the SVG, so it travels with the mark. The eyes and the antenna use
-          <code>currentColor</code> and take the widget's accent, while the shell
-          keeps its own metal — a mark can mix both.</p>
-        <p>The catchlights sit <em>outside</em> the blinking group on purpose: a
-          specular highlight belongs to the light, not to the eye, so it holds
-          position while the eye moves under it and squashes as the lid crosses.</p>
+      <div class="avatar-row">
+        <div class="avatar-copy">
+          <p>The mark in the corner of this page is the one shown here: a small
+            robot with a lit shell, eyes that blink under fixed catchlights, a
+            glint crossing the visor, and an antenna that pings.</p>
+          <p>It is <strong>one inline SVG string</strong> passed as
+            <code>avatarSvg</code> — no images, no library, no requests.</p>
+        </div>
+        <div class="bigbot" id="botpreview"></div>
+        <div class="avatar-copy">
+          <p>The animation lives in a <code>&lt;style&gt;</code> block
+            <em>inside</em> the SVG, so it travels with the mark. Eyes and antenna
+            use <code>currentColor</code> and take the accent; the shell keeps its
+            own metal.</p>
+          <p>The catchlights sit <em>outside</em> the blinking group: a highlight
+            belongs to the light, not the eye, so it holds still while the eye
+            moves under it.</p>
+        </div>
       </div>
       <p class="note">It ends with a <code>prefers-reduced-motion</code> guard
         that stops every animation. A permanently moving thing in the corner of
