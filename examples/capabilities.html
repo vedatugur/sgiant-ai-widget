@@ -97,6 +97,12 @@
       <h2>A card with its own actions</h2>
       <p>Items carry a status and buttons. An action can require confirmation
         before the host is called.</p>
+      <p class="note">The tiles read <em>"Not made yet"</em> where a picture
+        would be. That is the widget's own placeholder, not a bug: an item
+        references media by library <strong>id</strong>, never a URL, and a
+        static page has no library to resolve one against. Give a tile a
+        <code>mediaId</code> against a real backend and the placeholder becomes
+        the image, or the video with its poster.</p>
       <button class="run" data-demo="ui">Run</button>
       <pre><code>[[ui:{"title":"Three drafts are ready","layout":"list",
   "items":[{"id":"a","title":"Autumn offer","caption":"Ready to publish",
