@@ -19,6 +19,9 @@ npm install sgiant-ai-widget
   confirm-gated write, suggestion chips, a form the model designed, a card with
   its own actions, and a renderer you register yourself. Every demo runs a real
   turn and shows the JSON that produced it.
+- **[Real charts →](https://vedatugur.github.io/sgiant-ai-widget/charts.html)**
+  — animated bars, an animated line with a comparison overlay, and a donut,
+  drawn with no chart library at all through `renderChartFallback`.
 - **[Theming →](https://vedatugur.github.io/sgiant-ai-widget/theming.html)** —
   launcher geometry as custom properties, and an inline SVG brand mark.
 

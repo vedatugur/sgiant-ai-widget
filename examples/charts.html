@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — real charts, no library</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body {
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem;
+      }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run { font: inherit; font-size: .9em; cursor: pointer; margin: 0 .5rem .7rem 0;
+        padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+    </style>
+  </head>
+  <body>
+    <h1>Real charts, no chart library</h1>
+    <p class="sub">The widget draws a stat tile or a table on its own. Anything
+      richer is one host option — and it does not need a dependency.</p>
+
+    <p class="note">This page implements <code>renderChartFallback</code> in
+      about sixty lines of inline SVG: animated bars, an animated line with a
+      prior-period overlay, and a donut. No library is loaded. That is the point
+      — the seam hands you a DOM node and the data, and the rest is yours.</p>
+
+    <div class="demo">
+      <h2>Animated bars</h2>
+      <p>Bars grow from the baseline on first paint.</p>
+      <button class="run" data-demo="bar">Run</button>
+      <pre><code>{"type":"widget","spec":{"title":"Bookings by channel","chartType":"bar"},
+ "rows":[{"label":"Direct","value":182},{"label":"Booking.com","value":147},
+         {"label":"Expedia","value":83},{"label":"Walk-in","value":24}]}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>Animated line, with a comparison overlay</h2>
+      <p>The line draws itself left to right. <code>comparisonRows</code> is the
+        prior period — the widget passes it through as a fourth argument, and
+        this renderer draws it dashed behind.</p>
+      <button class="run" data-demo="line">Run</button>
+      <pre><code>{"type":"widget","spec":{"title":"Revenue, last 8 weeks","chartType":"line"},
+ "rows":[{"label":"W1","value":18},…],
+ "comparisonRows":[{"label":"W1","value":14},…]}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>A donut</h2>
+      <p>Same seam, different <code>chartType</code>. Your renderer decides what
+        each type means — the widget only routes it.</p>
+      <button class="run" data-demo="donut">Run</button>
+      <pre><code>{"type":"widget","spec":{"title":"Traffic mix","chartType":"donut"},
+ "rows":[{"label":"Organic","value":54},{"label":"Paid","value":28},
+         {"label":"Referral","value":18}]}</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>What the option looks like</h2>
+      <p>Return an optional disposer and the widget calls it when that message
+        is cleared, so you can tear down anything you attached. If your renderer
+        <em>throws</em>, the widget falls through to its built-in table rather
+        than losing the turn.</p>
+      <pre><code>createAiChatWidget({
+  endpoint: "/chat",
+  renderChartFallback: (host, spec, rows, comparisonRows) =&gt; {
+    host.appendChild(drawChart(spec, rows, comparisonRows));
+    return () =&gt; { /* optional cleanup */ };
+  },
+});</code></pre>
+    </div>
+
+    <script>
+      // ---- A tiny SVG chart renderer. No dependencies. -----------------------
+      // Colours come from the widget's own tokens, so a chart drawn here follows
+      // whatever theme the host is using rather than hard-coding a palette.
+      const NS = "http://www.w3.org/2000/svg";
+      const mk = (n, a = {}) => {
+        const e = document.createElementNS(NS, n);
+        for (const [k, v] of Object.entries(a)) e.setAttribute(k, String(v));
+        return e;
+      };
+      const num = (r) => {
+        const k = Object.keys(r).filter((x) => typeof r[x] === "number");
+        return k.length ? Number(r[k[k.length - 1]]) : 0;
+      };
+      const lbl = (r) => String(r.label ?? Object.values(r)[0] ?? "");
+
+      function drawBars(rows) {
+        const W = 320, H = 140, pad = 22, n = rows.length;
+        const max = Math.max(...rows.map(num), 1);
+        const svg = mk("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img" });
+        const bw = (W - pad * 2) / n - 8;
+        rows.forEach((r, i) => {
+          const h = ((H - pad * 2) * num(r)) / max;
+          const x = pad + i * ((W - pad * 2) / n) + 4;
+          const bar = mk("rect", {
+            x, y: H - pad, width: bw, height: 0, rx: 3,
+            fill: "var(--aiw-accent)",
+          });
+          // Animate on first paint. SMIL keeps this dependency-free and is not
+          // interrupted by the widget re-laying out around it.
+          bar.appendChild(mk("animate", {
+            attributeName: "height", from: 0, to: h, dur: "0.6s",
+            begin: `${i * 0.07}s`, fill: "freeze",
+          }));
+          bar.appendChild(mk("animate", {
+            attributeName: "y", from: H - pad, to: H - pad - h, dur: "0.6s",
+            begin: `${i * 0.07}s`, fill: "freeze",
+          }));
+          svg.appendChild(bar);
+          const t = mk("text", {
+            x: x + bw / 2, y: H - 6, "text-anchor": "middle",
+            "font-size": 9, fill: "var(--aiw-muted)",
+          });
+          t.textContent = lbl(r).slice(0, 9);
+          svg.appendChild(t);
+        });
+        return svg;
+      }
+
+      function polyline(rows, W, H, pad, max) {
+        return rows
+          .map((r, i) => {
+            const x = pad + (i * (W - pad * 2)) / Math.max(rows.length - 1, 1);
+            const y = H - pad - ((H - pad * 2) * num(r)) / max;
+            return `${x},${y}`;
+          })
+          .join(" ");
+      }
+
+      function drawLine(rows, comparison) {
+        const W = 320, H = 140, pad = 22;
+        const all = [...rows, ...(comparison || [])];
+        const max = Math.max(...all.map(num), 1);
+        const svg = mk("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img" });
+        if (comparison && comparison.length)
+          svg.appendChild(mk("polyline", {
+            points: polyline(comparison, W, H, pad, max),
+            fill: "none", stroke: "var(--aiw-muted)", "stroke-width": 1.5,
+            "stroke-dasharray": "4 4", opacity: .7,
+          }));
+        const line = mk("polyline", {
+          points: polyline(rows, W, H, pad, max),
+          fill: "none", stroke: "var(--aiw-accent)", "stroke-width": 2.5,
+          "stroke-linecap": "round", "stroke-linejoin": "round",
+        });
+        svg.appendChild(line);
+        // Draw the line on by animating its dash offset — the classic trick, and
+        // the reason the length has to be measured after it is in the document.
+        requestAnimationFrame(() => {
+          const len = line.getTotalLength ? line.getTotalLength() : 400;
+          line.setAttribute("stroke-dasharray", String(len));
+          line.setAttribute("stroke-dashoffset", String(len));
+          line.appendChild(mk("animate", {
+            attributeName: "stroke-dashoffset", from: len, to: 0,
+            dur: "0.9s", fill: "freeze",
+          }));
+        });
+        return svg;
+      }
+
+      function drawDonut(rows) {
+        const S = 140, r = 46, C = 2 * Math.PI * r;
+        const total = rows.reduce((a, x) => a + num(x), 0) || 1;
+        const svg = mk("svg", { viewBox: `0 0 ${S} ${S}`, width: "100%", height: 150, role: "img" });
+        let acc = 0;
+        rows.forEach((row, i) => {
+          const frac = num(row) / total;
+          const c = mk("circle", {
+            cx: S / 2, cy: S / 2, r, fill: "none",
+            stroke: i === 0 ? "var(--aiw-accent)" : "var(--aiw-muted)",
+            opacity: i === 0 ? 1 : 0.8 - i * 0.22,
+            "stroke-width": 16,
+            "stroke-dasharray": `${C * frac} ${C}`,
+            "stroke-dashoffset": -C * acc,
+            transform: `rotate(-90 ${S / 2} ${S / 2})`,
+          });
+          c.appendChild(mk("animate", {
+            attributeName: "stroke-dasharray", from: `0 ${C}`,
+            to: `${C * frac} ${C}`, dur: "0.7s", begin: `${i * 0.12}s`, fill: "freeze",
+          }));
+          svg.appendChild(c);
+          acc += frac;
+        });
+        return svg;
+      }
+
+      function drawChart(spec, rows, comparisonRows) {
+        const wrap = document.createElement("div");
+        if (spec && spec.title) {
+          const t = document.createElement("div");
+          t.textContent = spec.title;
+          t.style.cssText =
+            "font-size:11px;font-weight:700;text-transform:uppercase;" +
+            "letter-spacing:.05em;opacity:.65;margin-bottom:6px";
+          wrap.appendChild(t);
+        }
+        const type = (spec && spec.chartType) || "bar";
+        const data = Array.isArray(rows) ? rows : [];
+        wrap.appendChild(
+          type === "line" ? drawLine(data, comparisonRows)
+          : type === "donut" ? drawDonut(data)
+          : drawBars(data)
+        );
+        return wrap;
+      }
+
+      // ---- the demo stub -----------------------------------------------------
+      const W = (n) => ({ label: "W" + n });
+      const FRAMES = {
+        bar: [
+          { type: "text", d: "Bookings by channel this month.\n\n" },
+          { type: "widget", spec: { title: "Bookings by channel", chartType: "bar" },
+            rows: [
+              { label: "Direct", value: 182 }, { label: "Booking.com", value: 147 },
+              { label: "Expedia", value: 83 }, { label: "Walk-in", value: 24 },
+            ] },
+        ],
+        line: [
+          { type: "text", d: "Revenue is trending up against last period.\n\n" },
+          { type: "widget", spec: { title: "Revenue, last 8 weeks", chartType: "line" },
+            rows: [18, 22, 19, 27, 31, 29, 38, 44].map((v, i) => ({ ...W(i + 1), value: v })),
+            comparisonRows: [14, 16, 18, 17, 21, 23, 24, 26].map((v, i) => ({ ...W(i + 1), value: v })) },
+        ],
+        donut: [
+          { type: "text", d: "Where the traffic came from.\n\n" },
+          { type: "widget", spec: { title: "Traffic mix", chartType: "donut" },
+            rows: [
+              { label: "Organic", value: 54 }, { label: "Paid", value: 28 },
+              { label: "Referral", value: 18 },
+            ] },
+        ],
+      };
+
+      let pending = "bar";
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const frames = FRAMES[pending] ?? [];
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream({
+            async start(c) {
+              const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+              send({ threadId: "charts-demo" });
+              for (const f of frames) {
+                send(f);
+                await new Promise((r) => setTimeout(r, 240));
+              }
+              send({ type: "done" });
+              c.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        );
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Nova",
+        subtitle: "Charts, drawn by this page",
+        renderChartFallback: (host, spec, rows, comparisonRows) => {
+          host.appendChild(drawChart(spec, rows, comparisonRows));
+        },
+      });
+
+      function ask(text) {
+        const input = document.querySelector(".sgiant-aiw-input");
+        const send = document.querySelector(".sgiant-aiw-send");
+        if (!input || !send) return;
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        send.click();
+      }
+      document.querySelectorAll("button.run").forEach((b) => {
+        b.addEventListener("click", () => {
+          pending = b.dataset.demo;
+          chat.open();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => ask(`Show me the ${pending} chart`))
+          );
+        });
+      });
+    </script>
+  </body>
+</html>
