@@ -26,6 +26,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
+      # The suite that came with the package when it was extracted — 73 tests
+      # that had been running in the monorepo it left. A published package whose
+      # tests stayed behind is a package with no tests.
+      - run: npm test
+
       # The tarball audit. `prepublishOnly` runs it again during publish, but
       # having it as its own step means a leak fails with a readable log line
       # rather than inside npm's publish output.

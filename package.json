@@ -45,7 +45,8 @@
     "clean": "rm -rf dist *.tsbuildinfo",
     "build:global": "node scripts/build-global.mjs",
     "audit": "./scripts/audit-tarball.sh",
-    "prepublishOnly": "npm run build && npm run audit"
+    "prepublishOnly": "npm run build && npm run audit",
+    "test": "npm run build && node --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "sgiant-ai-agent-bridge": "1.0.0"
