@@ -313,11 +313,14 @@ export function injectStyles(side: "left" | "right"): void {
 }
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-/* ANY svg in the launcher, not just the built-in mark. The lift used to live
+/* ANY svg in the launcher, not just the built-in mark. flex:0 0 auto and
+   max-width:none because the bubble is a flex box: a mark asked to be LARGER
+   than the 56px disc was silently shrunk back to fit, so a lift meant to carry
+   it past the edge had nothing to carry. Measured 64px in, 56px out. The lift used to live
    only on the built-in class, so a host that supplied its own avatarSvg got
    the SIZE token and silently not the lift — the two halves of one feature
    keyed to different selectors. Measured: 44px applied, translate did not. */
-.${PREFIX}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${PREFIX}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);flex:0 0 auto;max-width:none;transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
 .${PREFIX}-bubble:hover svg{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
