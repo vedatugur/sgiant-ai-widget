@@ -1,6 +1,6 @@
 {
   "name": "sgiant-ai-widget",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Framework-agnostic embeddable AI chat widget. One call mounts a streaming chat bubble into any page — no React, no framework, themeable.",
   "license": "MIT",
   "keywords": [
