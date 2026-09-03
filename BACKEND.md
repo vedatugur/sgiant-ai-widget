@@ -76,6 +76,36 @@ write), chart frames carrying `spec` + `rows`, and `meta` (which model wrote the
 turn). Their exact fields are the `StreamFrame` interface in `src/dom.ts`, which
 is the only place they are defined.
 
+**Optional in the type does not mean optional in practice.** `StreamFrame` marks
+every field `?`, because one interface describes a dozen frame shapes. Three of
+them have fields the widget *requires* before it will render anything, and this
+is the list:
+
+| frame | required before it renders |
+| --- | --- |
+| `question` | `questionId` **and** `prompt` |
+| `activity` | `label` **and** `status` |
+| `tool_proposal` | `name`, plus a host that passes `onApplyProposal` |
+| `meta` | `isStaff` **and** `modelLabel` |
+
+This table is checked against the code by
+`tests/frame-contract-documented.test.ts`, which reads the guards rather than
+trusting the list — and its first run corrected this table. The `activity` row
+originally said `name`, which the widget does not check at all: an activity
+frame needs `label` and `status`, and one sent with only a `name` renders
+nothing.
+
+`questionId` is the one that catches people. It is echoed back with the user's
+answer so your backend knows *which* question was answered, and without it the
+frame is ignored. A frame that is missing one of these now logs a specific
+console warning once per page — it used to be dropped in silence, which is how
+this table came to exist.
+
+Two directives have a host requirement rather than a field one, for the same
+reason a confirm gate does: `[[form:…]]` and a UI card's action buttons only
+render when the host passes `onWidgetAction` (or `onLead`). A form with nowhere
+to submit is worse than no form.
+
 You can ship a complete chat experience without any of them.
 
 ## A reference implementation

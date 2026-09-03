@@ -817,6 +817,24 @@ import {
 } from "./icons";
 
 /**
+ * Warn a host about a malformed frame — once per reason, per page.
+ *
+ * Once, because a stream can carry the same bad frame on every turn and a
+ * console flooded with one message is a console nobody reads. Per reason, so a
+ * second, different mistake is still surfaced.
+ */
+const warned = new Set<string>();
+function warnOnce(reason: string, message: string): void {
+  if (warned.has(reason)) return;
+  warned.add(reason);
+  try {
+    console.warn(message);
+  } catch {
+    /* a host that has replaced console is not a reason to break the turn */
+  }
+}
+
+/**
  * Choose the brand mark: an inline SVG the host authored, a bitmap URL, or the
  * built-in crescent.
  *
@@ -5236,6 +5254,25 @@ export function createAiChatWidget(
               producedAny = true;
             }
             // The assistant is ASKING the human to decide something.
+            //
+            // A question frame missing `questionId` or `prompt` used to be
+            // dropped in SILENCE — no render, no error, nothing in the console.
+            // A backend author following BACKEND.md wrote a question, watched
+            // the reply arrive without it, and had no way to tell whether the
+            // widget did not support questions or their frame was wrong.
+            // `questionId` is optional on StreamFrame and mandatory here, and
+            // BACKEND.md did not mention it at all until 2026-09-03.
+            //
+            // Silence is the worst failure a protocol can have. Say what is
+            // missing, once, and carry on with the rest of the turn.
+            if (frame.type === "question" && !(frame.questionId && frame.prompt))
+              warnOnce(
+                "question-frame-incomplete",
+                "sgiant-ai-widget: ignoring a `question` frame without " +
+                  `${!frame.questionId ? "`questionId`" : "`prompt`"}. Both are ` +
+                  "required — the id is echoed back with the user's answer so " +
+                  "your backend knows which question was answered. See BACKEND.md."
+              );
             if (
               frame.type === "question" &&
               frame.questionId &&

@@ -54,9 +54,12 @@
     <div class="demo">
       <h2>The assistant asks the human to decide</h2>
       <p>A <code>question</code> frame renders choices. The answer goes back as
-        the next turn, so the model does not guess.</p>
+        the next turn, so the model does not guess. <strong><code>questionId</code>
+        is required</strong> — without it the frame is ignored, and this demo
+        showed nothing at all until it was added.</p>
       <button class="run" data-demo="question">Run</button>
-      <pre><code>{"type":"question","prompt":"Which period should I compare against?",
+      <pre><code>{"type":"question","questionId":"q_period_1",
+ "prompt":"Which period should I compare against?",
  "options":[{"id":"yoy","label":"Same month last year"},
             {"id":"prev","label":"Previous month","description":"Shorter, noisier"}]}</code></pre>
     </div>
@@ -146,6 +149,10 @@
           { type: "text", d: "I can compare two ways.\n\n" },
           {
             type: "question",
+            // REQUIRED, and the reason this demo showed nothing at first: the
+            // widget ignores a question frame without it. Your backend gets it
+            // back with the answer, so it knows which question was answered.
+            questionId: "q_period_1",
             prompt: "Which period should I compare against?",
             options: [
               { id: "yoy", label: "Same month last year" },
