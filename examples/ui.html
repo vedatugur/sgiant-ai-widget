@@ -165,7 +165,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     .aiwbot .spec { animation: aiwbot-spec 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
     .aiwbot .spec.r { animation-delay: .05s; }
     .aiwbot .glint { animation: aiwbot-glint 6s cubic-bezier(.45,0,.55,1) infinite; }
-    .aiwbot .ping { animation: aiwbot-ping 2.8s ease-out infinite; transform-origin: 24px 8px; }
+    .aiwbot .ping { animation: aiwbot-ping 2.8s ease-out infinite; transform-origin: 24px 8.6px; }
     @keyframes aiwbot-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1px) } }
     @keyframes aiwbot-blink { 0%,93%,100% { transform: scaleY(1) } 96% { transform: scaleY(.1) } }
     @keyframes aiwbot-spec { 0%,93%,100% { transform: scaleY(1); opacity:.95 } 96% { transform: scaleY(.08); opacity:.55 } }
@@ -187,15 +187,15 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
          the very bottom. Fewer stops read as a smoother surface, not a flatter
          one — banding is what made the old shell look like paper. -->
     <linearGradient id="aiwbot-body" x1=".28" y1="0" x2=".72" y2="1">
-      <stop offset="0%"   stop-color="#f2f4f9"/>
-      <stop offset="30%"  stop-color="#dfe3ee"/>
-      <stop offset="68%"  stop-color="#aab2c7"/>
-      <stop offset="88%"  stop-color="#6f7893"/>
-      <stop offset="100%" stop-color="#8e97ae"/>
+      <stop offset="0%"   stop-color="#fffdfa"/>
+      <stop offset="26%"  stop-color="#eceaf2"/>
+      <stop offset="62%"  stop-color="#9aa2ba"/>
+      <stop offset="86%"  stop-color="#565f79"/>
+      <stop offset="100%" stop-color="#79839c"/>
     </linearGradient>
     <radialGradient id="aiwbot-key" cx=".33" cy=".18" r=".55">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity=".42"/>
-      <stop offset="55%"  stop-color="#ffffff" stop-opacity=".07"/>
+      <stop offset="0%"   stop-color="#fff6e8" stop-opacity=".62"/>
+      <stop offset="48%"  stop-color="#fff6e8" stop-opacity=".08"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="aiwbot-rim" x1=".2" y1=".1" x2=".8" y2="1">
@@ -270,7 +270,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       <stop offset="100%" stop-color="#666e83"/>
     </linearGradient>
     <clipPath id="aiwbot-headclip"><rect x="8" y="12" width="32" height="30" rx="7.5"/></clipPath>
-    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="4.5"/></clipPath>
+    <clipPath id="aiwbot-visorclip"><rect x="13.2" y="19" width="21.6" height="11" rx="4"/></clipPath>
   </defs>
   <!-- Two shadows, because one cannot be both. The wide soft one places the
        object in the room; the tight dark one under the chin is contact, and it is
@@ -278,9 +278,9 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
   <ellipse cx="24" cy="42.6" rx="12" ry="2.1" fill="#0a0e1a" opacity=".22" filter="url(#aiwbot-soft)"/>
   <ellipse cx="24" cy="41.6" rx="7" ry="1.1" fill="#0a0e1a" opacity=".3" filter="url(#aiwbot-soft)"/>
   <g class="bob">
-    <circle cx="24" cy="8" r="2.8" fill="url(#aiwbot-glow)" class="ping"/>
-    <rect x="23.4" y="8" width="1.2" height="5" rx=".6" fill="#9aa2b8"/>
-    <circle cx="24" cy="7.6" r="1.7" fill="currentColor"/>
+    <circle cx="24" cy="8.6" r="2.9" fill="url(#aiwbot-glow)" class="ping"/>
+    <rect x="23.3" y="9.4" width="1.4" height="3.4" rx=".7" fill="#8f97ad"/>
+    <circle cx="24" cy="8.6" r="1.9" fill="currentColor"/>
     <!-- A SQUIRCLE, not a pill with ears. Removing the side pods and the mouth
          bar took four shapes out and cost nothing: what read as "robot" was
          always the visor and the two lights. -->
@@ -310,32 +310,30 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
          plane is angled in at its lower corners so the form has perspective
          rather than being a flat band. -->
     <g clip-path="url(#aiwbot-headclip)">
-      <path d="M8 12 H40 L36.4 19.4 H11.6 Z" fill="#ffffff" opacity=".2"/>
-      <path d="M40 12 V42 L33.4 38.2 V19 Z" fill="#05070f" opacity=".2"/>
-      <path d="M11.6 19.4 H36.4" stroke="#ffffff" stroke-opacity=".28" stroke-width=".5" fill="none"/>
-      <path d="M33.4 19 V38.2" stroke="#05070f" stroke-opacity=".3" stroke-width=".5" fill="none"/>
+      <path d="M8 12 H40 L37 17.4 H11 Z" fill="#fff8ee" opacity=".22"/>
+      <path d="M40 12 V42 L36.2 37.4 V17 Z" fill="#05070f" opacity=".22"/>
     </g>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
     </g>
     </g>
     <g class="fore">
-    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="5" fill="#05070f" opacity=".42"/>
-    <rect x="12" y="17" width="24" height="14" rx="4.5" fill="url(#aiwbot-visor)"/>
-    <rect x="12" y="17" width="24" height="14" rx="4.5" fill="url(#aiwbot-bevel)"/>
+    <rect x="12.6" y="18.3" width="22.8" height="12.4" rx="4.6" fill="#05070f" opacity=".42"/>
+    <rect x="13.2" y="19" width="21.6" height="11" rx="4" fill="url(#aiwbot-visor)"/>
+    <rect x="13.2" y="19" width="21.6" height="11" rx="4" fill="url(#aiwbot-bevel)"/>
     <!-- Each eye is a SOCKET that stays put and a pupil that moves inside it.
          The socket is the dark recess the eye sits in; without it a travelling
          pupil looks like a dot sliding across a face. -->
-    <rect x="16.5" y="20.5" width="6.2" height="7" rx="2.1" fill="#05070f" opacity=".55"/>
-    <rect x="25.3" y="20.5" width="6.2" height="7" rx="2.1" fill="#05070f" opacity=".55"/>
-    <g class="pupil pl"><rect x="17.2" y="21.1" width="4.8" height="5.8" rx="1.6" fill="currentColor" class="eye"/></g>
-    <g class="pupil pr"><rect x="26" y="21.1" width="4.8" height="5.8" rx="1.6" fill="currentColor" class="eye r"/></g>
+    <rect x="17.6" y="21.6" width="5" height="5.6" rx="1.8" fill="#000000" opacity=".8"/>
+    <rect x="25.4" y="21.6" width="5" height="5.6" rx="1.8" fill="#000000" opacity=".8"/>
+    <g class="pupil pl"><rect x="18.1" y="22.1" width="4" height="4.6" rx="1.45" fill="currentColor" class="eye"/></g>
+    <g class="pupil pr"><rect x="25.9" y="22.1" width="4" height="4.6" rx="1.45" fill="currentColor" class="eye r"/></g>
     <!-- Catchlights stay OUTSIDE both the pupil group and the blink group: the
          highlight belongs to the light, so the eye travels under it. -->
-    <rect x="18.1" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec"/>
-    <rect x="26.9" y="21.9" width="1.5" height="1.9" rx=".65" fill="#ffffff" class="spec r"/>
+    <rect x="18.7" y="22.6" width="1.25" height="1.5" rx=".55" fill="#ffffff" class="spec"/>
+    <rect x="26.5" y="22.6" width="1.25" height="1.5" rx=".55" fill="#ffffff" class="spec r"/>
     <g clip-path="url(#aiwbot-visorclip)">
-      <rect x="12" y="17" width="24" height="7" fill="url(#aiwbot-brow)"/>
-      <rect x="12" y="25" width="24" height="6" fill="url(#aiwbot-pool)"/>
+      <rect x="13.2" y="19" width="21.6" height="5.5" fill="url(#aiwbot-brow)"/>
+      <rect x="13.2" y="25.5" width="21.6" height="4.5" fill="url(#aiwbot-pool)"/>
     </g>
     <g clip-path="url(#aiwbot-visorclip)">
       <rect x="18" y="15" width="11" height="19" fill="url(#aiwbot-glintg)"
