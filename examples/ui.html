@@ -297,7 +297,13 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-body)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-fill)"/>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-ao)"/>
-    <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-key)"/>
+    <!-- SURFACE HIGHLIGHTS, in their own layer so they can travel AGAINST the
+         turn. A specular highlight belongs to the light: rotate the object and
+         the highlight slides across it the other way. Painted on and rotating
+         rigidly with the shape is the single thing that makes a lit object read
+         as a sticker, however good its shading. -->
+    <g class="lit">
+      <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-key)"/>
     <!-- FACES, not shading. A box reads as a box because separate planes meet at
          an edge and jump in value; smoothing across that edge is exactly what
          made this look like a rounded rectangle lit from the corner. The top
@@ -310,6 +316,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       <path d="M33.4 19 V38.2" stroke="#05070f" stroke-opacity=".3" stroke-width=".5" fill="none"/>
     </g>
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
+    </g>
     </g>
     <g class="fore">
     <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="5" fill="#05070f" opacity=".42"/>
@@ -393,7 +400,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
               "translate(" + (s.x * k).toFixed(2) + "px," + (s.y * k * 0.6).toFixed(2) + "px)";
           });
           shift(".deep", -0.7); shift(".face", 0.2); shift(".fore", 0.9);
-          shift(".ping", 1.6); shift(".glint", 2.0);
+          shift(".ping", 1.6); shift(".lit", -1.4); shift(".glint", -1.8);
           const ex = Math.max(-1.5, Math.min(1.5, s.x * 2.6));
           const ey = Math.max(-1.1, Math.min(1.1, s.y * 2));
           const pl = svg.querySelector(".pl"), pr = svg.querySelector(".pr");

@@ -92,11 +92,21 @@ export function startMarkMotion(
      // behind the face and read as a shadow following it around. Depth is a hint,
      // not a distance: a few tenths of a pixel between neighbours is enough for
      // the eye, and more is just two pictures moving.
+    // TWO KINDS OF LAYER, and conflating them was the bug.
+    //
+    // GEOMETRY moves WITH the turn, at a rate set by its distance from the
+    // viewer: the back wall swings against it (it is behind), the face barely
+    // moves, the visor and antenna move more.
     shift(".deep", -0.7);
     shift(".face", 0.2);
     shift(".fore", 0.9);
     shift(".ping", 1.6);
-    shift(".glint", 2.0);
+    // LIGHT moves AGAINST it. A highlight belongs to the lamp, not the object,
+    // so turning the object slides the highlight across its surface the other
+    // way. These were travelling WITH the turn, which paints them onto the
+    // shape — and a highlight painted onto a shape is exactly what a sticker is.
+    shift(".lit", -1.4);
+    shift(".glint", -1.8);
     // Eyes travel furthest, clamped in viewBox units so it holds at any rendered
     // size — a pupil that leaves its socket stops being an eye. The near eye
     // travels further: two eyes converging on a point do not move equally, and
