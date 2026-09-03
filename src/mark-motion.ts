@@ -57,7 +57,7 @@ export function startMarkMotion(
   const fine = window.matchMedia("(hover: hover) and (pointer: fine)");
   if (still.matches || !fine.matches) return inert;
 
-  const TILT = opts.tilt ?? 12;
+  const TILT = opts.tilt ?? 10;
   const springs = new WeakMap<Element, Spring>();
   let px = 0;
   let py = 0;
@@ -87,11 +87,16 @@ export function startMarkMotion(
     // by a DIFFERENT amount. Negative on the back, because a face further from
     // the viewer swings the opposite way as the object turns — that opposition
     // is the whole of the effect. A mark without these classes still tilts.
-    shift(".deep", -2.2);
-    shift(".face", 0.5);
-    shift(".fore", 2.0);
-    shift(".ping", 3.2);
-    shift(".glint", 3.6);
+    // The spread is SMALL on purpose. At -2.2 against 3.6 the layers pulled far
+     // enough apart that the mark came unglued — the side wall slid out from
+     // behind the face and read as a shadow following it around. Depth is a hint,
+     // not a distance: a few tenths of a pixel between neighbours is enough for
+     // the eye, and more is just two pictures moving.
+    shift(".deep", -0.7);
+    shift(".face", 0.2);
+    shift(".fore", 0.9);
+    shift(".ping", 1.6);
+    shift(".glint", 2.0);
     // Eyes travel furthest, clamped in viewBox units so it holds at any rendered
     // size — a pupil that leaves its socket stops being an eye. The near eye
     // travels further: two eyes converging on a point do not move equally, and
@@ -125,6 +130,16 @@ export function startMarkMotion(
   function onMove(e: MouseEvent): void {
     px = e.clientX;
     py = e.clientY;
+    // PAINT NOW, then let the spring settle over frames. requestAnimationFrame
+    // is throttled or paused in more situations than one expects — a background
+    // tab, a hidden pane, a browser saving power — and a mark that only ever
+    // moved inside a frame callback simply froze in all of them while the
+    // pointer sailed past. One synchronous paint costs nothing and means the
+    // mark is never stale, whatever the frame clock is doing.
+    for (const host of root()) {
+      const svg = host.querySelector("svg");
+      if (svg) paint(svg as SVGElement, host);
+    }
     kick();
   }
   window.addEventListener("mousemove", onMove, { passive: true });

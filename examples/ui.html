@@ -253,6 +253,22 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <filter id="aiwbot-soft" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="1.6"/>
     </filter>
+    <!-- The side wall is what is left of the offset box once the FRONT face is
+         punched out of it: a thin lit sliver along two edges, not a whole second
+         silhouette. Drawing the full duplicate is what made it read as a drop
+         shadow rather than as thickness. -->
+    <mask id="aiwbot-sidemask">
+      <rect x="0" y="0" width="48" height="48" fill="#000"/>
+      <rect x="9.3" y="13.1" width="32" height="30" rx="7.5" fill="#fff"/>
+      <rect x="8" y="12" width="32" height="30" rx="7.5" fill="#000"/>
+    </mask>
+    <!-- A side face is MATERIAL: it catches light and falls off. A flat grey is
+         a shadow, which is the other half of why the first attempt looked wrong. -->
+    <linearGradient id="aiwbot-side" x1=".2" y1="0" x2=".9" y2="1">
+      <stop offset="0%"   stop-color="#c3cadb"/>
+      <stop offset="55%"  stop-color="#8f97ad"/>
+      <stop offset="100%" stop-color="#666e83"/>
+    </linearGradient>
     <clipPath id="aiwbot-headclip"><rect x="8" y="12" width="32" height="30" rx="7.5"/></clipPath>
     <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="4.5"/></clipPath>
   </defs>
@@ -274,8 +290,8 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
          It carries the deep class so it parallaxes SLOWER than the face - the
          rate difference is what turns two stacked shapes into one solid one. -->
     <g class="deep">
-      <rect x="10.4" y="14.2" width="32" height="30" rx="7.5" fill="#5c6478"/>
-      <rect x="10.4" y="14.2" width="32" height="30" rx="7.5" fill="url(#aiwbot-ao)"/>
+      <rect x="9.3" y="13.1" width="32" height="30" rx="7.5"
+            fill="url(#aiwbot-side)" mask="url(#aiwbot-sidemask)"/>
     </g>
     <g class="face">
     <rect x="8" y="12" width="32" height="30" rx="7.5" fill="url(#aiwbot-body)"/>
@@ -366,8 +382,8 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
           s.vy = (s.vy + (ty - s.y) * 0.14) * 0.76;
           s.x += s.vx; s.y += s.vy;
           svg.style.transform =
-            "perspective(420px) rotateY(" + (s.x * 12).toFixed(2) +
-            "deg) rotateX(" + (-s.y * 9.4).toFixed(2) + "deg)";
+            "perspective(420px) rotateY(" + (s.x * 10).toFixed(2) +
+            "deg) rotateX(" + (-s.y * 7.8).toFixed(2) + "deg)";
           // Same layered rates as the widget's own module, so the preview and
           // the launcher move identically. Negative on the back: a face further
           // from the viewer swings the OPPOSITE way as the object turns, and
@@ -376,8 +392,8 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
             n.style.transform =
               "translate(" + (s.x * k).toFixed(2) + "px," + (s.y * k * 0.6).toFixed(2) + "px)";
           });
-          shift(".deep", -2.2); shift(".face", 0.5); shift(".fore", 2.0);
-          shift(".ping", 3.2); shift(".glint", 3.6);
+          shift(".deep", -0.7); shift(".face", 0.2); shift(".fore", 0.9);
+          shift(".ping", 1.6); shift(".glint", 2.0);
           const ex = Math.max(-1.5, Math.min(1.5, s.x * 2.6));
           const ey = Math.max(-1.1, Math.min(1.1, s.y * 2));
           const pl = svg.querySelector(".pl"), pr = svg.querySelector(".pr");
