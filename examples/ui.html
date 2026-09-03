@@ -23,19 +23,21 @@
          the same line and the text ragged around it; the eye had to choose. Given
          its own band with copy above and below, it reads as the subject of the
          card rather than as decoration beside one. */
-      .bigbot { width: 168px; height: 168px; color: #7dd3fc; margin: 0 auto; flex: 0 0 auto; }
-      /* Copy on BOTH flanks, the mark between them. Centring it with text only
-         above and below left two empty columns either side — the page got wider
-         and said less. A three-track row uses that width, and the mark still sits
-         in the middle rather than pushed against an edge. */
-      .avatar-row { display: flex; align-items: center; gap: 1.4rem; margin: .6rem 0 1rem; }
-      .avatar-copy { font-size: .9em; flex: 1 1 0; min-width: 0; }
-      .avatar-copy p { margin: .5rem 0; }
-      /* One column below ~46rem: three tracks in a phone's width is four words a
-         line, which is worse than the stack it replaced. */
+      /* TEXT WRAPS THE SILHOUETTE, not a box around it. `shape-outside: circle()`
+         makes the line boxes follow the mark's actual round edge, so the copy
+         hugs it on the way past and closes underneath — which is what "around"
+         means. A plain float would step the text around an invisible rectangle
+         and leave wedges of white at the corners. */
+      .bigbot { width: 172px; height: 172px; color: #7dd3fc; float: right;
+        shape-outside: circle(50% at 50% 50%); shape-margin: .7rem;
+        margin: .1rem 0 .5rem 1.1rem; }
+      .avatar-copy { font-size: .92em; }
+      .avatar-copy p { margin: .55rem 0; }
+      .avatar-copy::after { content: ""; display: block; clear: both; }
+      /* Below ~46rem the mark would leave three words a line. Full width, centred,
+         text above and below — the stack is the honest layout at that size. */
       @media (max-width: 46rem) {
-        .avatar-row { display: block; }
-        .bigbot { margin: .6rem auto 1rem; }
+        .bigbot { float: none; shape-outside: none; margin: .6rem auto 1rem; }
       }
       nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
       nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
@@ -62,24 +64,23 @@
 
     <div class="demo">
       <h2>An animated avatar, in pure SVG</h2>
-      <div class="avatar-row">
-        <div class="avatar-copy">
-          <p>The mark in the corner of this page is the one shown here: a small
-            robot with a lit shell, eyes that blink under fixed catchlights, a
-            glint crossing the visor, and an antenna that pings.</p>
-          <p>It is <strong>one inline SVG string</strong> passed as
-            <code>avatarSvg</code> — no images, no library, no requests.</p>
-        </div>
+      <div class="avatar-copy">
         <div class="bigbot" id="botpreview"></div>
-        <div class="avatar-copy">
-          <p>The animation lives in a <code>&lt;style&gt;</code> block
-            <em>inside</em> the SVG, so it travels with the mark. Eyes and antenna
-            use <code>currentColor</code> and take the accent; the shell keeps its
-            own metal.</p>
-          <p>The catchlights sit <em>outside</em> the blinking group: a highlight
-            belongs to the light, not the eye, so it holds still while the eye
-            moves under it.</p>
-        </div>
+        <p>The mark in the corner of this page is the one shown here: a small robot
+          with a lit shell, eyes that blink under fixed catchlights, a glint that
+          crosses the visor, and an antenna that pings. It is
+          <strong>one inline SVG string</strong> passed as <code>avatarSvg</code>
+          — no images, no library, no requests.</p>
+        <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
+          the SVG, so it travels with the mark. The eyes and the antenna use
+          <code>currentColor</code> and take the widget's accent, while the shell
+          keeps its own metal — a mark can mix both.</p>
+        <p>The catchlights sit <em>outside</em> the blinking group on purpose: a
+          specular highlight belongs to the light, not to the eye, so it holds its
+          position while the eye moves under it and squashes as the lid crosses.
+          The body is one gradient rather than three stacked overlays — fewer
+          stops read as a smoother surface, and the banding is what made the
+          earlier shell look like paper.</p>
       </div>
       <p class="note">It ends with a <code>prefers-reduced-motion</code> guard
         that stops every animation. A permanently moving thing in the corner of
@@ -147,143 +148,103 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <script>
       const ROBOT = `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" class="aiwbot">
   <style>
-    .aiwbot .bob { animation: aiwbot-bob 3.2s ease-in-out infinite; transform-origin: 24px 30px; }
-    .aiwbot .eye { animation: aiwbot-blink 4.4s ease-in-out infinite; transform-origin: center; }
-    .aiwbot .eye.r { animation-delay: .06s; }
-    /* THE GLINT IS NOT THE EYES. It sweeps the visor on its own clock, and the
-       eyes blink under it — a specular highlight belongs to the LIGHT, not to
-       the thing it lands on. The old version painted the shine onto the eye, so
-       it blinked with the lid like a sticker. */
-    .aiwbot .glint { animation: aiwbot-glint 5.4s cubic-bezier(.45,0,.55,1) infinite; }
-    /* Fixed catchlights, deliberately OUTSIDE the blinking group. A real one
-       holds position while the eye moves under it; it only gets clipped by the
-       lid, which is what the squash on blink imitates. */
-    .aiwbot .spec { animation: aiwbot-spec 4.4s ease-in-out infinite; transform-origin: center; }
-    .aiwbot .spec.r { animation-delay: .06s; }
-    .aiwbot .ping { animation: aiwbot-ping 2.2s ease-out infinite; transform-origin: 24px 7px; }
-    @keyframes aiwbot-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.2px) } }
-    @keyframes aiwbot-blink { 0%,92%,100% { transform: scaleY(1) } 95% { transform: scaleY(.12) } }
-    /* Squashed, not scaled: the lid crosses the highlight, it does not shrink it. */
-    @keyframes aiwbot-spec { 0%,92%,100% { transform: scaleY(1); opacity:.92 } 95% { transform: scaleY(.1); opacity:.5 } }
-    /* Fastest through the middle and lingering at the edges — a reflection on a
-       convex face is foreshortened near the rim, so it appears to slow there.
-       It also narrows and fades as it leaves, instead of stopping dead. */
+    .aiwbot .bob { animation: aiwbot-bob 3.6s ease-in-out infinite; transform-origin: 24px 32px; }
+    .aiwbot .eye { animation: aiwbot-blink 5s ease-in-out infinite; transform-origin: center; }
+    .aiwbot .eye.r { animation-delay: .05s; }
+    .aiwbot .spec { animation: aiwbot-spec 5s ease-in-out infinite; transform-origin: center; }
+    .aiwbot .spec.r { animation-delay: .05s; }
+    .aiwbot .glint { animation: aiwbot-glint 6s cubic-bezier(.45,0,.55,1) infinite; }
+    .aiwbot .ping { animation: aiwbot-ping 2.8s ease-out infinite; transform-origin: 24px 8px; }
+    @keyframes aiwbot-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1px) } }
+    @keyframes aiwbot-blink { 0%,93%,100% { transform: scaleY(1) } 96% { transform: scaleY(.1) } }
+    @keyframes aiwbot-spec { 0%,93%,100% { transform: scaleY(1); opacity:.95 } 96% { transform: scaleY(.08); opacity:.55 } }
     @keyframes aiwbot-glint {
-      0%   { transform: translateX(-9px) scaleX(.5); opacity: 0 }
-      18%  { opacity: .5 }
-      50%  { transform: translateX(0) scaleX(1); opacity: .72 }
-      82%  { opacity: .35 }
-      100% { transform: translateX(9px) scaleX(.5); opacity: 0 }
+      0%   { transform: translateX(-10px) scaleX(.45); opacity: 0 }
+      20%  { opacity: .42 }
+      50%  { transform: translateX(0) scaleX(1); opacity: .6 }
+      80%  { opacity: .28 }
+      100% { transform: translateX(10px) scaleX(.45); opacity: 0 }
     }
-    @keyframes aiwbot-ping { 0% { transform: scale(.7); opacity:.9 } 70%,100% { transform: scale(1.9); opacity:0 } }
+    @keyframes aiwbot-ping { 0% { transform: scale(.6); opacity:.85 } 70%,100% { transform: scale(2); opacity:0 } }
     @media (prefers-reduced-motion: reduce) {
-      .aiwbot .bob, .aiwbot .eye, .aiwbot .glint, .aiwbot .spec, .aiwbot .ping { animation: none }
+      .aiwbot .bob, .aiwbot .eye, .aiwbot .spec, .aiwbot .glint, .aiwbot .ping { animation: none }
     }
   </style>
   <defs>
-    <linearGradient id="aiwbot-shell" x1="0" y1="0" x2=".3" y2="1">
-      <stop offset="0%" stop-color="#fbfcff"/>
-      <stop offset="42%" stop-color="#dfe3ee"/>
-      <stop offset="100%" stop-color="#9aa2b8"/>
+    <!-- ONE body gradient doing the work of three: key light top-left, the
+         mid-tone across the belly, and the core shadow before the bounce lifts
+         the very bottom. Fewer stops read as a smoother surface, not a flatter
+         one — banding is what made the old shell look like paper. -->
+    <linearGradient id="aiwbot-body" x1=".28" y1="0" x2=".72" y2="1">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="30%"  stop-color="#e9ecf5"/>
+      <stop offset="68%"  stop-color="#b9c0d2"/>
+      <stop offset="88%"  stop-color="#8d95ab"/>
+      <stop offset="100%" stop-color="#a8b0c4"/>
     </linearGradient>
-    <radialGradient id="aiwbot-dome" cx=".34" cy=".22" r=".62">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity=".85"/>
-      <stop offset="60%" stop-color="#ffffff" stop-opacity=".08"/>
+    <radialGradient id="aiwbot-key" cx=".33" cy=".18" r=".55">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity=".9"/>
+      <stop offset="55%"  stop-color="#ffffff" stop-opacity=".12"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="aiwbot-rim" x1=".15" y1="0" x2=".85" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="72%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity=".55"/>
+    <linearGradient id="aiwbot-rim" x1=".2" y1=".1" x2=".8" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="76%"  stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="94%"  stop-color="#ffffff" stop-opacity=".7"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity=".2"/>
     </linearGradient>
-    <!-- FORM SHADOW: the surface turning away from the key light. This is what
-         makes a shape read as round rather than as a rounded rectangle — the
-         gradient fill alone only says "lighter at the top". -->
-    <linearGradient id="aiwbot-form" x1=".2" y1="0" x2=".8" y2="1">
-      <stop offset="0%" stop-color="#0b1020" stop-opacity="0"/>
-      <stop offset="58%" stop-color="#0b1020" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#0b1020" stop-opacity=".34"/>
+    <linearGradient id="aiwbot-visor" x1=".3" y1="0" x2=".7" y2="1">
+      <stop offset="0%"   stop-color="#2b3760"/>
+      <stop offset="45%"  stop-color="#151d36"/>
+      <stop offset="100%" stop-color="#060912"/>
     </linearGradient>
-    <!-- BOUNCE: light returning from the surface below. Without it the underside
-         goes dead black and the head looks pasted onto the page. -->
-    <linearGradient id="aiwbot-bounce" x1=".5" y1="1" x2=".5" y2=".55">
-      <stop offset="0%" stop-color="#cfe0ff" stop-opacity=".3"/>
-      <stop offset="100%" stop-color="#cfe0ff" stop-opacity="0"/>
-    </linearGradient>
-    <!-- OCCLUSION: where the visor sits INTO the shell. Two surfaces meeting
-         always darken at the seam; skipping it is what makes inset panels look
-         printed on. -->
-    <radialGradient id="aiwbot-occl" cx=".5" cy=".5" r=".5">
-      <stop offset="72%" stop-color="#05070f" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#05070f" stop-opacity=".55"/>
-    </radialGradient>
-    <!-- Glass thickness: bright top edge, dark bottom edge. -->
     <linearGradient id="aiwbot-bevel" x1=".5" y1="0" x2=".5" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity=".5"/>
-      <stop offset="18%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="82%" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity=".45"/>
-    </linearGradient>
-    <linearGradient id="aiwbot-ear" x1="0" y1="0" x2="1" y2=".6">
-      <stop offset="0%" stop-color="#e7eaf4"/>
-      <stop offset="60%" stop-color="#b7bece"/>
-      <stop offset="100%" stop-color="#848ca3"/>
-    </linearGradient>
-    <linearGradient id="aiwbot-visor" x1="0" y1="0" x2=".6" y2="1">
-      <stop offset="0%" stop-color="#243055"/>
-      <stop offset="55%" stop-color="#141c33"/>
-      <stop offset="100%" stop-color="#070b16"/>
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="14%"  stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="86%"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity=".5"/>
     </linearGradient>
     <linearGradient id="aiwbot-glintg" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="45%" stop-color="#dbeafe" stop-opacity=".9"/>
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="48%"  stop-color="#e2ecff" stop-opacity=".85"/>
+      <stop offset="56%"  stop-color="#ffffff" stop-opacity="1"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <radialGradient id="aiwbot-glow" cx=".5" cy=".5" r=".5">
-      <stop offset="0%" stop-color="currentColor" stop-opacity=".55"/>
+      <stop offset="0%"   stop-color="currentColor" stop-opacity=".5"/>
       <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
     </radialGradient>
-    <filter id="aiwbot-soft" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="1.4"/>
+    <filter id="aiwbot-soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.6"/>
     </filter>
-    <clipPath id="aiwbot-visorclip">
-      <rect x="11.5" y="16" width="25" height="15" rx="7"/>
-    </clipPath>
+    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="7"/></clipPath>
   </defs>
-  <!-- Contact shadow: the one cue that says "sitting on something" rather than
-       "floating in a void". It does NOT bob with the body — a shadow stays on
-       the ground while the thing above it moves. -->
-  <ellipse cx="24" cy="41.4" rx="11" ry="1.9" fill="#0b1020" opacity=".28" filter="url(#aiwbot-soft)"/>
+  <!-- Two shadows, because one cannot be both. The wide soft one places the
+       object in the room; the tight dark one under the chin is contact, and it is
+       the only thing that stops a floating look. Neither bobs. -->
+  <ellipse cx="24" cy="42.6" rx="12" ry="2.1" fill="#0a0e1a" opacity=".22" filter="url(#aiwbot-soft)"/>
+  <ellipse cx="24" cy="41.6" rx="7" ry="1.1" fill="#0a0e1a" opacity=".3" filter="url(#aiwbot-soft)"/>
   <g class="bob">
-    <circle cx="24" cy="7" r="2.6" fill="url(#aiwbot-glow)" class="ping"/>
-    <rect x="23.2" y="6" width="1.6" height="6" rx=".8" fill="#8f97ad"/>
-    <ellipse cx="24.6" cy="12.2" rx="1.9" ry=".7" fill="#05070f" opacity=".18"/>
-    <circle cx="24" cy="6" r="1.9" fill="currentColor"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="url(#aiwbot-shell)"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="url(#aiwbot-form)"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="url(#aiwbot-bounce)"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="url(#aiwbot-dome)"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.1"/>
-    <rect x="7" y="11" width="34" height="28" rx="10" fill="none" stroke="#7d8499" stroke-opacity=".45"/>
-    <!-- The visor sits INTO the shell: seam shadow first, then the glass, then
-         the thickness of its edge. -->
-    <rect x="10.8" y="15.3" width="26.4" height="16.4" rx="7.6" fill="url(#aiwbot-occl)" opacity=".9"/>
-    <rect x="11.5" y="16" width="25" height="15" rx="7" fill="url(#aiwbot-visor)"/>
-    <rect x="11.5" y="16" width="25" height="15" rx="7" fill="url(#aiwbot-bevel)"/>
-    <ellipse cx="20" cy="23" rx="2.5" ry="3" fill="currentColor" class="eye"/>
-    <ellipse cx="28" cy="23" rx="2.5" ry="3" fill="currentColor" class="eye r"/>
-    <ellipse cx="19.15" cy="21.9" rx=".78" ry="1" fill="#ffffff" class="spec"/>
-    <ellipse cx="27.15" cy="21.9" rx=".78" ry="1" fill="#ffffff" class="spec r"/>
+    <circle cx="24" cy="8" r="2.8" fill="url(#aiwbot-glow)" class="ping"/>
+    <rect x="23.4" y="8" width="1.2" height="5" rx=".6" fill="#9aa2b8"/>
+    <circle cx="24" cy="7.6" r="1.7" fill="currentColor"/>
+    <!-- A SQUIRCLE, not a pill with ears. Removing the side pods and the mouth
+         bar took four shapes out and cost nothing: what read as "robot" was
+         always the visor and the two lights. -->
+    <rect x="8" y="12" width="32" height="30" rx="13" fill="url(#aiwbot-body)"/>
+    <rect x="8" y="12" width="32" height="30" rx="13" fill="url(#aiwbot-key)"/>
+    <rect x="8" y="12" width="32" height="30" rx="13" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
+    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="7.7" fill="#05070f" opacity=".28"/>
+    <rect x="12" y="17" width="24" height="14" rx="7" fill="url(#aiwbot-visor)"/>
+    <rect x="12" y="17" width="24" height="14" rx="7" fill="url(#aiwbot-bevel)"/>
+    <ellipse cx="19.6" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye"/>
+    <ellipse cx="28.4" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye r"/>
+    <ellipse cx="18.8" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec"/>
+    <ellipse cx="27.6" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec r"/>
     <g clip-path="url(#aiwbot-visorclip)">
-      <rect x="18" y="14" width="12" height="19" fill="url(#aiwbot-glintg)"
-            transform="rotate(14 24 23.5)" class="glint"/>
+      <rect x="18" y="15" width="11" height="19" fill="url(#aiwbot-glintg)"
+            transform="rotate(15 24 24)" class="glint"/>
     </g>
-    <rect x="18" y="34" width="12" height="2.2" rx="1.1" fill="#8f97ad" opacity=".8"/>
-    <rect x="3.5" y="20" width="3" height="9" rx="1.5" fill="url(#aiwbot-ear)"/>
-    <rect x="41.5" y="20" width="3" height="9" rx="1.5" fill="url(#aiwbot-ear)"/>
-    <rect x="6.2" y="20.4" width="1.1" height="8.2" rx=".55" fill="#05070f" opacity=".22"/>
-    <rect x="40.7" y="20.4" width="1.1" height="8.2" rx=".55" fill="#05070f" opacity=".22"/>
   </g>
 </svg>`;
       document.getElementById("botpreview").innerHTML = ROBOT;
