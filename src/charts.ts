@@ -30,6 +30,21 @@ export type ChartRow = Record<string, unknown>;
 export interface ChartSpec {
   title?: string;
   chartType?: string;
+  /**
+   * Which columns hold the numbers, named by the model that asked for the
+   * chart. The first is drawn.
+   *
+   * HONOURED RATHER THAN GUESSED, and the difference is a wrong chart. The
+   * dashboard renderer this stands in for takes `metrics` and `dimension` from
+   * the spec; an earlier version of this file took "the last numeric field",
+   * so `{period, revenue, bookings}` plotted BOOKINGS while the same data on a
+   * dashboard plotted revenue. No error, no warning, two different pictures of
+   * one number — which is the exact failure this codebase already has a page of
+   * rules about.
+   */
+  metrics?: string[];
+  /** Which column is the axis / label. */
+  dimension?: string;
 }
 
 export interface ChartFallbackOptions {
@@ -62,14 +77,20 @@ function el<K extends keyof SVGElementTagNameMap>(
  * a backend that works with one works with the other. A row of
  * `{period, revenue}` measures revenue; `{label, value}` measures value.
  */
-function valueOf(row: ChartRow): number {
+function valueOf(row: ChartRow, metric?: string): number {
+  if (metric && typeof row[metric] === "number") return Number(row[metric]);
   const keys = Object.keys(row).filter((k) => typeof row[k] === "number");
   return keys.length ? Number(row[keys[keys.length - 1]]) : 0;
 }
 
 /** The label of a row: an explicit `label`, else the first field. */
-function labelOf(row: ChartRow): string {
-  const v = row.label ?? Object.values(row)[0];
+function labelOf(row: ChartRow, dimension?: string): string {
+  const v =
+    (dimension !== undefined && row[dimension] !== undefined
+      ? row[dimension]
+      : undefined) ??
+    row.label ??
+    Object.values(row)[0];
   return v == null ? "" : String(v);
 }
 
@@ -101,14 +122,14 @@ function animateAttr(
   );
 }
 
-function drawBars(rows: ChartRow[], H: number, animate: boolean): SVGSVGElement {
+function drawBars(rows: ChartRow[], H: number, animate: boolean, metric?: string, dim?: string): SVGSVGElement {
   const W = 320;
   const pad = 22;
-  const max = Math.max(...rows.map(valueOf), 1);
+  const max = Math.max(...rows.map((r) => valueOf(r, metric)), 1);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img" });
   const slot = (W - pad * 2) / Math.max(rows.length, 1);
   rows.forEach((row, i) => {
-    const h = ((H - pad * 2) * valueOf(row)) / max;
+    const h = ((H - pad * 2) * valueOf(row, metric)) / max;
     const x = pad + i * slot + 4;
     const w = Math.max(slot - 8, 2);
     const bar = el("rect", {
@@ -131,17 +152,17 @@ function drawBars(rows: ChartRow[], H: number, animate: boolean): SVGSVGElement 
       "font-size": 9,
       fill: "var(--aiw-muted)",
     });
-    text.textContent = labelOf(row).slice(0, 9);
+    text.textContent = labelOf(row, dim).slice(0, 9);
     svg.appendChild(text);
   });
   return svg;
 }
 
-function points(rows: ChartRow[], W: number, H: number, pad: number, max: number): string {
+function points(rows: ChartRow[], W: number, H: number, pad: number, max: number, metric?: string): string {
   return rows
     .map((row, i) => {
       const x = pad + (i * (W - pad * 2)) / Math.max(rows.length - 1, 1);
-      const y = H - pad - ((H - pad * 2) * valueOf(row)) / max;
+      const y = H - pad - ((H - pad * 2) * valueOf(row, metric)) / max;
       return `${x},${y}`;
     })
     .join(" ");
@@ -151,16 +172,17 @@ function drawLine(
   rows: ChartRow[],
   comparison: ChartRow[] | undefined,
   H: number,
-  animate: boolean
+  animate: boolean,
+  metric?: string
 ): SVGSVGElement {
   const W = 320;
   const pad = 22;
-  const max = Math.max(...[...rows, ...(comparison ?? [])].map(valueOf), 1);
+  const max = Math.max(...[...rows, ...(comparison ?? [])].map((r) => valueOf(r, metric)), 1);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img" });
   if (comparison?.length)
     svg.appendChild(
       el("polyline", {
-        points: points(comparison, W, H, pad, max),
+        points: points(comparison, W, H, pad, max, metric),
         fill: "none",
         stroke: "var(--aiw-muted)",
         "stroke-width": 1.5,
@@ -169,7 +191,7 @@ function drawLine(
       })
     );
   const line = el("polyline", {
-    points: points(rows, W, H, pad, max),
+    points: points(rows, W, H, pad, max, metric),
     fill: "none",
     stroke: "var(--aiw-accent)",
     "stroke-width": 2.5,
@@ -191,15 +213,15 @@ function drawLine(
   return svg;
 }
 
-function drawDonut(rows: ChartRow[], animate: boolean): SVGSVGElement {
+function drawDonut(rows: ChartRow[], animate: boolean, metric?: string): SVGSVGElement {
   const S = 140;
   const r = 46;
   const C = 2 * Math.PI * r;
-  const total = rows.reduce((sum, row) => sum + valueOf(row), 0) || 1;
+  const total = rows.reduce((sum, row) => sum + valueOf(row, metric), 0) || 1;
   const svg = el("svg", { viewBox: `0 0 ${S} ${S}`, width: "100%", height: S + 10, role: "img" });
   let acc = 0;
   rows.forEach((row, i) => {
-    const frac = valueOf(row) / total;
+    const frac = valueOf(row, metric) / total;
     const arc = el("circle", {
       cx: S / 2,
       cy: S / 2,
@@ -282,6 +304,9 @@ export function createChartFallback(options: ChartFallbackOptions = {}) {
           `falling through to the built-in renderer.`
       );
 
+    // The model NAMED these. Guessing is what produces a chart of the wrong
+    // column, drawn confidently.
+    const metric = s.metrics?.[0];
     const moving = animate && !prefersReducedMotion();
     const wrap = document.createElement("div");
 
@@ -300,11 +325,12 @@ export function createChartFallback(options: ChartFallbackOptions = {}) {
             data,
             Array.isArray(comparisonRows) ? (comparisonRows as ChartRow[]) : undefined,
             height,
-            moving
+            moving,
+            metric
           )
         : draw === "donut"
-          ? drawDonut(data, moving)
-          : drawBars(data, height, moving)
+          ? drawDonut(data, moving, metric)
+          : drawBars(data, height, moving, metric, s.dimension)
     );
     host.appendChild(wrap);
   };

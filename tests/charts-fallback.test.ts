@@ -80,3 +80,68 @@ test("it accepts the dashboard vocabulary, not just chart shapes", () => {
     );
   }
 });
+
+/**
+ * The smallest document this renderer can draw into.
+ *
+ * Enough to record what was drawn and nothing more — the point is to assert the
+ * NUMBERS the shapes encode, which needs no layout, no CSS and no browser.
+ */
+function fakeDocument() {
+  const made: Array<{ tag: string; attrs: Record<string, string>; text?: string }> = [];
+  const node = (tag: string) => {
+    const attrs: Record<string, string> = {};
+    const rec = { tag, attrs } as { tag: string; attrs: Record<string, string>; text?: string };
+    made.push(rec);
+    return {
+      setAttribute: (k: string, v: string) => void (attrs[k] = String(v)),
+      appendChild: () => {},
+      set textContent(v: string) { rec.text = v; },
+      style: { cssText: "" },
+    };
+  };
+  return {
+    made,
+    doc: {
+      createElementNS: (_ns: string, tag: string) => node(tag),
+      createElement: (tag: string) => node(tag),
+    },
+  };
+}
+
+test("it plots the metric the model NAMED, not the last numeric column", () => {
+  // The dashboard renderer takes `metrics` and `dimension` off the spec. This
+  // guessed "the last numeric field" until 2026-09-03, so a row of
+  // {period, revenue, bookings} plotted BOOKINGS here and revenue there — same
+  // data, two different pictures, and no error on either side.
+  const { made, doc } = fakeDocument();
+  const prev = (globalThis as { document?: unknown }).document;
+  (globalThis as { document?: unknown }).document = doc;
+  try {
+    createChartFallback({ animate: false })(
+      { appendChild: () => {} } as unknown as HTMLElement,
+      { chartType: "breakdown", metrics: ["revenue"], dimension: "period" },
+      [
+        { period: "Sep", revenue: 900, bookings: 3 },
+        { period: "Oct", revenue: 100, bookings: 9 },
+      ]
+    );
+  } finally {
+    (globalThis as { document?: unknown }).document = prev;
+  }
+
+  const bars = made.filter((m) => m.tag === "rect").map((m) => Number(m.attrs.height));
+  assert.equal(bars.length, 2, "two rows must draw two bars");
+  assert.ok(
+    bars[0] > bars[1],
+    `September (revenue 900) must be the TALLER bar. Got ${bars[0]} vs ${bars[1]} — ` +
+      `which is the shape of plotting \`bookings\` (3 vs 9) instead of the named metric.`
+  );
+
+  const labels = made.filter((m) => m.tag === "text").map((m) => m.text);
+  assert.deepEqual(
+    labels,
+    ["Sep", "Oct"],
+    "the axis must come from the named `dimension`, not from whichever field happens to be first"
+  );
+});

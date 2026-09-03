@@ -90,7 +90,9 @@ createAiChatWidget({ renderChartFallback: createChartFallback() });
 ```
 
 It draws `time_series`, `breakdown` and `donut`, reading your `--aiw-*` tokens
-so a chart follows the theme. It **throws** for `kpi`, `table`, `pivot_grid`,
+so a chart follows the theme, and it plots the column your spec **names** in
+`metrics` / `dimension` rather than guessing at one — so the same frame renders
+the same numbers here and in a full dashboard renderer. It **throws** for `kpi`, `table`, `pivot_grid`,
 `heatmap`, `scatter` and `content` — which the widget catches and renders with
 its built-in instead. A bad heatmap made of rectangles is worse than a readable
 table of the same numbers.
