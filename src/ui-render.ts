@@ -114,6 +114,10 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     const kind =
       spec.kind ?? (spec.rows ? "table" : spec.items ? "kpis" : "list");
     if (kind === "stat") {
+      // A lone number does not need the full column. `-widget` stretches to the
+      // log width, which is right for a table and wasteful here — a 530px card
+      // holding "48,210" and air. This modifier lets it size to its content.
+      card.classList.add(`${PREFIX}-widget-solo`);
       const v = el("div", `${PREFIX}-widget-stat`);
       v.textContent = String(spec.value ?? "");
       card.appendChild(v);

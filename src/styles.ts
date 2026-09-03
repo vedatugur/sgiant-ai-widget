@@ -669,6 +669,13 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-history-star:hover{color:#f59e0b}
 .${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-widget-title{font-size:var(--aiw-font-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
+/* A single-stat card sizes to its content instead of stretching. The generic
+   card stretches because a table needs the width; one number does not, and a
+   full-width box holding six characters reads as a layout mistake.
+   max-width keeps a long value (a sentence-shaped KPI) from spanning the log
+   anyway, and it still stretches below 360px where columns stop helping. */
+.${PREFIX}-widget-solo{align-self:flex-start;min-width:140px;max-width:min(100%,320px)}
+@media (max-width:360px){.${PREFIX}-widget-solo{align-self:stretch;max-width:none}}
 .${PREFIX}-widget-stat{font-size:var(--aiw-font-3xl);font-weight:800;line-height:1.1;color:var(--aiw-text)}
 .${PREFIX}-widget-cap{font-size:var(--aiw-font-sm);color:var(--aiw-text-2);margin-top:2px}
 .${PREFIX}-widget-delta{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-accent-ink);margin-top:4px}

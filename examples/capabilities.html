@@ -129,10 +129,16 @@
         show the last tier — exactly what an embed with no chart library gets
         out of the box: a stat tile for a <code>kpi</code>, a table for
         everything else.</p>
+      <p class="note">The built-in stat takes the <strong>last key</strong> of
+        the first row as the value and that key's <strong>name</strong> as the
+        caption. So <code>{"period":"September","revenue":"€48,210"}</code> reads
+        "revenue"; a row ending in a key called <code>value</code> reads "value",
+        which is the least useful word available. Name the last key after the
+        thing it measures.</p>
       <button class="run" data-demo="kpi">Run — kpi</button>
       <button class="run" data-demo="table">Run — rows</button>
       <pre><code>{"type":"widget","spec":{"title":"Revenue this month","chartType":"kpi"},
- "rows":[{"metric":"revenue","value":"€48,210"}]}
+ "rows":[{"period":"September","revenue":"€48,210"}]}
 
 {"type":"widget","spec":{"title":"Bookings by channel","chartType":"bar"},
  "rows":[{"channel":"Direct","bookings":182},
@@ -258,7 +264,7 @@ mountAiAgent();                     // no-op unless framed
             // sending it as text renders nothing at all.
             type: "widget",
             spec: { title: "Revenue this month", chartType: "kpi" },
-            rows: [{ metric: "revenue", value: "\u20ac48,210" }],
+            rows: [{ period: "September", revenue: "\u20ac48,210" }],
           },
         ],
         table: [
