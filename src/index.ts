@@ -355,6 +355,12 @@ export interface AiChatWidgetOptions {
    * the bubble looks like itself — which is why a bitmap was never enough for a
    * package other companies brand.
    *
+   * Ids inside the mark are made unique per copy, because the widget draws it
+   * in both the launcher and the panel header — so a gradient, filter, mask or
+   * clip path works in both rather than one of them resolving into the other's
+   * hidden subtree. You do not need to prefix them for THAT reason. Prefix them
+   * anyway if the host page has its own SVG defs, since ids remain global.
+   *
    * THIS IS MARKUP AND IT IS INSERTED AS MARKUP. Pass a mark YOU authored, the
    * same way you would write it into your own page. Never build this string
    * from user input, a URL parameter, or anything a model produced. The only
@@ -835,6 +841,42 @@ function warnOnce(reason: string, message: string): void {
 }
 
 /**
+ * Make the ids inside one copy of an SVG unique.
+ *
+ * THE WIDGET DRAWS THE HOST'S MARK TWICE — once in the launcher, once in the
+ * panel header — and `innerHTML` of the same string twice puts two elements
+ * with the same `id` in the document. `url(#g)` then resolves to the FIRST
+ * match, which is inside the launcher; while the panel is open the launcher is
+ * `display:none`, so the header's gradient resolves into a hidden subtree and
+ * paints nothing. Reported as "the avatar comes out white", and it is: the
+ * shape is there, filled with nothing.
+ *
+ * Anything a mark defines and refers to internally hits this — gradients,
+ * filters, masks, clip paths, patterns. So each copy gets its own suffix.
+ *
+ * Only ids DEFINED in this markup are rewritten, and only references that point
+ * at them, so a mark referring to something the host page defines elsewhere
+ * still works.
+ */
+let markCopy = 0;
+function uniquifySvgIds(markup: string): string {
+  const defined = [...markup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+  if (!defined.length) return markup;
+  const suffix = `-aiw${++markCopy}`;
+  let out = markup;
+  for (const id of defined) {
+    // Escape the id for use in a RegExp — an id may legally contain characters
+    // that mean something in a pattern.
+    const e = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out
+      .replace(new RegExp(`\\bid="${e}"`, "g"), `id="${id}${suffix}"`)
+      .replace(new RegExp(`url\\(#${e}\\)`, "g"), `url(#${id}${suffix})`)
+      .replace(new RegExp(`([\\s:]href)="#${e}"`, "g"), `$1="#${id}${suffix}"`);
+  }
+  return out;
+}
+
+/**
  * Choose the brand mark: an inline SVG the host authored, a bitmap URL, or the
  * built-in crescent.
  *
@@ -1048,7 +1090,7 @@ export function createAiChatWidget(
   const bubble = el("button", `${PREFIX}-bubble`);
   bubble.setAttribute("aria-label", L("openBubble", { name }));
   bubble.innerHTML =
-    `<span class="${PREFIX}-bubble-av">${avatarInner}</span>` +
+    `<span class="${PREFIX}-bubble-av">${uniquifySvgIds(avatarInner)}</span>` +
     `<span class="${PREFIX}-bubble-label"></span>` +
     `<span class="${PREFIX}-bubble-dot" hidden></span>`;
 
@@ -1404,8 +1446,12 @@ export function createAiChatWidget(
 
   applyPos(readPos());
 
-  const avatar = el("div", `${PREFIX}-avatar`);
-  avatar.innerHTML = avatarInner;
+  const avatar = el(
+    "div",
+    // A mark the host supplied presents itself — see the -own rule.
+    `${PREFIX}-avatar${opts.avatarSvg || opts.avatarUrl ? ` ${PREFIX}-avatar-own` : ""}`
+  );
+  avatar.innerHTML = uniquifySvgIds(avatarInner);
   const hName = el("div", `${PREFIX}-hname`);
   const titleEl = el("span", `${PREFIX}-title`);
   titleEl.textContent = name;

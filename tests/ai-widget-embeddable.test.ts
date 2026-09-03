@@ -127,3 +127,40 @@ describe("sgiant-ai-widget stays embeddable", () => {
     }
   });
 });
+
+it("gives every copy of the host's mark unique SVG ids", () => {
+  // The widget draws avatarSvg TWICE — launcher and panel header — and
+  // `innerHTML` of one string twice puts duplicate `id`s in the document.
+  // `url(#g)` then resolves to the first, which is inside the launcher; while
+  // the panel is open the launcher is display:none, so the header's gradient
+  // resolves into a hidden subtree and paints nothing. Reported as "the avatar
+  // comes out white": the shape is there, filled with nothing.
+  //
+  // This asserts the WIRING, because that is the regression — a third place
+  // that renders the mark, added later, without the rewrite.
+  const src = readFileSync("src/index.ts", "utf8");
+
+  assert.match(
+    src,
+    /function uniquifySvgIds/,
+    "the id-rewriting helper is gone — a mark with a gradient will break again"
+  );
+
+  const injections = [...src.matchAll(/(\w+)\.innerHTML = ([^;]+);/g)]
+    .filter(([, target]) => /avatar/i.test(target))
+    .map(([, , value]) => value);
+  for (const value of injections)
+    assert.match(
+      value,
+      /uniquifySvgIds\(/,
+      `an avatar is injected as \`${value}\` without uniquifySvgIds()`
+    );
+
+  const bubble = src.match(/-bubble-av">\$\{([^}]+)\}/);
+  assert.ok(bubble, "the launcher's avatar markup moved — update this test");
+  assert.match(
+    bubble![1],
+    /uniquifySvgIds\(/,
+    "the launcher renders the mark without rewriting its ids"
+  );
+});

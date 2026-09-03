@@ -110,9 +110,13 @@
       <code>fill="currentColor"</code> and the mark follows the widget's theme,
       which is right for a monochrome glyph. Give it its own fills or a gradient
       — as this one does — and it stays your brand's colours under every theme
-      above. <strong>Prefix any gradient id</strong>: those ids are global to the
-      page, so an unprefixed <code>id="g"</code> can be repainted by another SVG
-      on the host's page.</p>
+      above. The widget draws your mark in <em>both</em> the launcher and the
+      header and makes the ids inside each copy unique, so a gradient works in
+      both — it did not until 2026-09-03, when the second copy resolved
+      <code>url(#g)</code> into the first, which is <code>display:none</code>
+      while the panel is open, and the mark rendered as an empty shape. Ids are
+      still global to the page, so prefix yours if the host has its own SVG
+      defs.</p>
 
     <pre><code>createAiChatWidget({
   endpoint: "/chat",
