@@ -15,9 +15,22 @@
       pre { background: rgba(127,127,127,.12); padding: 1rem; border-radius: .5rem; overflow-x: auto; }
       code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
       .note { border-left: 3px solid rgba(127,127,127,.4); padding-left: 1rem; opacity: .85; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        border:1px solid var(--line,rgba(127,127,127,.28)); border-radius:.4rem; padding:.28rem .7rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600;
+        background:rgba(127,127,127,.16); }
     </style>
   </head>
   <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html" aria-current="page">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
     <h1>sgiant-ai-widget</h1>
     <p class="sub">A framework-agnostic AI chat widget. This page uses no bundler and no build step.</p>
 
@@ -45,6 +58,9 @@
         steps, a question, a confirm-gated write, chips, a form the model
         designed, a card with actions, and your own renderer. Each one runs a
         real turn, with the JSON that produced it beside it.</li>
+      <li><a href="./advanced.html">Advanced mode</a> — the assistant
+        highlighting, filling and clicking inside a real app in an iframe, over
+        <code>sgiant-ai-agent-bridge</code>. Three scenarios you can run.</li>
       <li><a href="./charts.html">Real charts, no chart library</a> — animated
         bars, an animated line with a prior-period overlay, and a donut, all
         drawn by the page in about sixty lines of inline SVG through the

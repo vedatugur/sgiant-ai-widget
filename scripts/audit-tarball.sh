@@ -53,7 +53,7 @@ done
 #    is actually protecting.
 if grep -arhoE 'https?://[a-zA-Z0-9.-]+' "$pkg" \
    | sort -u \
-   | grep -vE '^https?://(github\.com|registry\.npmjs\.org|json\.schemastore\.org|[a-z-]+\.example\.com|www\.w3\.org|vedatugur\.github\.io|unpkg\.com)$' \
+   | grep -vE '^https?://(github\.com|registry\.npmjs\.org|json\.schemastore\.org|[a-z-]+\.example\.com|www\.w3\.org|vedatugur\.github\.io|unpkg\.com|www\.npmjs\.com)$' \
    | grep . ; then
   fail "the tarball links to a host that is not on the allowlist above"
 fi

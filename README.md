@@ -19,6 +19,12 @@ npm install sgiant-ai-widget
   confirm-gated write, suggestion chips, a form the model designed, a card with
   its own actions, and a renderer you register yourself. Every demo runs a real
   turn and shows the JSON that produced it.
+- **[Advanced mode →](https://vedatugur.github.io/sgiant-ai-widget/advanced.html)**
+  — the assistant highlighting, filling and clicking inside a real app in an
+  iframe, driven over
+  [`sgiant-ai-agent-bridge`](https://www.npmjs.com/package/sgiant-ai-agent-bridge).
+  Selectors never cross the wire; only ids the page opted in with
+  `data-ai-target`.
 - **[Real charts →](https://vedatugur.github.io/sgiant-ai-widget/charts.html)**
   — animated bars, an animated line with a comparison overlay, and a donut,
   drawn with no chart library at all through `renderChartFallback`.

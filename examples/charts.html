@@ -21,9 +21,22 @@
         padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
       button.run:hover { background: rgba(127,127,127,.14); }
       .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        border:1px solid var(--line,rgba(127,127,127,.28)); border-radius:.4rem; padding:.28rem .7rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600;
+        background:rgba(127,127,127,.16); }
     </style>
   </head>
   <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html" aria-current="page">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
     <h1>Real charts, no chart library</h1>
     <p class="sub">The widget draws a stat tile or a table on its own. Anything
       richer is one host option — and it does not need a dependency.</p>

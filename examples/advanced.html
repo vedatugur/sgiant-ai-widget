@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — advanced mode, driving a real app</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run { font: inherit; font-size: .9em; cursor: pointer; margin: 0 .5rem .7rem 0;
+        padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        border:1px solid var(--line,rgba(127,127,127,.28)); border-radius:.4rem; padding:.28rem .7rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600;
+        background:rgba(127,127,127,.16); }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html" aria-current="page">Advanced mode</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
+    <h1>Advanced mode — the assistant driving your app</h1>
+    <p class="sub">Open the widget, press <strong>Advanced view</strong> in its
+      header, then run a scenario. The app on the right is a real page in an
+      iframe, and the assistant acts on it while you watch.</p>
+
+    <p class="note">Two packages, two halves.
+      <code>sgiant-ai-widget</code> runs here and opens your app via
+      <code>getAdvancedUrl</code>.
+      <a href="https://www.npmjs.com/package/sgiant-ai-agent-bridge"><code>sgiant-ai-agent-bridge</code></a>
+      runs <em>inside</em> that app — one call, <code>mountAiAgent()</code> —
+      and publishes the controls marked <code>data-ai-target</code>. The page
+      being driven is <a href="./app.html" target="_blank">app.html</a>; open it
+      on its own and the bridge stays dormant, because it is a no-op unless
+      framed.</p>
+
+    <div class="demo">
+      <h2>1 · Show me where something is</h2>
+      <p><code>highlight</code> and <code>scroll-to</code> draw an overlay on a
+        control without changing anything. This is the safe half of page control
+        — the assistant can point without touching.</p>
+      <button class="run" data-demo="point">Run</button>
+      <pre><code>[[action:{"name":"highlight","label":"Show me the save button",
+  "data":{"target":"save-settings"}}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>2 · Fill a field</h2>
+      <p><code>fill</code> writes a value and fires the events a framework
+        listens for, so React or Vue state updates rather than the DOM drifting
+        out of sync with it.</p>
+      <button class="run" data-demo="fill">Run</button>
+      <pre><code>[[action:{"name":"fill","label":"Rename the property",
+  "data":{"target":"property-name","value":"Seaside Inn &amp; Spa"}}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>3 · A whole scenario, confirm-gated</h2>
+      <p>Fill two fields, then click Save — and the click carries a
+        <code>confirm</code>, so the user approves the only step that changes
+        anything.</p>
+      <button class="run" data-demo="scenario">Run</button>
+      <pre><code>[[action:{"name":"fill","label":"Set the notice period",
+  "data":{"target":"cancel-days","value":"7"}}]]
+[[action:{"name":"fill","label":"Add a checkout note",
+  "data":{"target":"checkout-notes","value":"Late checkout on request."}}]]
+[[action:{"name":"click","label":"Save the changes",
+  "confirm":"Save these settings?","data":{"target":"save-settings"}}]]</code></pre>
+    </div>
+
+    <div class="demo">
+      <h2>Fill and click are gated whether you ask or not</h2>
+      <p>Scenario 2 above carries no <code>confirm</code>, and the widget asks
+        anyway — <em>"Type 'Seaside Inn &amp; Spa' into property-name?"</em>.
+        Anything that CHANGES the page is confirmed by default; only
+        <code>highlight</code>, <code>scroll-to</code> and
+        <code>focus-field</code> run straight through, because they change
+        nothing.</p>
+      <p>Setting <code>confirm</code> yourself replaces the wording with your
+        own, which is what scenario 3 does for the save. You cannot turn the gate
+        off — a model that has been talked into something should not be able to
+        silently type into a form.</p>
+    </div>
+
+    <div class="demo">
+      <h2>What crosses the wire</h2>
+      <p>An id and, for <code>fill</code>, a value. <strong>Never a
+        selector.</strong> There is no message that can express "click the third
+        div", so a compromised parent — or a model talked into something — cannot
+        reach a control the page never marked. Origins are allow-listed on both
+        sides and default to same-origin.</p>
+      <pre><code>// in your app
+import { mountAiAgent } from "sgiant-ai-agent-bridge";
+mountAiAgent({ allowedOrigins: ["https://your-widget-host.example.com"] });
+
+&lt;button data-ai-target="save-settings"&gt;Save changes&lt;/button&gt;
+
+// in the widget host
+createAiChatWidget({ getAdvancedUrl: () =&gt; "/app" });</code></pre>
+    </div>
+
+    <script>
+      const A = (o) => `[[action:${JSON.stringify(o)}]]`;
+      const FRAMES = {
+        point: [
+          { type: "text", d: "It is at the bottom of the settings form.\n\n" },
+          { type: "text", d: A({ name: "highlight", label: "Show me the save button",
+              data: { target: "save-settings" } }) },
+        ],
+        fill: [
+          { type: "text", d: "I can rename it for you.\n\n" },
+          { type: "text", d: A({ name: "fill", label: "Rename the property",
+              data: { target: "property-name", value: "Seaside Inn & Spa" } }) },
+        ],
+        scenario: [
+          { type: "text", d: "Here is the whole change. The save is confirm-gated.\n\n" },
+          { type: "text", d: A({ name: "fill", label: "Set the notice period",
+              data: { target: "cancel-days", value: "7" } }) },
+          { type: "text", d: A({ name: "fill", label: "Add a checkout note",
+              data: { target: "checkout-notes", value: "Late checkout on request." } }) },
+          { type: "text", d: A({ name: "click", label: "Save the changes",
+              confirm: "Save these settings?", data: { target: "save-settings" } }) },
+        ],
+      };
+
+      let pending = "point";
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream({
+            async start(c) {
+              const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+              send({ threadId: "advanced-demo" });
+              for (const f of FRAMES[pending] ?? []) {
+                send(f);
+                await new Promise((r) => setTimeout(r, 300));
+              }
+              send({ type: "done" });
+              c.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        );
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Nova",
+        subtitle: "Advanced mode",
+        accent: "#6d28d9",
+        // THIS is what puts the Advanced view control in the header. Without it
+        // the button never appears — advanced mode is opt-in, because it frames
+        // a page and only the host knows which one.
+        getAdvancedUrl: () => "./app.html",
+        advancedLabel: "Advanced view",
+        onWidgetAction: async (name, data) =>
+          `(${name} on ${data.target} was not routed to the frame — open Advanced view first.)`,
+      });
+
+      function ask(text) {
+        const input = document.querySelector(".sgiant-aiw-input");
+        const send = document.querySelector(".sgiant-aiw-send");
+        if (!input || !send) return;
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        send.click();
+      }
+      document.querySelectorAll("button.run").forEach((b) => {
+        b.addEventListener("click", () => {
+          pending = b.dataset.demo;
+          chat.open();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => ask(`Run the ${pending} scenario`))
+          );
+        });
+      });
+    </script>
+  </body>
+</html>

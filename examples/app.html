@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo app — driven by the agent bridge</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.3); }
+      body { font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0; padding: 1.6rem 1.4rem 3rem; }
+      h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
+      p.sub { margin: 0 0 1.4rem; opacity: .68; font-size: .92em; }
+      fieldset { border: 1px solid var(--line); border-radius: .5rem; margin: 0 0 1rem; padding: .9rem 1rem 1.1rem; }
+      legend { padding: 0 .4rem; font-size: .78em; text-transform: uppercase; letter-spacing: .05em; opacity: .6; }
+      label { display: block; font-size: .84em; opacity: .8; margin: .7rem 0 .25rem; }
+      input, select, textarea { font: inherit; width: 100%; box-sizing: border-box;
+        padding: .5rem .6rem; border-radius: .4rem; border: 1px solid var(--line);
+        background: transparent; color: inherit; }
+      button { font: inherit; padding: .5rem 1rem; border-radius: .4rem; cursor: pointer;
+        border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.primary { background: #6d28d9; border-color: #6d28d9; color: #fff; font-weight: 600; }
+      .row { display: flex; gap: .6rem; margin-top: 1rem; }
+      .saved { margin-top: .9rem; font-size: .86em; opacity: .75; min-height: 1.2em; }
+    </style>
+  </head>
+  <body>
+    <h1>Seaside Inn — settings</h1>
+    <p class="sub">A stand-in for your app. Every control the assistant may touch
+      carries a <code>data-ai-target</code>; nothing else is reachable.</p>
+
+    <fieldset>
+      <legend>Property</legend>
+      <label for="n">Property name</label>
+      <input id="n" data-ai-target="property-name" value="Seaside Inn" />
+
+      <label for="c">Contact email</label>
+      <input id="c" type="email" data-ai-target="contact-email"
+             value="hello@example.com" />
+
+      <label for="t">Time zone</label>
+      <select id="t" data-ai-target="timezone">
+        <option>Europe/Istanbul</option>
+        <option>Europe/London</option>
+        <option>UTC</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Booking policy</legend>
+      <label for="d">Cancellation notice (days)</label>
+      <input id="d" type="number" data-ai-target="cancel-days" value="3" />
+
+      <label for="n2">Notes shown at checkout</label>
+      <textarea id="n2" rows="3" data-ai-target="checkout-notes"></textarea>
+    </fieldset>
+
+    <div class="row">
+      <button class="primary" data-ai-target="save-settings">Save changes</button>
+      <button data-ai-target="reset-settings">Reset</button>
+    </div>
+    <div class="saved" id="saved"></div>
+
+    <script type="module">
+      // THE PAGE-SIDE HALF of sgiant-ai-agent-bridge. It publishes every
+      // data-ai-target on this page and executes highlight / scroll-to /
+      // focus-field / fill / click against them, drawing an overlay so the user
+      // sees each action land.
+      //
+      // A no-op when this page is NOT framed, so it is safe to call
+      // unconditionally — which is why a real app just calls it at startup.
+      //
+      // Loaded here from a copied dist so the example needs no build step. In
+      // your app this is `import { mountAiAgent } from "sgiant-ai-agent-bridge"`.
+      import { mountAiAgent } from "./bridge/index.js";
+
+      mountAiAgent({
+        // Same-origin here. An external embedder passes the parent's origin
+        // explicitly — granting it is granting control of this page.
+        allowedOrigins: [location.origin],
+      });
+
+      const saved = document.getElementById("saved");
+      document
+        .querySelector('[data-ai-target="save-settings"]')
+        .addEventListener("click", () => {
+          const name = document.getElementById("n").value;
+          saved.textContent = `Saved — property name is now "${name}".`;
+        });
+      document
+        .querySelector('[data-ai-target="reset-settings"]')
+        .addEventListener("click", () => {
+          document.getElementById("n").value = "Seaside Inn";
+          document.getElementById("n2").value = "";
+          saved.textContent = "Reset to defaults.";
+        });
+    </script>
+  </body>
+</html>
