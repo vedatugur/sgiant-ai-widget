@@ -29,7 +29,10 @@
          means. A plain float would step the text around an invisible rectangle
          and leave wedges of white at the corners. */
       .bigbot { width: 172px; height: 172px; color: #7dd3fc; float: right;
-        shape-outside: circle(50% at 50% 50%); shape-margin: .7rem;
+        shape-outside: inset(0 round 32%); shape-margin: .75rem;
+        /* `inset(round)` rather than `circle()`: the mark is a rounded
+           SQUARE now, and wrapping text to a circle around it would pull the
+           lines away from two corners that are actually there. */
         margin: .1rem 0 .5rem 1.1rem; }
       .avatar-copy { font-size: .92em; }
       .avatar-copy p { margin: .55rem 0; }
@@ -217,7 +220,7 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <filter id="aiwbot-soft" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="1.6"/>
     </filter>
-    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="7"/></clipPath>
+    <clipPath id="aiwbot-visorclip"><rect x="12" y="17" width="24" height="14" rx="6"/></clipPath>
   </defs>
   <!-- Two shadows, because one cannot be both. The wide soft one places the
        object in the room; the tight dark one under the chin is contact, and it is
@@ -231,12 +234,12 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <!-- A SQUIRCLE, not a pill with ears. Removing the side pods and the mouth
          bar took four shapes out and cost nothing: what read as "robot" was
          always the visor and the two lights. -->
-    <rect x="8" y="12" width="32" height="30" rx="13" fill="url(#aiwbot-body)"/>
-    <rect x="8" y="12" width="32" height="30" rx="13" fill="url(#aiwbot-key)"/>
-    <rect x="8" y="12" width="32" height="30" rx="13" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
-    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="7.7" fill="#05070f" opacity=".28"/>
-    <rect x="12" y="17" width="24" height="14" rx="7" fill="url(#aiwbot-visor)"/>
-    <rect x="12" y="17" width="24" height="14" rx="7" fill="url(#aiwbot-bevel)"/>
+    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-body)"/>
+    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-key)"/>
+    <rect x="8" y="12" width="32" height="30" rx="10.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
+    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="6.6" fill="#05070f" opacity=".28"/>
+    <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-visor)"/>
+    <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-bevel)"/>
     <ellipse cx="19.6" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye"/>
     <ellipse cx="28.4" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye r"/>
     <ellipse cx="18.8" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec"/>
