@@ -37,8 +37,6 @@
       .avatar-copy { font-size: .92em; }
       .avatar-copy p { margin: .55rem 0; }
       .avatar-copy::after { content: ""; display: block; clear: both; }
-      .markrow { display: flex; flex-wrap: wrap; gap: .4rem; margin: .2rem 0 .9rem; }
-      .markrow .mark[aria-pressed="true"] { background: rgba(127,127,127,.2); font-weight: 600; }
       /* Below ~46rem the mark would leave three words a line. Full width, centred,
          text above and below — the stack is the honest layout at that size. */
       @media (max-width: 46rem) {
@@ -86,14 +84,6 @@
           The body is one gradient rather than three stacked overlays — fewer
           stops read as a smoother surface, and the banding is what made the
           earlier shell look like paper.</p>
-      </div>
-      <p>Three marks, same option. The launcher takes whatever SVG you hand it,
-        so the character is yours — swap one in and the corner of the page changes
-        without touching anything else.</p>
-      <div class="markrow">
-        <button class="run mark" data-mark="robot">Robot</button>
-        <button class="run mark" data-mark="orb">Orb</button>
-        <button class="run mark" data-mark="spark">Spark</button>
       </div>
       <p class="note" style="margin-bottom:1rem">A <strong>tall</strong> mark — one
         with an antenna, where the art has headroom inside its own viewBox — can
@@ -198,9 +188,9 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <linearGradient id="aiwbot-body" x1=".28" y1="0" x2=".72" y2="1">
       <stop offset="0%"   stop-color="#f2f4f9"/>
       <stop offset="30%"  stop-color="#dfe3ee"/>
-      <stop offset="68%"  stop-color="#b9c0d2"/>
-      <stop offset="88%"  stop-color="#8d95ab"/>
-      <stop offset="100%" stop-color="#a8b0c4"/>
+      <stop offset="68%"  stop-color="#aab2c7"/>
+      <stop offset="88%"  stop-color="#6f7893"/>
+      <stop offset="100%" stop-color="#8e97ae"/>
     </linearGradient>
     <radialGradient id="aiwbot-key" cx=".33" cy=".18" r=".55">
       <stop offset="0%"   stop-color="#ffffff" stop-opacity=".42"/>
@@ -254,11 +244,18 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-body)"/>
     <rect x="8" y="12" width="32" height="30" rx="10.5" fill="url(#aiwbot-key)"/>
     <rect x="8" y="12" width="32" height="30" rx="10.5" fill="none" stroke="url(#aiwbot-rim)" stroke-width="1.2"/>
-    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="6.6" fill="#05070f" opacity=".28"/>
+    <rect x="11.3" y="16.3" width="25.4" height="15.4" rx="6.6" fill="#05070f" opacity=".42"/>
     <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-visor)"/>
     <rect x="12" y="17" width="24" height="14" rx="6" fill="url(#aiwbot-bevel)"/>
-    <ellipse cx="19.6" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye"/>
-    <ellipse cx="28.4" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye r"/>
+    <!-- Each eye is a SOCKET that stays put and a pupil that moves inside it.
+         The socket is the dark recess the eye sits in; without it a travelling
+         pupil looks like a dot sliding across a face. -->
+    <ellipse cx="19.6" cy="24" rx="3.1" ry="3.5" fill="#05070f" opacity=".55"/>
+    <ellipse cx="28.4" cy="24" rx="3.1" ry="3.5" fill="#05070f" opacity=".55"/>
+    <g class="pupil pl"><ellipse cx="19.6" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye"/></g>
+    <g class="pupil pr"><ellipse cx="28.4" cy="24" rx="2.4" ry="2.9" fill="currentColor" class="eye r"/></g>
+    <!-- Catchlights stay OUTSIDE both the pupil group and the blink group: the
+         highlight belongs to the light, so the eye travels under it. -->
     <ellipse cx="18.8" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec"/>
     <ellipse cx="27.6" cy="22.9" rx=".72" ry=".95" fill="#ffffff" class="spec r"/>
     <g clip-path="url(#aiwbot-visorclip)">
@@ -267,34 +264,6 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
     </g>
   </g>
 </svg>`;
-      // Two more marks, to show the option takes ANY svg. Both are deliberately
-      // simpler than the robot: a mark does not need a face, and at 56px any
-      // detail below about 3px of stroke is lost anyway.
-      const ORB = '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">'
-        + '<defs>'
-        + '<radialGradient id="orb-b" cx=".34" cy=".28" r=".75">'
-        + '<stop offset="0%" stop-color="#ffffff"/>'
-        + '<stop offset="42%" stop-color="currentColor"/>'
-        + '<stop offset="100%" stop-color="#0b1327"/></radialGradient>'
-        + '<radialGradient id="orb-s" cx=".3" cy=".24" r=".28">'
-        + '<stop offset="0%" stop-color="#ffffff" stop-opacity=".95"/>'
-        + '<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'
-        + '</defs>'
-        + '<ellipse cx="24" cy="43" rx="11" ry="1.8" fill="#0a0e1a" opacity=".25"/>'
-        + '<circle cx="24" cy="24" r="16" fill="url(#orb-b)"/>'
-        + '<ellipse cx="18.5" cy="17.5" rx="6.5" ry="5" fill="url(#orb-s)"/>'
-        + '<circle cx="24" cy="24" r="16" fill="none" stroke="#ffffff" stroke-opacity=".22"/>'
-        + '</svg>';
-      const SPARK = '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">'
-        + '<style>.sp{animation:sp 3s ease-in-out infinite;transform-origin:24px 24px}'
-        + '@keyframes sp{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:.86}}'
-        + '@media (prefers-reduced-motion:reduce){.sp{animation:none}}</style>'
-        + '<path class="sp" d="M24 6 L27.6 18.4 L40 22 L27.6 25.6 L24 38 L20.4 25.6 L8 22 L20.4 18.4 Z" fill="currentColor"/>'
-        + '<circle cx="35" cy="12" r="2.2" fill="currentColor" opacity=".65"/>'
-        + '<circle cx="13" cy="33" r="1.5" fill="currentColor" opacity=".45"/>'
-        + '</svg>';
-      const MARKS = { robot: ROBOT, orb: ORB, spark: SPARK };
-
       document.getElementById("botpreview").innerHTML = ROBOT;
 
       const chat = SgiantAiWidget.createAiChatWidget({
@@ -308,120 +277,23 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
 
       document.querySelectorAll("button.run[data-l]").forEach((b) => {
         b.addEventListener("click", () => {
-          live.setLauncher(JSON.parse(b.dataset.l));
-          live.close();
+          chat.setLauncher(JSON.parse(b.dataset.l));
+          chat.close();
         });
       });
 
-      // Swapping the mark REMOUNTS: `avatarSvg` is read at creation, so
-      // destroy-and-recreate is the honest demonstration rather than reaching
-      // into the widget's DOM behind its back.
-      let live = chat;
-      function useMark(name) {
-        document.getElementById("botpreview").innerHTML = MARKS[name];
-        document.querySelectorAll(".mark").forEach((b) =>
-          b.setAttribute("aria-pressed", String(b.dataset.mark === name))
-        );
-        live.destroy();
-        live = SgiantAiWidget.createAiChatWidget({
-          endpoint: "/demo-chat",
-          title: "Nova",
-          subtitle: "Chrome tour",
-          accent: "#0ea5e9",
-          avatarSvg: MARKS[name],
-          greeting: "Try the launcher states below, or drag me by the header.",
-        });
-        // TARGET THE BUBBLE, not :root. The tokens are declared ON the bubble
-        // through `:where()` — zero specificity, so a host RULE can win, but an
-        // inherited value cannot: a declaration on the element always beats
-        // inheritance no matter how weak its selector. Setting these on
-        // documentElement read back correctly and changed nothing on screen,
-        // which is exactly the trap `:where()` exists to make survivable.
-        //
-        // Only the robot has headroom above its head, so only the robot is
-        // lifted past the disc. A lift on a mark that fills its own viewBox just
-        // shoves it off-centre.
-        let sheet = document.getElementById("markvars");
-        if (!sheet) {
-          sheet = document.createElement("style");
-          sheet.id = "markvars";
-          document.head.appendChild(sheet);
-        }
-        // PER MARK, because the numbers come from where the art sits inside its
-        // own viewBox — not from taste.
-        //
-        // The robot's head spans y=12..42 of 48, so its centre is at 56.25% and
-        // the antenna tip at ~10%. Solving for "head centred in a 56px disc"
-        // gives a lift of -6.3% at any size; the SIZE then decides whether the
-        // antenna clears the top. At 44px it does not (it sits 8px inside and
-        // leaves 9px of dead space below); at 64px the antenna crosses by 1.3px
-        // and the gap below closes to zero. A first attempt used -22% at 44px,
-        // which put the mark 4px above the disc and left a 16px hole under it —
-        // lifted, not balanced.
-        //
-        // The orb and the spark are centred in their own viewBox already, so
-        // they take no lift at all. That is the whole reason this is a token
-        // rather than a global.
-        const FIT = {
-          robot: { icon: "64px", lift: "-6.3%" },
-          orb:   { icon: "34px", lift: "0%" },
-          spark: { icon: "32px", lift: "-2%" },
-        }[name];
-        sheet.textContent =
-          ".sgiant-aiw-bubble{--aiw-launcher-icon:" + FIT.icon +
-          ";--aiw-launcher-lift:" + FIT.lift + "}";
-      }
-      document.querySelectorAll(".mark").forEach((b) =>
-        b.addEventListener("click", () => useMark(b.dataset.mark))
-      );
-      // MOUSE PARALLAX. The mark tilts toward the pointer and its parts travel at
-      // DIFFERENT rates — the antenna furthest, the shell least — which is what
-      // sells depth; a rigid tilt just looks like a rotating sticker. Damped
-      // toward the target each frame rather than snapped, because something that
-      // tracks the cursor exactly reads as a cursor, not as light.
-      //
-      // Honours prefers-reduced-motion: a mark that follows the pointer is motion
-      // the reader never asked for.
-      (function parallax() {
-        const host = document.getElementById("botpreview");
-        if (!host) return;
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-        let tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
-        function frame() {
-          cx += (tx - cx) * 0.12;
-          cy += (ty - cy) * 0.12;
-          const svg = host.querySelector("svg");
-          if (svg) {
-            svg.style.transform =
-              "perspective(420px) rotateY(" + (cx * 9).toFixed(2) +
-              "deg) rotateX(" + (-cy * 7).toFixed(2) + "deg)";
-            const set = (sel, k) => {
-              const n = svg.querySelector(sel);
-              if (n) n.style.transform =
-                "translate(" + (cx * k).toFixed(2) + "px," +
-                (cy * k * 0.6).toFixed(2) + "px)";
-            };
-            set(".ping", 1.8);
-            set(".glint", 2.6);
-          }
-          raf = Math.abs(tx - cx) + Math.abs(ty - cy) > 0.001
-            ? requestAnimationFrame(frame) : 0;
-        }
-        function nudge(e) {
-          if (reduce.matches) return;
-          const r = host.getBoundingClientRect();
-          tx = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (r.width * 1.6)));
-          ty = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / (r.height * 1.6)));
-          if (!raf) raf = requestAnimationFrame(frame);
-        }
-        window.addEventListener("mousemove", nudge, { passive: true });
-        window.addEventListener("mouseleave", () => {
-          tx = 0; ty = 0; if (!raf) raf = requestAnimationFrame(frame);
-        });
-        host.style.willChange = "transform";
-      })();
-
-      useMark("robot");
+      // ONE mark, fitted to the disc from its own geometry rather than by eye.
+      // The robot's head spans y=12..42 of a 48 viewBox, so its centre is 56.25%
+      // and the antenna tip about 10%. Solving for "head centred in a 56px disc"
+      // gives -6.3% at any size; the SIZE then decides whether the antenna
+      // clears the top. A first attempt at 44px/-22% put the mark 4px above the
+      // disc and left a 16px hole beneath it — lifted, not balanced. At 64px the
+      // head centres, the antenna crosses, and the gap closes.
+      document.getElementById("botpreview").innerHTML = ROBOT;
+      const fit = document.createElement("style");
+      fit.textContent =
+        ".sgiant-aiw-bubble{--aiw-launcher-icon:64px;--aiw-launcher-lift:-6.3%}";
+      document.head.appendChild(fit);
     </script>
   </body>
 </html>
