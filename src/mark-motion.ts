@@ -57,7 +57,7 @@ export function startMarkMotion(
   const fine = window.matchMedia("(hover: hover) and (pointer: fine)");
   if (still.matches || !fine.matches) return inert;
 
-  const TILT = opts.tilt ?? 9;
+  const TILT = opts.tilt ?? 12;
   const springs = new WeakMap<Element, Spring>();
   let px = 0;
   let py = 0;
@@ -82,8 +82,16 @@ export function startMarkMotion(
           `translate(${(s!.x * k).toFixed(2)}px,${(s!.y * k * 0.6).toFixed(2)}px)`;
       });
     };
-    shift(".ping", 1.8);
-    shift(".glint", 2.6);
+    // DEPTH BY RATE. Everything here moves in the same direction; what makes it
+    // read as solid rather than as a stack of stickers is that each layer moves
+    // by a DIFFERENT amount. Negative on the back, because a face further from
+    // the viewer swings the opposite way as the object turns — that opposition
+    // is the whole of the effect. A mark without these classes still tilts.
+    shift(".deep", -2.2);
+    shift(".face", 0.5);
+    shift(".fore", 2.0);
+    shift(".ping", 3.2);
+    shift(".glint", 3.6);
     // Eyes travel furthest, clamped in viewBox units so it holds at any rendered
     // size — a pupil that leaves its socket stops being an eye. The near eye
     // travels further: two eyes converging on a point do not move equally, and
