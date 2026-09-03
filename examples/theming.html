@@ -56,6 +56,38 @@
       <code>-sm</code> pair applies below 480px and is deliberately independent,
       so a bigger desktop launcher does not force a bigger phone one.</p>
 
+    <h2>Whole-theme presets</h2>
+    <p>Every colour is a custom property too. These four are complete themes —
+      click one and the widget repaints live. Open the bubble first.</p>
+
+    <p id="presets"></p>
+
+    <p>Each preset is just a map of token names to values. Pass it as the
+      <code>theme</code> option at construction, or write the same properties
+      into a stylesheet — which is what these buttons do, injecting one
+      <code>&lt;style&gt;</code> rule:</p>
+
+    <pre><code>createAiChatWidget({
+  endpoint: "/chat",
+  theme: {
+    accent: "#e07a5f",
+    "header-bg": "#3d405b",
+    "header-fg": "#f4f1de",
+    surface: "#fffcf7",
+    bg: "#f4f1de",
+    text: "#2b2b2b",
+    border: "#e4ded1",
+  },
+});</code></pre>
+
+    <p class="note"><strong>Precedence, and it matters:</strong> the
+      <code>theme</code> and <code>accent</code> options write <em>inline</em>
+      styles, so they beat every stylesheet — yours included. A CSS rule beats
+      only the widget's own defaults, which sit inside <code>:where()</code> and
+      have zero specificity. So pick one mechanism: pass a theme at construction
+      <em>or</em> drive it from CSS. This page uses CSS only — it passes no
+      <code>accent</code>, which is why the buttons above can change one.</p>
+
     <h2>Your own brand mark</h2>
     <p>The mark below is an inline SVG passed as <code>avatarSvg</code>. It
       inherits the widget's colours through <code>currentColor</code> and stays
@@ -96,16 +128,114 @@
 
     <script src="./sgiant-ai-widget.global.js"></script>
     <script>
-      SgiantAiWidget.createAiChatWidget({
+      const chat = SgiantAiWidget.createAiChatWidget({
         endpoint: "/demo-chat",
         title: "Nova",
         subtitle: "Themed launcher and mark",
-        accent: "#0f766e",
         avatarSvg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2 L14.6 9.4 L22 12 L14.6 14.6 L12 22 L9.4 14.6 L2 12 L9.4 9.4 Z"
                 fill="currentColor"/>
         </svg>`,
       });
+
+      // ---- THEME PRESETS ---------------------------------------------------
+      // A theme is a map of --aiw-* token names (without the prefix) to values.
+      // Setting them on the two roots is exactly what the `theme` option does
+      // at construction; doing it live is how you would follow a user's own
+      // light/dark or brand choice without rebuilding the widget.
+      const PRESETS = {
+        Default: null, // clears the overrides and falls back to the built-ins
+        Midnight: {
+          accent: "#8b5cf6",
+          "accent-contrast": "#ffffff",
+          "header-bg": "#12121a",
+          "header-fg": "#ececf5",
+          surface: "#16161e",
+          "surface-raised": "#1c1c26",
+          "surface-2": "#22222c",
+          bg: "#101016",
+          text: "#e7e7ec",
+          "text-2": "#b6b6c2",
+          muted: "#8a8a96",
+          border: "#2b2b36",
+          "border-strong": "#3a3a47",
+          "border-soft": "#22222c",
+        },
+        Sand: {
+          accent: "#e07a5f",
+          "accent-contrast": "#ffffff",
+          "header-bg": "#3d405b",
+          "header-fg": "#f4f1de",
+          surface: "#fffcf7",
+          "surface-raised": "#ffffff",
+          "surface-2": "#f7f2e8",
+          bg: "#f4f1de",
+          text: "#2b2b2b",
+          "text-2": "#5b5b5b",
+          muted: "#8a8378",
+          border: "#e4ded1",
+          "border-strong": "#d5cdbb",
+          "border-soft": "#efe9dc",
+        },
+        Forest: {
+          accent: "#2f7d43",
+          "accent-contrast": "#ffffff",
+          "header-bg": "#14261b",
+          "header-fg": "#e8f2ea",
+          surface: "#ffffff",
+          "surface-2": "#f2f7f3",
+          bg: "#f7faf8",
+          text: "#12211a",
+          "text-2": "#41564a",
+          muted: "#6c8377",
+          border: "#dbe7de",
+        },
+      };
+
+      // Apply a preset by injecting ONE stylesheet rather than writing inline
+      // styles on the widget's elements.
+      //
+      // Inline was the obvious approach and it was wrong: the panel is created
+      // and torn down as the widget opens and closes, so properties written
+      // onto it disappear, and a preset chosen while it was shut appeared to do
+      // nothing. A stylesheet is independent of those nodes — it applies to
+      // whatever exists now and to whatever is created later.
+      //
+      // It works at all because the widget declares its own defaults inside
+      // :where(), which has zero specificity. A plain class selector beats it.
+      let sheet = document.getElementById("aiw-preset");
+      function applyTheme(name) {
+        const theme = PRESETS[name];
+        if (!sheet) {
+          sheet = document.createElement("style");
+          sheet.id = "aiw-preset";
+          document.head.appendChild(sheet);
+        }
+        if (!theme) {
+          sheet.textContent = "";
+          return;
+        }
+        const decls = Object.entries(theme)
+          .map(([k, v]) => `--aiw-${k}:${v}`)
+          .join(";");
+        sheet.textContent =
+          `.sgiant-aiw-bubble,.sgiant-aiw-panel{${decls}}`;
+      }
+
+      const holder = document.getElementById("presets");
+      for (const name of Object.keys(PRESETS)) {
+        const b = document.createElement("button");
+        b.className = "run";
+        b.textContent = name;
+        b.style.marginRight = ".5rem";
+        b.addEventListener("click", () => {
+          // No timing dance needed: a stylesheet does not care whether the
+          // panel exists yet.
+          applyTheme(name);
+          chat.open();
+        });
+        holder.appendChild(b);
+      }
     </script>
   </body>
 </html>
