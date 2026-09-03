@@ -60,7 +60,15 @@ read in one go, is in **[BACKEND.md](./BACKEND.md)**.
 
 The entire stylesheet reads from `--aiw-*` CSS custom properties set on the
 widget's roots. `accent` / `gradient` are the shorthand; the `theme` option
-overrides any token — or theme from plain CSS by targeting the roots.
+overrides any token — or theme from plain CSS by targeting the roots, which
+works because the defaults are declared inside `:where()` and therefore carry
+zero specificity. Any rule you write beats them, with no `!important` needed.
+
+**Launcher geometry is tokenised too**: `--aiw-launcher-size`, `-offset`,
+`-offset-sm` (below 480px), `-icon`, `-pill-height`, `-pill-icon`,
+`-parked-size`, `-parked-icon`, `-dot`, `-dot-sm`. The `-sm` pair is
+deliberately independent, so a larger desktop launcher does not force a larger
+one on a phone. See [examples/theming.html](./examples/theming.html).
 
 ```ts
 createAiChatWidget({

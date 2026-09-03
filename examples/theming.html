@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — theming and the brand mark</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 8rem;
+      }
+      h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+      pre { background: rgba(127,127,127,.12); padding: 1rem; border-radius: .5rem; overflow-x: auto; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+
+      /* Launcher geometry is CSS custom properties, so it is themeable from a
+         plain stylesheet — no option, no rebuild. This makes the bubble bigger
+         and pushes it further from the corner. */
+      .sgiant-aiw-bubble {
+        --aiw-launcher-size: 72px;
+        --aiw-launcher-offset: 32px;
+        --aiw-launcher-icon: 34px;
+        /* The offset below 480px is its OWN token. Override only the first and
+           the bubble quietly returns to the default 16px on a phone — which is
+           how this example was wrong before anyone measured it. */
+        --aiw-launcher-offset-sm: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Theming the launcher</h1>
+    <p>The bubble on this page is <strong>72px</strong> and sits <strong>32px</strong>
+      from the corner, against defaults of 56px and 18px. Nothing was passed to
+      <code>createAiChatWidget</code> to do that — it is four custom properties
+      in the page's own stylesheet.</p>
+
+    <p>Plain CSS wins because the widget declares its defaults inside
+      <code>:where()</code>, which has zero specificity. Any rule you write
+      beats them, and you do not need <code>!important</code> or a more
+      specific selector. (The <code>theme</code> option still works and takes
+      precedence, since it writes inline styles.)</p>
+
+    <pre><code>.sgiant-aiw-bubble {
+  --aiw-launcher-size: 72px;
+  --aiw-launcher-offset: 32px;
+  --aiw-launcher-icon: 34px;
+  --aiw-launcher-offset-sm: 24px;  /* below 480px */
+}</code></pre>
+
+    <p>The full set: <code>size</code>, <code>offset</code>,
+      <code>offset-sm</code> (below 480px), <code>icon</code>,
+      <code>pill-height</code>, <code>pill-icon</code>,
+      <code>parked-size</code>, <code>parked-icon</code>, <code>dot</code>,
+      <code>dot-sm</code> — each prefixed <code>--aiw-launcher-</code>. The
+      <code>-sm</code> pair applies below 480px and is deliberately independent,
+      so a bigger desktop launcher does not force a bigger phone one.</p>
+
+    <h2>Your own brand mark</h2>
+    <p>The mark below is an inline SVG passed as <code>avatarSvg</code>. It
+      inherits the widget's colours through <code>currentColor</code> and stays
+      crisp at any launcher size, which is what an <code>&lt;img&gt;</code>
+      cannot do.</p>
+
+    <pre><code>createAiChatWidget({
+  endpoint: "/chat",
+  avatarSvg: `&lt;svg viewBox="0 0 24 24" fill="none"&gt;…&lt;/svg&gt;`,
+});</code></pre>
+
+    <script>
+      // Same fifteen-line demo stub as the other example — this page is static.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const body = JSON.parse(init.body);
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream({
+            async start(c) {
+              const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+              send({ threadId: "theming-demo" });
+              for (const w of ("The launcher and the mark on this page are both " +
+                "themed. You said: " + body.content).split(" ")) {
+                send({ type: "text", d: w + " " });
+                await new Promise((r) => setTimeout(r, 30));
+              }
+              send({ type: "done" });
+              c.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/x-ndjson" } }
+        );
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        title: "Nova",
+        subtitle: "Themed launcher and mark",
+        accent: "#0f766e",
+        avatarSvg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2 L14.6 9.4 L22 12 L14.6 14.6 L12 22 L9.4 14.6 L2 12 L9.4 9.4 Z"
+                fill="currentColor"/>
+        </svg>`,
+      });
+    </script>
+  </body>
+</html>

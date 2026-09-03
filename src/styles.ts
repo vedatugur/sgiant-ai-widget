@@ -168,7 +168,15 @@ export function injectStyles(side: "left" | "right"): void {
  * These two deliberately do NOT flip with the colour scheme, and neither does
  * the bar. --aiw-surface does, which is how the active-icon chip came to paint
  * #161616 on #151D2F in dark mode. */
-.${PREFIX}-bubble,.${PREFIX}-panel{${motionCssVars()}--aiw-font-3xs:10px;--aiw-font-2xs:11px;--aiw-font-xs:12px;--aiw-font-sm:13px;--aiw-font-md:14px;--aiw-font-lg:15px;--aiw-font-xl:16px;--aiw-font-2xl:18px;--aiw-font-3xl:30px;--aiw-radius-2xs:2px;--aiw-radius-xs:4px;--aiw-radius-sm:6px;--aiw-radius-md:8px;--aiw-radius-lg:10px;--aiw-radius-xl:12px;--aiw-radius-2xl:14px;--aiw-radius-3xl:18px;--aiw-radius-pill:999px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+/* :where() so these DEFAULTS carry ZERO specificity and any author rule beats
+   them. They were .PREFIX-bubble,.PREFIX-panel until 2026-09-03 — the same
+   specificity a host would write — and this stylesheet is injected later, so
+   the host always lost. The README promised theming "from plain CSS by
+   targeting the roots" the whole time and that promise was false; only the
+   theme option worked, because it writes INLINE styles.
+   Caught by MEASURING a themed page rather than looking at it: the bubble
+   reported 56x56 while the page asked for 72. */
+:where(.${PREFIX}-bubble),:where(.${PREFIX}-panel){${motionCssVars()}--aiw-font-3xs:10px;--aiw-font-2xs:11px;--aiw-font-xs:12px;--aiw-font-sm:13px;--aiw-font-md:14px;--aiw-font-lg:15px;--aiw-font-xl:16px;--aiw-font-2xl:18px;--aiw-font-3xl:30px;--aiw-radius-2xs:2px;--aiw-radius-xs:4px;--aiw-radius-sm:6px;--aiw-radius-md:8px;--aiw-radius-lg:10px;--aiw-radius-xl:12px;--aiw-radius-2xl:14px;--aiw-radius-3xl:18px;--aiw-radius-pill:999px;--aiw-launcher-size:56px;--aiw-launcher-offset:18px;--aiw-launcher-offset-sm:16px;--aiw-launcher-icon:26px;--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:22px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -255,16 +263,16 @@ export function injectStyles(side: "left" | "right"): void {
    place saying the same thing. #88 ("I can't see any chatbox") is answered by
    the disc's own contrast (navy on white is 16.82:1) and, on a first visit, by
    the named pill below — a word rather than a puzzle. */
-.${PREFIX}-bubble{position:fixed;bottom:18px;${side}:18px;z-index:48;width:56px;height:56px;border:none;border-radius:50%;background:#151D2F;color:#FCF7E3;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:0 6px 20px rgba(21,29,47,.22);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
+.${PREFIX}-bubble{position:fixed;bottom:var(--aiw-launcher-offset);${side}:var(--aiw-launcher-offset);z-index:48;width:var(--aiw-launcher-size);height:var(--aiw-launcher-size);border:none;border-radius:50%;background:#151D2F;color:#FCF7E3;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:0 6px 20px rgba(21,29,47,.22);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
 /* 26 in 56. The mark was 34 at first and the object read flat — a disc with a
    shape stamped on it rather than a mark sitting in space. The ratio is the
    richness here, not an effect. */
-.${PREFIX}-bubble .${PREFIX}-ayca{width:26px;height:26px;transition:transform var(--duration-base,300ms) var(--ease-out)}
+.${PREFIX}-bubble .${PREFIX}-ayca{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);transition:transform var(--duration-base,300ms) var(--ease-out)}
 .${PREFIX}-bubble:active{transform:translateY(0) scale(.96)}
 /* The first-visit variant: a word, not a puzzle. Collapses to the pebble once
    the reader has opened it. */
-.${PREFIX}-bubble-pill{width:auto;height:48px;border-radius:var(--aiw-radius-pill);padding:0 18px 0 14px}
-.${PREFIX}-bubble-pill .${PREFIX}-ayca{width:22px;height:22px}
+.${PREFIX}-bubble-pill{width:auto;height:var(--aiw-launcher-pill-height);border-radius:var(--aiw-radius-pill);padding:0 18px 0 14px}
+.${PREFIX}-bubble-pill .${PREFIX}-ayca{width:var(--aiw-launcher-pill-icon);height:var(--aiw-launcher-pill-icon)}
 .${PREFIX}-bubble-pill .${PREFIX}-bubble-label{display:block}
 .${PREFIX}-bubble-label{display:none;font:inherit;font-size:var(--aiw-font-md);font-weight:600;white-space:nowrap}
 /* Only TWO of the six states move, which is what makes movement mean
@@ -276,12 +284,12 @@ export function injectStyles(side: "left" | "right"): void {
    count's geometry (18px min-width plus 5px of padding, sized for two digits)
    renders an empty string as a wide lozenge — which reads as a broken badge
    rather than a status light. */
-.${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{min-width:0;width:10px;height:10px;padding:0;top:4px;background:var(--aiw-muted);box-shadow:0 0 0 2px #151D2F}
+.${PREFIX}-bubble-offline .${PREFIX}-bubble-dot{min-width:0;width:var(--aiw-launcher-dot-sm);height:var(--aiw-launcher-dot-sm);padding:0;top:4px;background:var(--aiw-muted);box-shadow:0 0 0 2px #151D2F}
 .${PREFIX}-bubble-offline.${PREFIX}-on-ink .${PREFIX}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
-.${PREFIX}-bubble-parked{width:40px;height:40px;opacity:.6}
-.${PREFIX}-bubble-parked .${PREFIX}-ayca{width:20px;height:20px}
+.${PREFIX}-bubble-parked{width:var(--aiw-launcher-parked-size);height:var(--aiw-launcher-parked-size);opacity:.6}
+.${PREFIX}-bubble-parked .${PREFIX}-ayca{width:var(--aiw-launcher-parked-icon);height:var(--aiw-launcher-parked-icon)}
 /* The unread count and the offline dot — one badge element, two looks. */
-.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:18px;height:18px;padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
+.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:var(--aiw-launcher-dot);height:var(--aiw-launcher-dot);padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
 /* GATED. There was no hover:hover query anywhere in this widget, so on a
    touchscreen the lift-and-scale stuck after the tap. The file already carries
@@ -295,7 +303,7 @@ export function injectStyles(side: "left" | "right"): void {
 }
 .${PREFIX}-bubble-av{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .${PREFIX}-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.${PREFIX}-bubble svg{width:26px;height:26px}
+.${PREFIX}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon)}
 .${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
@@ -837,7 +845,7 @@ ${darkWhenHostSaysSo}
      dead band under the composer. The keyboard handler sets this flag. */
   .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-form{padding-bottom:10px}
   .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-log{padding-bottom:14px}
-  .${PREFIX}-bubble{bottom:16px;${side}:16px}
+  .${PREFIX}-bubble{bottom:var(--aiw-launcher-offset-sm);${side}:var(--aiw-launcher-offset-sm)}
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
 }

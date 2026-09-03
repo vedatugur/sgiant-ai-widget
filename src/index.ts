@@ -347,6 +347,22 @@ export interface AiChatWidgetOptions {
   subtitle?: string;
   /** Avatar image URL (the brand logo mark). Falls back to a crescent glyph. */
   avatarUrl?: string;
+  /**
+   * The brand mark as an INLINE SVG string, e.g. `"<svg viewBox=…>…</svg>"`.
+   *
+   * Wins over `avatarUrl`. An `<img>` cannot inherit the widget's colours or
+   * stay crisp at every launcher size, and it costs a network round trip before
+   * the bubble looks like itself — which is why a bitmap was never enough for a
+   * package other companies brand.
+   *
+   * THIS IS MARKUP AND IT IS INSERTED AS MARKUP. Pass a mark YOU authored, the
+   * same way you would write it into your own page. Never build this string
+   * from user input, a URL parameter, or anything a model produced. The only
+   * check made here is that it looks like an `<svg>` root and carries no
+   * `<script>` — that is a guard against an obvious mistake, NOT sanitisation,
+   * and it will not save you from hostile input.
+   */
+  avatarSvg?: string;
   /** CSS gradient for the chrome (header/bubble) for a premium look. */
   gradient?: string;
   greeting?: string;
@@ -772,7 +788,7 @@ export interface AiChatWidgetHandle {
   /** Register a custom directive renderer at runtime (see `renderers`).
    *  Reserved built-in tags are rejected with an Error. */
   registerRenderer(tag: string, renderer: DirectiveRenderer): void;
-  /** Drive the collapsed launcher. Partial — omitted fields keep their value. */
+/** Drive the collapsed launcher. Partial — omitted fields keep their value. */
   setLauncher(next: LauncherState): void;
 }
 
@@ -800,6 +816,43 @@ import {
   ICON_THUMB_DOWN,
 } from "./icons";
 
+/**
+ * Choose the brand mark: an inline SVG the host authored, a bitmap URL, or the
+ * built-in crescent.
+ *
+ * The SVG check is deliberately narrow. It refuses anything that is not an
+ * `<svg>` root, and anything containing a `<script>` — enough to turn "I passed
+ * the wrong thing" into a clear error instead of broken markup, and honest
+ * about being nothing more than that. Real sanitisation of arbitrary SVG is a
+ * library's job, and a host that needs one should run it before calling here.
+ */
+function pickAvatar(
+  opts: { avatarSvg?: string; avatarUrl?: string },
+  name: string
+): string {
+  const svg = opts.avatarSvg?.trim();
+  if (svg) {
+    if (!/^<svg[\s>]/i.test(svg))
+      throw new Error(
+        "createAiChatWidget: `avatarSvg` must be an inline <svg> string. " +
+          "For an image URL use `avatarUrl` instead."
+      );
+    if (/<script/i.test(svg))
+      throw new Error(
+        "createAiChatWidget: `avatarSvg` contains a <script> tag. This option " +
+          "inserts markup — pass a mark you authored, never anything built " +
+          "from user input."
+      );
+    return svg;
+  }
+  if (opts.avatarUrl)
+    return `<img src="${escapeHtml(opts.avatarUrl)}" alt="${escapeHtml(
+      name
+    )}" class="${PREFIX}-av-img"/>`;
+  return AVATAR_SVG;
+}
+
+
 export function createAiChatWidget(
   opts: AiChatWidgetOptions
 ): AiChatWidgetHandle {
@@ -822,10 +875,13 @@ export function createAiChatWidget(
         s = s.split(`{${p}}`).join(String(params[p]));
     return s;
   };
-  // Avatar markup: the brand logo mark (img) when given, else a crescent glyph.
-  const avatarInner = opts.avatarUrl
-    ? `<img src="${opts.avatarUrl}" alt="${name}" class="${PREFIX}-av-img"/>`
-    : AVATAR_SVG;
+  // Avatar markup: an inline SVG mark, else a bitmap, else the crescent glyph.
+  //
+  // `avatarUrl` was interpolated into the src attribute unescaped until
+  // 2026-09-03. A host passing a URL containing a double quote broke out of the
+  // attribute — the kind of thing that stays harmless right up until someone
+  // builds that URL from a tenant record.
+  const avatarInner = pickAvatar(opts, name);
   /** Aborted by `destroy()`. Every in-flight turn is tied to it, so a widget
    *  that has been torn down stops writing to its own dead DOM and storage. */
   const alive = new AbortController();
