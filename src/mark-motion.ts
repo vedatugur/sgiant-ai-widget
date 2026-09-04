@@ -16,8 +16,21 @@
 export interface MarkMotionOptions {
   /** Off entirely when false. */
   enabled?: boolean;
-  /** Degrees of tilt at full deflection. */
+  /** Degrees of tilt at full deflection. Ignored in "stepped" mode. */
   tilt?: number;
+  /**
+   * How the mark follows the pointer.
+   *
+   * "spring" eases toward the cursor with overshoot and settles — right for a
+   * mark with specular highlights and curved form, where the eye expects light
+   * to slide across a surface.
+   *
+   * "stepped" snaps to a grid and does not rotate at all. Right for a flat,
+   * heavy mark: there is no highlight to slide and no curve to turn, so easing
+   * one reads as the glossy vocabulary wearing borrowed clothes. Mass relocates;
+   * it does not swivel.
+   */
+  mode?: "spring" | "stepped";
 }
 
 interface Spring {
@@ -64,7 +77,29 @@ export function startMarkMotion(
   let held: { x: number; y: number } | null = null;
   let raf = 0;
 
+  function paintStepped(svg: SVGElement, host: HTMLElement): boolean {
+    const r = host.getBoundingClientRect();
+    if (!r.width) return false;
+    const aim = held ?? { x: px, y: py };
+    const nx = (aim.x - (r.left + r.width / 2)) / (r.width / 2);
+    const ny = (aim.y - (r.top + r.height / 2)) / (r.height / 2);
+    const qx = Math.max(-2, Math.min(2, Math.round(nx * 2)));
+    const qy = Math.max(-1, Math.min(1, Math.round(ny)));
+    // NO ROTATION. A slab relocates; it does not turn toward you.
+    svg.style.transform =
+      `translate(${(qx * 0.7).toFixed(1)}px,${(qy * 0.4).toFixed(1)}px)`;
+    const t = `translate(${qx * 1.6},${(qy * 0.96).toFixed(2)})`;
+    svg.querySelectorAll(".pl,.pr").forEach((n) => n.setAttribute("transform", t));
+    svg.querySelectorAll<SVGElement>(".slide").forEach((n) => {
+      n.style.animation = "none";
+      n.style.transform = `translateX(${(qx * 3.2).toFixed(1)}px)`;
+    });
+    // Stepped motion has nowhere to settle: it is already where it is going.
+    return false;
+  }
+
   function paint(svg: SVGElement, host: HTMLElement): boolean {
+    if (opts.mode === "stepped") return paintStepped(svg, host);
     const r = host.getBoundingClientRect();
     if (!r.width) return false;
     const aim = held ?? { x: px, y: py };

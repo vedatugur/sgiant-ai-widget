@@ -532,6 +532,13 @@ export interface AiChatWidgetOptions {
    */
   markMotion?: boolean;
   /**
+   * How the mark follows the pointer. "spring" (default) eases with overshoot,
+   * which suits a mark with specular highlights and curved form. "stepped"
+   * snaps to a grid and never rotates — for a flat, heavy mark, where easing a
+   * highlight that does not exist reads as borrowed vocabulary.
+   */
+  markMotionMode?: "spring" | "stepped";
+  /**
    * Offer an "auto-apply" toggle, and decide what it is allowed to apply.
    *
    * A PREDICATE, NOT A BOOLEAN, and that is the design. The widget does not know
@@ -1300,7 +1307,7 @@ export function createAiChatWidget(
         .querySelectorAll<HTMLElement>(`.${PREFIX}-avatar`)
         .forEach((n) => hosts.push(n));
       return hosts;
-    });
+    }, { mode: opts.markMotionMode ?? "spring" });
   }
 
   if (dozeAfter > 0) {
