@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — attachments: files the assistant can read</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .88em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      table { border-collapse: collapse; width: 100%; font-size: .9em; margin: .6rem 0 0; }
+      th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { font-weight: 600; opacity: .75; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        padding:.25rem .55rem; border-radius:.35rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600; background:rgba(127,127,127,.16); }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./automation.html">Automation</a>
+      <a href="./uploads.html" aria-current="page">Attachments</a>
+      <a href="./history.html">Past chats</a>
+      <a href="./ui.html">Chrome</a>
+      <a href="./theming.html">Theming</a>
+    </nav>
+
+    <h1>Attachments</h1>
+    <p class="sub">Files the user hands the assistant — images, documents, video — and the limits that apply to them.</p>
+
+    <div class="demo">
+      <h2>One option turns it on</h2>
+      <p>The paperclip does not exist until the widget has somewhere to put a
+        file. That is deliberate: an attach button on a surface with no upload
+        endpoint is a control that fails after the user has already chosen a
+        file, which is the worst moment to say no.</p>
+      <pre><code>createAiChatWidget({
+  endpoint: "/accounts/acc_1/ai/chat",
+  uploadEndpoint: "/accounts/acc_1/assets/media",   // POST multipart
+});</code></pre>
+      <p class="note">There is also <code>getUploadEndpoint()</code>, read at
+        call time, for a host whose account can change without remounting the
+        widget — the same shape as <code>getToken</code>.</p>
+    </div>
+
+    <div class="demo">
+      <h2>What it sends</h2>
+      <p>A <code>multipart/form-data</code> POST per file, with the bearer token
+        from <code>getToken</code> if you supplied one:</p>
+      <table>
+        <tr><th>field</th><th>value</th></tr>
+        <tr><td><code>file</code></td><td>the file itself</td></tr>
+        <tr><td><code>session</code></td><td><code>1</code> — always</td></tr>
+        <tr><td><code>threadId</code></td><td>the current thread, when there is one</td></tr>
+      </table>
+      <p style="margin-top:.8rem">Your endpoint must answer with exactly this,
+        and the nesting matters:</p>
+      <pre><code>{ "media": { "id": "med_1", "filename": "notes.pdf", "contentType": "application/pdf" } }</code></pre>
+      <p style="margin-top:.8rem">The chat turn then carries ids, not bytes.</p>
+      <p class="note"><strong>A response without <code>media</code> is dropped
+        in silence</strong> — no chip, no error, nothing in the console. If you
+        attach a file and nothing happens, check this shape first; it is the
+        likeliest cause and it looks exactly like a broken button.</p>
+      <p class="note"><code>session=1</code> is the whole difference between a
+        chat attachment and an upload to the asset library. A file dropped into
+        a conversation is part of that conversation: reachable from its history
+        by id, and never filed into the library where it would sit alongside
+        deliberate uploads nobody meant to make.</p>
+    </div>
+
+    <div class="demo">
+      <h2>The limits, and why they differ</h2>
+      <table>
+        <tr><th>limit</th><th>value</th><th>why</th></tr>
+        <tr><td>files per turn</td><td>6</td><td>Extra files past the sixth are dropped, not refused — the turn still sends.</td></tr>
+        <tr><td>image / document</td><td>25 MB</td><td>Read by the model inline, so this bounds a prompt.</td></tr>
+        <tr><td>video / audio</td><td>100 MB</td><td>Referenced by id and never sent inline. A 30-second 1080p phone video is already past the document cap, so sharing the cap would refuse the everyday case for being ordinary.</td></tr>
+      </table>
+      <p style="margin-top:.8rem">An oversize file gets its own error chip
+        naming the file and the cap, and the others in the same selection still
+        upload. One bad file does not lose the batch.</p>
+    </div>
+
+    <div class="demo">
+      <h2>Try it</h2>
+      <p>The widget in the corner has an upload endpoint, so it shows the
+        paperclip. This page is static, so the "server" below is a stub that
+        hands back a fake media id — attach anything and watch the chip appear,
+        or pick something over 25 MB to see the refusal.</p>
+    </div>
+
+    <script>
+      // The same stub the other pages use, plus an upload route. The page
+      // answers the widget's own newline-delimited JSON protocol itself.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+
+        // The upload endpoint: accept the multipart body, invent an id.
+        if (url.includes("/demo-upload")) {
+          const fd = init.body;
+          const file = fd.get ? fd.get("file") : null;
+          await new Promise((r) => setTimeout(r, 400));
+          // THE SHAPE IS NOT OPTIONAL. The widget reads `j.media` and does
+          // nothing at all when it is absent — no chip, no error, no console
+          // line, the file simply never appears. I wrote this mock returning
+          // {mediaId, name, mime} first and spent a while wondering why the
+          // demo did nothing.
+          return new Response(
+            JSON.stringify({
+              media: {
+                id: "med_" + Math.random().toString(36).slice(2, 9),
+                filename: file && file.name ? file.name : "file",
+                contentType:
+                  file && file.type ? file.type : "application/octet-stream",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const body = JSON.parse(init.body);
+        const count = (body.attachments || []).length;
+        const reply = count
+          ? "I can see " + count + " attachment(s) on that turn. They arrive as ids, not bytes."
+          : "Attach a file with the paperclip and send again. You said: " + body.content;
+        const enc = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            send({ threadId: body.threadId || "demo-thread" });
+            for (const word of reply.split(" ")) {
+              send({ type: "text", d: word + " " });
+              await new Promise((r) => setTimeout(r, 24));
+            }
+            send({ type: "done" });
+            c.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        });
+      };
+    </script>
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/demo-chat",
+        // The one line this page is about.
+        uploadEndpoint: "/demo-upload",
+        title: "Nova",
+        subtitle: "Attachments",
+        avatarSvg: SgiantAiWidget.CHROME_MARK,
+        markMotionMode: "stepped",
+        greeting: "Attach a file with the paperclip, then send.",
+      });
+    </script>
+  </body>
+</html>

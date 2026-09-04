@@ -454,7 +454,7 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-quality-dismiss{border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 /* Answered state: the card collapses to a single line of thanks. */
 .${PREFIX}-quality-done{font-size:var(--aiw-font-xs);color:var(--aiw-text-2);font-weight:500}
-.${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
+.${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--aiw-surface)}
 .${PREFIX}-suggestion{border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-pill);padding:6px 11px;font-size:var(--aiw-font-xs);font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
 .${PREFIX}-suggestion:hover{background:color-mix(in srgb,var(--aiw-accent) 10%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 40%,transparent)}
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
@@ -527,7 +527,12 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);border-radius:var(--aiw-radius-lg);width:38px;line-height:1;cursor:pointer;color:var(--aiw-text-2);transition:border-color .12s,color .12s,background .12s}
 .${PREFIX}-attach:hover{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-attach:disabled{opacity:.5;cursor:default}
-.${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0;background:var(--aiw-surface)}
+/* Vertical padding is SYMMETRIC. It was 8px 10px 0, which put the chips 8px
+   from the top of the bar and flush against the composer's border-top —
+   reported as "the bottom gap is not equal", and it was not. The bar sits
+   directly on that border, so a zero here is not absorbed by anything: the
+   chip touches the line. */
+.${PREFIX}-attbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--aiw-surface)}
 .${PREFIX}-artifacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 10px 0;background:var(--aiw-surface)}
 .${PREFIX}-artifacts-title{font-size:var(--aiw-font-2xs);font-weight:600;color:var(--aiw-muted)}
 .${PREFIX}-artifact{display:inline-flex;align-items:center;gap:6px;max-width:200px;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-md);padding:3px 8px;font-size:var(--aiw-font-2xs);color:var(--aiw-text-2);white-space:nowrap}
