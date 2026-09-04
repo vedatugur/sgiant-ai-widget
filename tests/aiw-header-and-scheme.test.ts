@@ -80,19 +80,26 @@ test("no control on the header bar reads the ACCENT's foreground token", () => {
   );
 });
 
-test("the header does not flip with the colour scheme", () => {
-  // --aiw-surface does, which is how the active-icon chip came to paint #161616
-  // on the #151D2F bar in dark mode. The bar is a constant; its chip must be
-  // drawn from the bar's own pair.
-  for (const token of ["--aiw-header-bg", "--aiw-header-fg"]) {
-    const declarations = widgetStyles.split(token + ":").length - 1;
-    assert.equal(
-      declarations,
-      1,
-      `${token} is declared ${declarations} times — a second declaration means ` +
-        `it flips with something, and the header bar does not`
+test("the header's chip is drawn from the bar's own pair, not the surface", () => {
+  // WAS "the header does not flip with the colour scheme", asserting exactly one
+  // declaration of each token. That encoded a DECISION, and the decision changed
+  // on 2026-09-04: a dark bar on a light page was reported as wrong, and the bar
+  // now follows the scheme. A test that pins a decision fails the day the
+  // decision is revisited, which tells you nothing about whether the code is
+  // right.
+  //
+  // What must still hold is the failure underneath it: --aiw-surface flips, and
+  // the active-icon chip once painted #161616 on the #151D2F bar in dark mode
+  // because it read the surface instead of the bar. The chip belongs to the bar,
+  // whatever colour the bar is.
+  const rules = widgetStyles.match(/[^\n{}]*\{[^{}]*\}/g) ?? [];
+  const chip = rules.filter((r) => /-icon-on/.test(r));
+  assert.ok(chip.length > 0, "no active-icon rule found");
+  for (const rule of chip)
+    assert.ok(
+      !/--aiw-surface/.test(rule),
+      `the active chip reads --aiw-surface: ${rule.slice(0, 90)}`
     );
-  }
 });
 
 test("dark follows the host's switch, with the OS only as a fallback", () => {

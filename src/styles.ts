@@ -100,7 +100,7 @@ export function hostDefinesPlatformTokens(): boolean {
  * palette is a palette that drifts, and this one has three separate blocks.
  */
 const darkRules = (bubble: string, panel: string): string => `
-${bubble},${panel}{--aiw-accent-ink:var(--aiw-accent-ink-dark,var(--aiw-accent));--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}
+${bubble},${panel}{--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-accent-ink:var(--aiw-accent-ink-dark,var(--aiw-accent));--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}
 ${panel} .${PREFIX}-assistant code{background:rgba(255,255,255,.1)}
 ${panel} .${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}
 ${panel} .${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}
@@ -165,8 +165,18 @@ export function injectStyles(side: "left" | "right"): void {
  * shipped and reported from the product. A token means "readable on the
  * ACCENT"; the header is not the accent. Cream on navy is 15.66:1.
  *
- * These two deliberately do NOT flip with the colour scheme, and neither does
- * the bar. --aiw-surface does, which is how the active-icon chip came to paint
+ * THESE TWO FOLLOW THE SCHEME as of 2026-09-04, and until then deliberately did
+ * not. A dark bar on a light page was reported as looking wrong, and it was a
+ * decision rather than a defect: the pair was pinned because the buttons used to
+ * read --aiw-accent-contrast, which is DERIVED from the accent, and against the
+ * teal all three of our apps pass that derivation returns brand navy. Navy on
+ * navy is 1.00:1, an invisible toolbar, and it shipped.
+ *
+ * So the pair flips but is never derived. Light is cream bar with navy text,
+ * dark is navy bar with cream text: the SAME two brand values swapped, which is
+ * why the contrast is identical in both directions (15.66:1) and cannot drift
+ * with an accent a host passes. Anything computed from the accent belongs
+ * nowhere near this bar. --aiw-surface does, which is how the active-icon chip came to paint
  * #161616 on #151D2F in dark mode. */
 /* :where() so these DEFAULTS carry ZERO specificity and any author rule beats
    them. They were .PREFIX-bubble,.PREFIX-panel until 2026-09-03 — the same
@@ -183,7 +193,7 @@ export function injectStyles(side: "left" | "right"): void {
      doing a job the mark is already doing, and the two shapes compete. Set
      these three to transparent / none / inherit and the mark becomes the
      launcher, with no other change. Defaults keep the disc, because most
-     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:22px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:22px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#FCF7E3;--aiw-header-fg:#151D2F;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
