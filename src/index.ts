@@ -818,6 +818,16 @@ import {
 export { gateNavigationTarget } from "./safe-url";
 
 /**
+ * The assistant's character mark, for sgiant's OWN surfaces.
+ *
+ * Exported rather than made the default, because the default is the sgiant
+ * brand crescent and that is what an embedder on their own site should get.
+ * Pass this with `markMotionMode: "stepped"` — it is a flat mark and the
+ * spring default is built for a curved, glossy one.
+ */
+export { CHROME_MARK } from "./mark-chrome";
+
+/**
  * Renders one custom `[[<tag>:{json}]]` directive into `host` (already
  * mounted in the chat log). `spec` is the directive's parsed JSON — validate
  * it yourself, the assistant authored it. Optionally return a disposer; the

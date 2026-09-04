@@ -69,21 +69,27 @@
       <h2>An animated avatar, in pure SVG</h2>
       <div class="avatar-copy">
         <div class="bigbot" id="botpreview"></div>
-        <p>The mark in the corner of this page is the one shown here: a small robot
-          with a lit shell, eyes that blink under fixed catchlights, a glint that
-          crosses the visor, and an antenna that pings. It is
-          <strong>one inline SVG string</strong> passed as <code>avatarSvg</code>
-          — no images, no library, no requests.</p>
-        <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
-          the SVG, so it travels with the mark. The eyes and the antenna use
-          <code>currentColor</code> and take the widget's accent, while the shell
-          keeps its own metal — a mark can mix both.</p>
-        <p>The catchlights sit <em>outside</em> the blinking group on purpose: a
-          specular highlight belongs to the light, not to the eye, so it holds its
-          position while the eye moves under it and squashes as the lid crosses.
-          The body is one gradient rather than three stacked overlays — fewer
-          stops read as a smoother surface, and the banding is what made the
-          earlier shell look like paper.</p>
+          <p>The mark in the corner of this page is the one shown here: flat slabs,
+            one off-centre eye and a red lamp. It ships from the package as
+            <code>CHROME_MARK</code> and is passed as <code>avatarSvg</code> —
+            <strong>one inline SVG string</strong>, no images, no library, no
+            requests.</p>
+          <p>The animation lives in a <code>&lt;style&gt;</code> block <em>inside</em>
+            the SVG, so it travels with the mark. The eye uses
+            <code>currentColor</code> and takes the widget's accent, while the shell
+            keeps its own colour — a mark can mix both.</p>
+          <p><strong>The asymmetry is the point.</strong> One eye, off centre: the
+            symmetry of the earlier mark is what made it read as an icon, and a
+            single element out of line reads as attention instead. Everything here
+            snaps — <code>steps()</code>, never easing — which is why it asks for
+            <code>markMotionMode: "stepped"</code>. Easing belongs to a curved,
+            glossy mark with a specular to slide across it; on flat slabs the same
+            easing reads as sliding on ice rather than as weight.</p>
+          <p>The eye carries a <code>pl</code> class, which is how
+            <code>mark-motion</code> finds it and moves it independently of the
+            body. Rename it and nothing breaks loudly: the mark still renders, the
+            body still tilts, and only the eye stops following — a robot that has
+            stopped paying attention.</p>
       </div>
       <p class="note" style="margin-bottom:1rem">A <strong>tall</strong> mark — one
         with an antenna, where the art has headroom inside its own viewBox — can
@@ -157,33 +163,10 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
 
     <script src="./sgiant-ai-widget.global.js"></script>
     <script>
-      const ROBOT = `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" class="aiwbot">
-  <style>
-    /* NO EASING ANYWHERE. This mark has no specular to slide and no curve to
-       turn, so every transition snaps: steps() is the vocabulary. Easing a flat
-       slab is the glossy language wearing borrowed clothes. */
-    .aiwbot .eye { animation: aiwbot-blink 4.4s steps(2, jump-none) infinite; }
-    .aiwbot .lamp { animation: aiwbot-lamp 2.6s steps(2, jump-none) infinite; }
-    @keyframes aiwbot-blink { 0%,93% { opacity: 1 } 94%,96% { opacity: .12 } 97%,100% { opacity: 1 } }
-    @keyframes aiwbot-lamp { 0% { opacity: 1 } 50%,100% { opacity: .45 } }
-    @media (prefers-reduced-motion: reduce) {
-      .aiwbot .eye, .aiwbot .lamp { animation: none }
-    }
-  </style>
-  <!-- Depth is STATED: one flat offset block, one straight edge. No gradient
-       anywhere in this mark, and nothing simulating a light. -->
-  <rect x="11" y="13" width="31" height="29" fill="#14110E" opacity=".22"/>
-  <rect x="8" y="10" width="31" height="29" fill="#A8A399"/>
-  <rect x="8" y="10" width="31" height="8" fill="#C2BDB2"/>
-  <rect x="8" y="31" width="31" height="8" fill="#8C877E"/>
-  <rect x="13" y="20" width="21" height="9" fill="#14110E"/>
-  <!-- ONE eye, OFF CENTRE. The symmetry of the previous mark is what made it
-       read as an icon; a single element out of line reads as attention. It
-       carries the pl class so the pointer tracking finds it, and currentColor so it
-       takes the widget's accent like every other mark. -->
-  <rect x="17" y="22.4" width="6" height="4.2" fill="currentColor" class="eye pl"/>
-  <rect x="30" y="10" width="9" height="8" fill="#D62828" class="lamp"/>
-</svg>`;
+      // ONE DEFINITION, and it lives in the package: `CHROME_MARK`. This demo
+      // used to carry its own copy of the mark, which is how a demo and the
+      // thing it demonstrates drift apart without anyone noticing.
+      const ROBOT = SgiantAiWidget.CHROME_MARK;
       document.getElementById("botpreview").innerHTML = ROBOT;
 
       const chat = SgiantAiWidget.createAiChatWidget({
