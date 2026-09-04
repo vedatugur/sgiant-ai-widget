@@ -287,9 +287,17 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       // mistake the lift's own docs warn about. Sized to sit inside the disc
       // rather than break it, because a hard-edged slab crossing a rounded edge
       // reads as a clipping bug rather than as a character peeking over.
+      // 46 IN 56, and 32 in 40 when parked — the same 82% either way.
+      //
+      // 34 was sized by habit from the glossy mark, which was 114% and BROKE the
+      // disc: most of its apparent size lived outside the edge. A mark that sits
+      // inside has to fill the inside, and both shapes are near-square now, so
+      // there is no round edge forcing a margin. The ratio is what must hold
+      // across states, not the pixel count — that was the parked bug earlier.
       fit.textContent =
-        ".sgiant-aiw-bubble{--aiw-launcher-icon:34px;--aiw-launcher-lift:0%;" +
-        "--aiw-launcher-parked-icon:24px;--aiw-launcher-radius:14%}";
+        ".sgiant-aiw-bubble{--aiw-launcher-icon:46px;--aiw-launcher-lift:0%;" +
+        "--aiw-launcher-parked-icon:32px;--aiw-launcher-pill-icon:28px;" +
+        "--aiw-launcher-radius:14%}";
       document.head.appendChild(fit);
     </script>
   </body>
