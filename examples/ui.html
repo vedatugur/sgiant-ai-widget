@@ -295,9 +295,15 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       // there is no round edge forcing a margin. The ratio is what must hold
       // across states, not the pixel count — that was the parked bug earlier.
       fit.textContent =
-        ".sgiant-aiw-bubble{--aiw-launcher-icon:46px;--aiw-launcher-lift:0%;" +
-        "--aiw-launcher-parked-icon:32px;--aiw-launcher-pill-icon:28px;" +
-        "--aiw-launcher-radius:14%}";
+        ".sgiant-aiw-bubble{--aiw-launcher-icon:56px;--aiw-launcher-lift:0%;" +
+        "--aiw-launcher-parked-icon:40px;--aiw-launcher-pill-icon:30px;" +
+        // NO DISC. This mark carries its own slab and its own cast shadow, so a
+        // coloured pill behind it is a second container doing the first one's
+        // job — and the two shapes argue. The mark IS the launcher now, which
+        // is why the icon can run to the full 56: there is no edge to sit
+        // inside of any more.
+        "--aiw-launcher-bg:transparent;--aiw-launcher-shadow:none;" +
+        "--aiw-launcher-fg:currentColor}";
       document.head.appendChild(fit);
     </script>
   </body>
