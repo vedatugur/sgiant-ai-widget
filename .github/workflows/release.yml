@@ -22,6 +22,17 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      # TRUSTED PUBLISHING NEEDS A NEWER npm THAN NODE SHIPS.
+      #
+      # Node 22 bundles npm 10, which has no idea what OIDC is: it looks for
+      # NODE_AUTH_TOKEN, finds none, and fails as if the credential were
+      # missing rather than saying the CLI is too old. 11.5.1 is the first
+      # version that exchanges the workflow's id-token for a publish
+      # credential, and it is pinned rather than floating because a release
+      # that changes its own toolchain silently is one that cannot be
+      # reproduced.
+      - run: npm install -g npm@11.5.1
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
@@ -47,6 +58,18 @@ jobs:
             exit 1
           }
 
+      # NO TOKEN. The package trusts THIS repository and THIS workflow file
+      # through OIDC, so npm exchanges the `id-token` above for a short-lived
+      # publish credential at the moment of publishing.
+      #
+      # Two tokens were tried before this and both failed identically — auth
+      # succeeded, the tarball built, the provenance statement signed and
+      # reached the transparency log, and only then npm refused the write with
+      # EOTP. The package requires 2FA or a granular token with bypass-2fa
+      # enabled, and neither token had that box ticked. Trusted publishing
+      # removes the question: there is no secret to scope wrongly, leak or
+      # rotate, and the package's strict 2FA setting stays on.
+      #
+      # `--provenance` is unchanged and now doubles as the credential's own
+      # evidence: the same signed claim about which workflow built the tarball.
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
