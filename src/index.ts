@@ -5494,6 +5494,10 @@ export function createAiChatWidget(
           ...(fork?.regenerate ? { regenerate: true } : {}),
         }),
       });
+      // What this status proves about the api, for the launcher's offline state
+      // (#346). A 5xx/429 means asking again now will not work either; any
+      // other 4xx is a REACHABLE api refusing this particular request.
+      noteApiResult(res.ok ? "ok" : res.status);
       if (!res.ok || !res.body) {
         failure = `Server error (${res.status}).`;
       } else {
@@ -5671,6 +5675,9 @@ export function createAiChatWidget(
       // the browser just can't see the rest of the stream. Recover by
       // polling the thread until the reply lands (see below).
       transportLost = true;
+      // Nothing was heard back at all — the one case we can call unreachable
+      // without guessing (#346).
+      noteApiResult("unreachable");
       failure = (err as Error).message || "Network error.";
     } finally {
       pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
@@ -6217,6 +6224,52 @@ export function createAiChatWidget(
   paintOpeningView();
 
   /**
+   * Whether the API answered last time we asked (#346).
+   *
+   * `navigator.onLine` answers "is this device on a network", which is not the
+   * question the offline state is for. A reader whose wifi is fine but whose
+   * api is down, rate-limited or mid-deploy saw a perfectly healthy launcher,
+   * asked, and got an error — the exact sequence the state exists to prevent.
+   *
+   * Deliberately NOT a heartbeat. A poll on every embed is a request per site
+   * per interval for a state nobody is looking at most of the time. The
+   * information is free on the next real turn; what was missing is that the
+   * failure recorded it.
+   *
+   * Starts true because "we have not asked yet" is not evidence of trouble, and
+   * a launcher that opens greyed out on a working site is the same lie in the
+   * other direction.
+   */
+  let apiReachable = true;
+
+  /**
+   * Record what one turn proved about the api, and re-sync the launcher.
+   *
+   * The split is between "the api will not answer" and "the api answered, and
+   * the answer was no":
+   *
+   *  - a transport failure, a 5xx, or a 429 means asking again now will not
+   *    work either — that is what the offline state promises,
+   *  - any other 4xx (401, 403, 404, 422) is a REACHABLE api refusing THIS
+   *    request. Greying the launcher for those would tell a reader the service
+   *    is down when their next question might be answered fine.
+   *
+   * And it clears honestly: a success sets it back, or one blip would leave the
+   * launcher lying the other way for the rest of the session.
+   */
+  const noteApiResult = (result: "ok" | "unreachable" | number): void => {
+    const next =
+      result === "ok"
+        ? true
+        : result === "unreachable"
+          ? false
+          : !(result >= 500 || result === 429);
+    if (next === apiReachable) return;
+    apiReachable = next;
+    syncOnline();
+  };
+
+  /**
    * `offline` from the browser, not from a failed request (#305).
    *
    * A launcher that says so up front is better than one that looks ready and
@@ -6227,7 +6280,8 @@ export function createAiChatWidget(
    */
   const syncOnline = (): void => {
     if (typeof navigator === "undefined") return;
-    if (!navigator.onLine) setLauncher({ state: "offline" });
+    const deviceOffline = !navigator.onLine;
+    if (deviceOffline || !apiReachable) setLauncher({ state: "offline" });
     else if (launcher.state === "offline") setLauncher({ state: "resting" });
   };
   window.addEventListener("online", syncOnline);
