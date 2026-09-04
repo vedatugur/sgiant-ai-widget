@@ -250,7 +250,19 @@ export function injectStyles(side: "left" | "right"): void {
    reading survivable: a cream disc that ends up over white is 1.06:1 and
    effectively gone, and the ground under a fixed launcher genuinely changes as
    the reader scrolls. One pixel of navy is enough to keep it an object. */
-.${PREFIX}-bubble.${PREFIX}-on-ink{background:#FCF7E3;box-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 1px rgba(21,29,47,.55)}
+/* SET THE TOKENS, NOT THE PROPERTIES. This declared background and
+     box-shadow outright, which beats any value a host puts in
+     --aiw-launcher-bg: a declaration on the element always wins over one that
+     merely feeds it. So a host asking for no disc at all (CHROME_LAUNCHER does
+     exactly that) got the disc back the moment the launcher sat on a dark
+     ground, and only there. Reported 2026-09-04: the container would not go
+     away, and the option looked like it did nothing.
+
+     Through the tokens the precedence comes out right on its own: this rule
+     beats the defaults, and an inline host override beats this rule. The ink
+     variant keeps its heavier shadow and its hairline for the reason above; it
+     just no longer insists on them. */
+  .${PREFIX}-bubble.${PREFIX}-on-ink{--aiw-launcher-bg:#FCF7E3;--aiw-launcher-fg:#151D2F;--aiw-launcher-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 1px rgba(21,29,47,.55)}
 .${PREFIX}-bubble.${PREFIX}-on-ink .${PREFIX}-bubble-label{color:#151D2F}
 .${PREFIX}-bubble.${PREFIX}-on-ink .${PREFIX}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
 .${PREFIX}-eyes{transform-origin:24px 23px;animation:${PREFIX}-blink2 5.5s ease-in-out infinite}

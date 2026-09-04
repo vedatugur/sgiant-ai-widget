@@ -71,9 +71,17 @@ test("on an ink ground the whole OBJECT inverts, not just the mark", () => {
   );
   assert.match(
     src,
-    // The FACT, not the declaration: the rule may also carry a shadow and a
-    // hairline. Pinning the exact string made this fail on an unrelated edit.
-    /\.\$\{PREFIX\}-bubble\.\$\{PREFIX\}-on-ink\{[^}]*background:#FCF7E3/,
+    // The FACT, not the declaration — and it took a second pass to mean it.
+    // This still pinned `background:`, so it failed when the rule started
+    // setting --aiw-launcher-bg instead. That change was the fix for a real
+    // bug: declaring the property outright beat any host override, so a host
+    // asking for no disc got one anyway on a dark ground.
+    //
+    // What must hold is that an ink ground makes the launcher cream. Whether
+    // the rule says so directly or feeds the token the base rule reads is an
+    // implementation detail — and the token is the form that lets a host still
+    // win.
+    /\.\$\{PREFIX\}-bubble\.\$\{PREFIX\}-on-ink\{[^}]*(--aiw-launcher-bg|background):#FCF7E3/,
     "the disc does not invert — the mark would be navy on navy"
   );
 });

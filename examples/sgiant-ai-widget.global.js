@@ -1,4 +1,4 @@
-/*! sgiant-ai-widget 1.6.0 — MIT — https://vedatugur.github.io/sgiant-ai-widget/ */
+/*! sgiant-ai-widget 1.6.1 — MIT — https://vedatugur.github.io/sgiant-ai-widget/ */
 "use strict";var SgiantAiWidget=(()=>{var fi=Object.defineProperty;var gs=Object.getOwnPropertyDescriptor;var hs=Object.getOwnPropertyNames;var fs=Object.prototype.hasOwnProperty;var ms=(t,a)=>{for(var o in a)fi(t,o,{get:a[o],enumerable:!0})},bs=(t,a,o,c)=>{if(a&&typeof a=="object"||typeof a=="function")for(let f of hs(a))!fs.call(t,f)&&f!==o&&fi(t,f,{get:()=>a[f],enumerable:!(c=gs(a,f))||c.enumerable});return t};var vs=t=>bs(fi({},"__esModule",{value:!0}),t);var Xs={};ms(Xs,{CHROME_LAUNCHER:()=>go,CHROME_MARK:()=>po,KNOWN_UI_STATUSES:()=>Ei,OPEN_ASSISTANT_EVENT:()=>Vs,OPERATE_ACTIONS:()=>bn,PREFIX:()=>e,STANDARD_ACTION_PATHS:()=>Bt,UI_CONTROL_ACTIONS:()=>mn,UI_SAY_ACTION:()=>_t,WIDGET_LABELS:()=>ut,broadcastAiChange:()=>Cr,buildThreadReplay:()=>oo,clearHighlight:()=>Pt,createAiChatWidget:()=>Gs,createHostActions:()=>hr,gateNavigationTarget:()=>Hn,genericProposalSummary:()=>Sn,isKnownNavTarget:()=>zt,isNavigationAction:()=>wn,isOperateAction:()=>Ve,isUiControlAction:()=>ot,makePageContext:()=>gr,matchManifest:()=>yi,normalizeUiSpec:()=>Cn,parseJsonDirective:()=>ue,resolveWidgetLabels:()=>io,scanAiTargets:()=>bi,subscribeAiChange:()=>Ln,subscribeLiveSync:()=>Tr,uiSpecMediaIds:()=>Tn});var mn=["highlight","scroll-to","focus-field"];function ot(t){return mn.includes(t)}function ws(t){return t.replace(/["\\]/g,"\\$&")}function rr(t){if(typeof document>"u")return null;let a=document.querySelector(`[data-ai-target="${ws(t)}"]`);return a&&a.isConnected?a:null}function xs(t){let a=t.getAttribute("aria-label"),o=t instanceof HTMLInputElement||t instanceof HTMLTextAreaElement?t.placeholder:"";return(a||t.textContent||o||"").trim().replace(/\s+/g," ").slice(0,60)}function bi(t=40){if(typeof document>"u")return[];let a=[],o=new Set,c=document.querySelectorAll("[data-ai-target]");for(let f of Array.from(c)){let d=f.getAttribute("data-ai-target");if(!(!d||o.has(d))){if(!f.isConnected||f.offsetParent===null){let r=f.getBoundingClientRect();if(r.width===0&&r.height===0)continue}if(o.add(d),a.push({id:d,label:xs(f)}),a.length>=t)break}}return a}var or="ai-bridge-highlight",ar="ai-bridge-highlight-kf";function ys(){if(typeof document>"u"||document.getElementById(ar))return;let t=document.createElement("style");t.id=ar,t.textContent=`@keyframes ai-bridge-pulse{
     0%,100%{box-shadow:0 0 0 2px rgba(250,113,45,.9),0 0 0 6px rgba(250,113,45,.22)}
     50%{box-shadow:0 0 0 2px rgba(250,113,45,1),0 0 0 10px rgba(250,113,45,.06)}
@@ -141,7 +141,19 @@ ${a}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
    reading survivable: a cream disc that ends up over white is 1.06:1 and
    effectively gone, and the ground under a fixed launcher genuinely changes as
    the reader scrolls. One pixel of navy is enough to keep it an object. */
-.${e}-bubble.${e}-on-ink{background:#FCF7E3;box-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 1px rgba(21,29,47,.55)}
+/* SET THE TOKENS, NOT THE PROPERTIES. This declared background and
+     box-shadow outright, which beats any value a host puts in
+     --aiw-launcher-bg: a declaration on the element always wins over one that
+     merely feeds it. So a host asking for no disc at all (CHROME_LAUNCHER does
+     exactly that) got the disc back the moment the launcher sat on a dark
+     ground, and only there. Reported 2026-09-04: the container would not go
+     away, and the option looked like it did nothing.
+
+     Through the tokens the precedence comes out right on its own: this rule
+     beats the defaults, and an inline host override beats this rule. The ink
+     variant keeps its heavier shadow and its hairline for the reason above; it
+     just no longer insists on them. */
+  .${e}-bubble.${e}-on-ink{--aiw-launcher-bg:#FCF7E3;--aiw-launcher-fg:#151D2F;--aiw-launcher-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 1px rgba(21,29,47,.55)}
 .${e}-bubble.${e}-on-ink .${e}-bubble-label{color:#151D2F}
 .${e}-bubble.${e}-on-ink .${e}-bubble-dot{box-shadow:0 0 0 2px #FCF7E3}
 .${e}-eyes{transform-origin:24px 23px;animation:${e}-blink2 5.5s ease-in-out infinite}
