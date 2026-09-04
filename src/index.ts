@@ -828,6 +828,13 @@ export { gateNavigationTarget } from "./safe-url";
 export { CHROME_MARK } from "./mark-chrome";
 
 /**
+ * The launcher tokens CHROME_MARK is drawn for — pass as `theme`. Separate from
+ * the mark because artwork and host theming are different things: a host can
+ * take the mark and keep its own launcher.
+ */
+export { CHROME_LAUNCHER } from "./mark-chrome-launcher";
+
+/**
  * Renders one custom `[[<tag>:{json}]]` directive into `host` (already
  * mounted in the chat log). `spec` is the directive's parsed JSON — validate
  * it yourself, the assistant authored it. Optionally return a disposer; the

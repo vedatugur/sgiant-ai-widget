@@ -278,16 +278,19 @@ chat.setLauncher({ ground: "ink" });      // invert against a dark surface</code
       // inside has to fill the inside, and both shapes are near-square now, so
       // there is no round edge forcing a margin. The ratio is what must hold
       // across states, not the pixel count — that was the parked bug earlier.
+      // THE RECIPE SHIPS FROM THE PACKAGE NOW: CHROME_LAUNCHER. It lived here as
+      // a hand-injected style until 2026-09-04, which is exactly why no host
+      // used it — the same trap CHROME_MARK was in before 1.4.0.
+      //
+      // Written as CSS here rather than passed as `theme` only because this page
+      // also styles the standalone preview above it. A real host passes
+      // `theme: { ...CHROME_LAUNCHER }` and needs none of this.
       fit.textContent =
-        ".sgiant-aiw-bubble{--aiw-launcher-icon:56px;--aiw-launcher-lift:0%;" +
-        "--aiw-launcher-parked-icon:40px;--aiw-launcher-pill-icon:30px;" +
-        // NO DISC. This mark carries its own slab and its own cast shadow, so a
-        // coloured pill behind it is a second container doing the first one's
-        // job — and the two shapes argue. The mark IS the launcher now, which
-        // is why the icon can run to the full 56: there is no edge to sit
-        // inside of any more.
-        "--aiw-launcher-bg:transparent;--aiw-launcher-shadow:none;" +
-        "--aiw-launcher-fg:currentColor}";
+        ".sgiant-aiw-bubble{" +
+        Object.entries(SgiantAiWidget.CHROME_LAUNCHER)
+          .map(function (entry) { return "--aiw-" + entry[0] + ":" + entry[1]; })
+          .join(";") +
+        "}";
       document.head.appendChild(fit);
     </script>
   </body>

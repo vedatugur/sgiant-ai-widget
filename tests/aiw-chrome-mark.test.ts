@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CHROME_MARK } from "../src/mark-chrome.ts";
+import { CHROME_LAUNCHER } from "../src/mark-chrome-launcher.ts";
 import { readFileSync, readdirSync } from "node:fs";
 
 /**
@@ -99,4 +100,38 @@ test("every example is reachable from every other one", () => {
         `examples/${p} does not link to ${other}`
       );
   }
+});
+
+test("the launcher recipe ships from the package, not from a demo", () => {
+  // The seven tokens that make the mark BE the launcher lived only in
+  // examples/ui.html as a hand-injected style, so no host could use them — the
+  // same trap CHROME_MARK was in before 1.4.0, one layer down. If the demo ever
+  // carries its own copy again the two drift and nobody notices, because the
+  // demo is the thing people look at.
+  const ui = readFileSync("examples/ui.html", "utf8");
+  assert.match(ui, /SgiantAiWidget\.CHROME_LAUNCHER/);
+  assert.doesNotMatch(
+    ui,
+    /--aiw-launcher-bg\s*:\s*transparent/,
+    "ui.html must take the launcher tokens from the export, not restate them"
+  );
+});
+
+test("the launcher recipe keeps the sizes the shrunk states need", () => {
+  // parked-icon and pill-icon are why the mark stays legible when the launcher
+  // shrinks. Drop them and it falls back to sizes tuned for the old glossy
+  // mark: the parked launcher becomes a smudge nobody can identify. Shipped
+  // once, found by looking at it rather than by any test.
+  for (const key of [
+    "launcher-parked-icon",
+    "launcher-pill-icon",
+    "launcher-icon",
+  ])
+    assert.ok(
+      CHROME_LAUNCHER[key],
+      `${key} missing — the launcher loses legibility in a state, silently`
+    );
+  // No disc: the mark carries its own slab and cast shadow.
+  assert.equal(CHROME_LAUNCHER["launcher-bg"], "transparent");
+  assert.equal(CHROME_LAUNCHER["launcher-shadow"], "none");
 });
