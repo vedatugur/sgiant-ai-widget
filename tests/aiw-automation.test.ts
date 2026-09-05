@@ -90,8 +90,20 @@ test("auto-apply requires the host's blessing — it never guesses", () => {
 test("auto-apply refuses a card that asked the user something", () => {
   // `fields` are inputs the ASSISTANT requested. Applying past them answers a
   // question that was put to the person, using whatever the model guessed.
-  const src = readFileSync("src/index.ts", "utf8");
-  assert.match(src, /autoApply && !fields\.length && opts\.autoApplyOption/);
+  //
+  // Reads `widgetSrc` (the whole src/ directory) and not `index.ts`: this
+  // assertion is about THE WIDGET, and the cards moved to `./decision-cards`
+  // in #320. Binding it to a filename is what the helper beside it exists to
+  // prevent — and it failed on exactly that, which is how we know it was
+  // reading real content rather than passing vacuously.
+  //
+  // The accessor is optional in the pattern because the extraction turned a
+  // closure `let` into `ctx.getAutoApply()` — passing it by value would have
+  // frozen each card at the moment it was built.
+  assert.match(
+    widgetSrc,
+    /[Aa]utoApply(\(\))? && !fields\.length && (ctx\.)?opts\.autoApplyOption/
+  );
 });
 
 test("auto-apply is never pinned by advanced mode, unlike auto-navigate", () => {

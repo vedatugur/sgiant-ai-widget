@@ -123,7 +123,7 @@ import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";
 import { PREFIX } from "./prefix";
 import { createUiRenderers } from "./ui-render";
-import { genericProposalSummary } from "./proposal-summary";
+import { createDecisionCards } from "./decision-cards";
 // Exported so a host can fall back to it deliberately, and so the sgiant
 // phrasing in @sgiant/ai-apply can end every branch with the same floor.
 export { genericProposalSummary } from "./proposal-summary";
@@ -801,7 +801,6 @@ import {
   type ProposalField,
   buildField,
   isTruthyValue,
-  isPrimitiveArg,
   proposalFields,
   parseFormDirective,
   stripDirectivesForReplay,
@@ -4732,420 +4731,31 @@ export function createAiChatWidget(
 
   // Confirm-card copy for write-tool proposals lives in ./proposal-summary
   // (#320). Pure text formatting, so it is testable without a widget.
-  // Host-supplied, with the generic renderer as the floor. `|| ` not `?? ` on
-  // purpose: a host returning "" means "nothing worth saying", and an empty
-  // card would be a confirm gate that confirms nothing.
-  const PROPOSAL_LABELS: Record<string, string> = opts.proposalTitles ?? {};
-  const proposalSummary = (
-    name: string,
-    args: Record<string, unknown>
-  ): string =>
-    opts.proposalSummary?.(name, args) || genericProposalSummary(args);
   /**
-   * Render a `question` frame — the assistant asking the human to DECIDE.
+   * The two cards that ask the human to DECIDE — extracted to
+   * `./decision-cards` (#320). 414 lines that build DOM and call back, with no
+   * state of their own.
    *
-   * Distinct from a proposal card: a proposal asks permission for an action the
-   * model already chose, a question asks for something the model cannot decide
-   * itself. Answering resolves it; the card then collapses to the chosen answer
-   * so the transcript reads as a conversation rather than a dead form.
-   *
-   * Options render as buttons and free-text as an input, because the SAME
-   * question may also be answered from Telegram, where buttons work and prose
-   * does not. Keeping both shapes here means one question definition serves
-   * every surface.
+   * The three getters are load-bearing. `threadId`, `autoApply` and `busy` are
+   * reassigned while a card is on screen, so passing them by value would freeze
+   * each card at the moment it was built — a proposal applied ten seconds later
+   * would carry the thread the user was reading when it appeared.
    */
-  function renderQuestion(q: {
-    questionId: string;
-    prompt: string;
-    context?: string;
-    options?: Array<{ id: string; label: string; description?: string }>;
-    multi?: boolean;
-    critical?: boolean;
-  }): void {
-    const wrap = el("div", `${PREFIX}-question`);
-    if (q.critical) wrap.classList.add(`${PREFIX}-question-critical`);
-
-    const title = el("div", `${PREFIX}-question-title`);
-    title.textContent = q.prompt;
-    wrap.appendChild(title);
-
-    if (q.context) {
-      const ctx = el("div", `${PREFIX}-question-ctx`);
-      ctx.textContent = q.context;
-      wrap.appendChild(ctx);
-    }
-
-    const answered = (summary: string): void => {
-      // Collapse to what was decided. Leaving live controls after an answer
-      // invites a second, conflicting reply to a question already resolved.
-      wrap.innerHTML = "";
-      wrap.classList.add(`${PREFIX}-question-done`);
-      const done = el("div", `${PREFIX}-question-answer`);
-      done.textContent = summary;
-      wrap.appendChild(done);
-    };
-
-    // Shown in place of collapsing the card when the answer could NOT leave the
-    // browser. Collapsing anyway would tell the user their choice was accepted
-    // while the assistant never heard it.
-    const undelivered = el("div", `${PREFIX}-question-err`);
-    undelivered.textContent = L("questionSendFailed");
-    undelivered.style.display = "none";
-
-    /**
-     * Deliver the answer as an ordinary user message.
-     *
-     * The ask_user turn ENDED server-side the moment the question was emitted
-     * (see runAgentTurn) — there is no mid-turn channel to reply on, and "the
-     * answer arrives as the next message" is the design. `onAnswer` is only an
-     * observer hook, so it can never be what makes the answer land.
-     */
-    const deliver = (optionIds: string[], text?: string): void => {
-      const chosen = optionIds
-        .map((id) => q.options?.find((o) => o.id === id)?.label ?? id)
-        .filter(Boolean);
-      const answer = chosen.length ? chosen.join(", ") : (text ?? "").trim();
-      if (!answer) return;
-      // A turn is already streaming — sending now would be dropped by the
-      // composer guard, so say so and leave the controls live to retry.
-      if (busy) {
-        undelivered.style.display = "";
-        return;
-      }
-      opts.onAnswer?.({ questionId: q.questionId, optionIds, text });
-      void send(answer);
-      answered(answer);
-    };
-
-    if (q.options?.length) {
-      const list = el("div", `${PREFIX}-question-opts`);
-      const picked = new Set<string>();
-      // Built before the options so toggling one can enable it. A multi-select
-      // confirm with nothing picked has nothing to send: leaving it enabled made
-      // the click a silent no-op (`deliver` bails on an empty answer), which
-      // reads as a broken button. The React panel disables it; so does this.
-      const confirm = q.multi
-        ? (el("button", `${PREFIX}-question-send`) as HTMLButtonElement)
-        : null;
-      if (confirm) {
-        confirm.type = "button";
-        confirm.textContent = L("questionConfirm");
-        confirm.disabled = true;
-        confirm.addEventListener("click", () => deliver([...picked]));
-      }
-      for (const o of q.options) {
-        const b = el("button", `${PREFIX}-question-opt`) as HTMLButtonElement;
-        b.type = "button";
-        const lab = el("span", `${PREFIX}-question-opt-label`);
-        lab.textContent = o.label;
-        b.appendChild(lab);
-        if (o.description) {
-          const d = el("span", `${PREFIX}-question-opt-desc`);
-          d.textContent = o.description;
-          b.appendChild(d);
-        }
-        b.addEventListener("click", () => {
-          if (!q.multi) {
-            deliver([o.id]);
-            return;
-          }
-          // Multi-select: toggle, and confirm explicitly — otherwise the first
-          // click would submit and the user could never pick a second option.
-          if (picked.has(o.id)) picked.delete(o.id);
-          else picked.add(o.id);
-          b.classList.toggle(`${PREFIX}-question-opt-on`, picked.has(o.id));
-          if (confirm) confirm.disabled = picked.size === 0;
-        });
-        list.appendChild(b);
-      }
-      wrap.appendChild(list);
-      if (confirm) wrap.appendChild(confirm);
-    } else {
-      // Free text.
-      const row = el("div", `${PREFIX}-question-free`);
-      const input = el("input", `${PREFIX}-question-input`) as HTMLInputElement;
-      input.type = "text";
-      input.placeholder = L("questionPlaceholder");
-      const go = el("button", `${PREFIX}-question-send`) as HTMLButtonElement;
-      go.type = "button";
-      go.textContent = L("questionConfirm");
-      const submit = (): void => {
-        const v = input.value.trim();
-        if (v) deliver([], v);
-      };
-      go.addEventListener("click", submit);
-      input.addEventListener("keydown", (ev) => {
-        if ((ev as KeyboardEvent).key === "Enter") submit();
-      });
-      row.appendChild(input);
-      row.appendChild(go);
-      wrap.appendChild(row);
-    }
-
-    wrap.appendChild(undelivered);
-    log.appendChild(wrap);
-    scrollDown(true);
-  }
-
-  function renderProposal(
-    name: string,
-    args: Record<string, unknown>,
-    agent?: string,
-    /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
-    fields: ProposalField[] = [],
-    /** The account this write targets, per the worker. */
-    proposalAccountId?: string,
-    /** The persisted artifact a dashboard/template apply needs. */
-    proposalArtifactId?: string
-  ): void {
-    // `-pending` marks a card that is still AWAITING the user, and it is what
-    // the end-of-turn reload checks. The reload used to look for `-proposal`,
-    // which also matches an already-applied card (the success path empties the
-    // node but keeps the class) — so one Apply disabled the reload for the
-    // whole session and with it every edit/regenerate/branch control.
-    const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
-    const title = el("div", `${PREFIX}-proposal-title`);
-    /**
-     * Args the user may correct before applying — see EDITABLE_ARGS.
-     *
-     * Each entry keeps the field's TYPE and its node, not just a reader: the
-     * apply path has to post a boolean as a boolean (not the string "false"),
-     * and has to be able to point at the control it is refusing to send without.
-     */
-    const edits: Array<{
-      arg: string;
-      type: string;
-      required: boolean;
-      read: () => string;
-      node: HTMLElement;
-    }> = [];
-    // Show the acting agent (e.g. Vega) so the user sees WHO proposed this.
-    if (agent) {
-      const badge = el("span", `${PREFIX}-act-agent`);
-      badge.textContent = agent;
-      badge.style.marginRight = "6px";
-      title.appendChild(badge);
-    }
-    title.appendChild(
-      document.createTextNode(PROPOSAL_LABELS[name] ?? L("proposalGeneric"))
-    );
-    wrap.appendChild(title);
-    let disposePreview: (() => void) | undefined;
-    // Scraped-media import — PREVIEW the actual image/video (loaded from its
-    // source URL, NOT saved) before the user clicks Apply.
-    if (name === "add_scraped_media") {
-      const src = typeof args.url === "string" ? args.url : "";
-      if (src && args.type === "video") {
-        const video = el(
-          "video",
-          `${PREFIX}-proposal-media`
-        ) as HTMLVideoElement;
-        video.src = src;
-        video.controls = true;
-        video.preload = "metadata";
-        video.playsInline = true;
-        if (typeof args.poster === "string" && args.poster)
-          video.poster = String(args.poster);
-        wrap.appendChild(video);
-      } else if (src) {
-        const img = el("img", `${PREFIX}-proposal-media`) as HTMLImageElement;
-        img.src = src;
-        img.loading = "lazy";
-        img.alt =
-          typeof args.alt === "string" && args.alt
-            ? String(args.alt)
-            : "Web image preview";
-        wrap.appendChild(img);
-      }
-    }
-    // Editable args: the assistant's suggestion is a STARTING POINT, not a
-    // decision the user has to accept whole. Importing a site into a folder
-    // called "Website" and then renaming it afterwards is a worse experience
-    // than being handed the name with a cursor in it.
-    for (const field of fields) {
-      const row = el("label", `${PREFIX}-proposal-edit`);
-      const built = buildField({
-        name: field.arg,
-        ...(field.type ? { type: field.type } : {}),
-        ...(field.label ? { label: field.label } : {}),
-        ...(field.options ? { options: field.options } : {}),
-        ...(field.required ? { required: field.required } : {}),
-        // Prefilled with what the assistant proposed: the user confirms or
-        // corrects, rather than typing from nothing. Any PRIMITIVE counts —
-        // reading only strings meant `withReadme: true` drew an UNTICKED box and
-        // `maxPages: 20` drew an empty number field, so the card contradicted
-        // the very proposal it was there to confirm.
-        value: isPrimitiveArg(args[field.arg]) ? String(args[field.arg]) : "",
-        ...(field.placeholder ? { placeholder: field.placeholder } : {}),
-      });
-      // Caption first — unless the control already draws one (a checkbox), in
-      // which case the card adding its own would say the same thing twice.
-      if (field.label && !built.selfLabelled) {
-        const cap = el("span", `${PREFIX}-proposal-edit-label`);
-        cap.textContent = field.label;
-        row.appendChild(cap);
-      }
-      row.appendChild(built.node);
-      wrap.appendChild(row);
-      edits.push({
-        arg: field.arg,
-        type: field.type ?? "text",
-        required: Boolean(field.required),
-        read: built.read,
-        node: built.node,
-      });
-    }
-    const summary = proposalSummary(name, args);
-    if (summary) {
-      const s = el("div", `${PREFIX}-proposal-summary`);
-      s.textContent = summary;
-      wrap.appendChild(s);
-    }
-    // Shown when Apply is REFUSED because a field the assistant marked required
-    // was left blank. Applying anyway (which is what dropping the empty value
-    // did) sent an incomplete write; doing nothing at all reads as a dead
-    // button. Say which way it went.
-    const editErr = el("div", `${PREFIX}-proposal-err`);
-    editErr.textContent = L("requiredFields");
-    editErr.style.display = "none";
-    if (edits.length) wrap.appendChild(editErr);
-    const row = el("div", `${PREFIX}-confirm-row`);
-    const apply = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
-    apply.type = "button";
-    apply.textContent = L("apply");
-    const cancel = el("button", `${PREFIX}-confirm-no`) as HTMLButtonElement;
-    cancel.type = "button";
-    cancel.textContent = L("dismiss");
-    cancel.addEventListener("click", () => {
-      disposePreview?.();
-      wrap.remove();
-    });
-    apply.addEventListener("click", async () => {
-      // Collect the edits BEFORE anything is disabled or dispatched: a required
-      // field left blank has to stop the apply, and a blocked card must stay
-      // usable so the user can fill it in and click again.
-      // What the user typed WINS over what the assistant proposed — that is the
-      // entire point of showing them the field. An emptied OPTIONAL field means
-      // "you choose", so it is dropped rather than sent as "".
-      const edited: Record<string, unknown> = { ...args };
-      const missing: HTMLElement[] = [];
-      for (const f of edits) {
-        f.node.classList.remove(`${PREFIX}-field-invalid`);
-        const raw = f.read();
-        // Post the type the ARG actually is. Every control reads back a string,
-        // and the string "false" is TRUTHY server-side (`withReadme !== false`
-        // passes), so an unticked box used to change nothing at all.
-        if (f.type === "checkbox") {
-          const on = isTruthyValue(raw);
-          if (f.required && !on) {
-            missing.push(f.node);
-            continue;
-          }
-          edited[f.arg] = on;
-          continue;
-        }
-        if (!raw) {
-          if (f.required) {
-            missing.push(f.node);
-            continue;
-          }
-          delete edited[f.arg];
-          continue;
-        }
-        if (f.type === "number") {
-          const n = Number(raw);
-          // Non-numeric text in a number field is the user's answer, not a
-          // NaN to post — hand it over as typed and let the API judge it.
-          edited[f.arg] = Number.isFinite(n) ? n : raw;
-          continue;
-        }
-        edited[f.arg] = raw;
-      }
-      if (missing.length) {
-        for (const n of missing) n.classList.add(`${PREFIX}-field-invalid`);
-        editErr.style.display = "";
-        return;
-      }
-      editErr.style.display = "none";
-      apply.disabled = true;
-      apply.textContent = L("applying");
-      try {
-        // Carry the originating thread on EVERY apply — session-scoped asset
-        // writes (scraped imports) use it to keep chat debris out of the
-        // library until explicitly saved. Tools that don't care simply
-        // ignore the extra key.
-        const res = await opts.onApplyProposal!(
-          name,
-          threadId ? { ...edited, threadId } : edited,
-          // `artifactId` travels beside the account: the dashboard/template
-          // applies are the two that cannot be reconstructed from `args` alone.
-          proposalAccountId || proposalArtifactId
-            ? {
-                ...(proposalAccountId ? { accountId: proposalAccountId } : {}),
-                ...(proposalArtifactId
-                  ? { artifactId: proposalArtifactId }
-                  : {}),
-              }
-            : undefined
-        );
-        const msg = typeof res === "string" ? res : res?.message;
-        // An apply that ENQUEUED answers with a job id. Keeping it is the whole
-        // difference between "I'll notify you when it's ready ✓" followed by
-        // minutes of silence, and a card that shows the work happening.
-        const jobId = res && typeof res === "object" ? res.jobId : undefined;
-        disposePreview?.();
-        // Resolved: it no longer blocks the end-of-turn reload.
-        wrap.classList.remove(`${PREFIX}-proposal-pending`);
-        wrap.innerHTML = "";
-        const ok = el("div", `${PREFIX}-proposal-ok`);
-        ok.innerHTML =
-          `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
-          `<span>${escapeHtml(stripTick(msg || L("applied")))}</span>`;
-        wrap.appendChild(ok);
-        // A REPORT is a document, not just a task: once it exists it has a
-        // page, and the useful thing to hand the user is a way in.
-        const reportId =
-          res && typeof res === "object" ? res.reportId : undefined;
-        // TRACK THE REPORT, NOT ITS JOB ROW. Both ids come back today, but the
-        // generic row is being retired — a card polling it would go blind the
-        // moment the contract migration lands, and it would go blind SILENTLY,
-        // stuck on "Queued" forever rather than erroring. Prefer the id that
-        // will still exist; fall back to the job id for work that has no
-        // report (an import, a render).
-        if (reportId) trackConfirmedJob({ kind: "report", id: reportId });
-        else if (jobId) trackConfirmedJob({ kind: "job", id: jobId });
-        const href = reportId ? opts.reportHref?.(reportId) : undefined;
-        if (href) {
-          const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;
-          open.href = href;
-          open.textContent = L("openReport");
-          ok.appendChild(open);
-        }
-      } catch {
-        apply.disabled = false;
-        apply.textContent = L("tryAgain");
-      }
-    });
-    row.append(apply, cancel);
-    wrap.appendChild(row);
-    log.appendChild(wrap);
-    scrollDown(true);
-    // AUTO-APPLY — three conditions, all required, and each one is a decision.
-    //
-    //  1. the user turned it on. Off by default, browser-local, theirs.
-    //  2. the HOST says this particular write is safe to apply unasked. The
-    //     widget cannot tell a draft from a publish — they arrive here as the
-    //     same shape — so it never guesses; no predicate means nothing applies.
-    //  3. the card asks the user for NOTHING. `fields` are inputs the assistant
-    //     explicitly requested; applying past them would answer a question that
-    //     was put to the person, using whatever the model guessed.
-    //
-    // The card is still rendered and still says what happened. Auto-apply
-    // removes a click, not the record of the change.
-    if (autoApply && !fields.length && opts.autoApplyOption?.(name, args)) {
-      apply.click();
-    }
-  }
+  const { renderQuestion, renderProposal } = createDecisionCards({
+    L,
+    log,
+    panel,
+    side,
+    scrollDown,
+    send,
+    toggle,
+    stripTick,
+    trackConfirmedJob,
+    getThreadId: () => threadId,
+    getAutoApply: () => autoApply,
+    isBusy: () => busy,
+    opts,
+  });
 
   /**
    * Stream-loss recovery. The api runs a turn to completion and persists the
