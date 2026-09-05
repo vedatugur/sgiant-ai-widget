@@ -209,14 +209,14 @@ export function matchManifest(
   const segs = (p: string): string[] => p.split("/").filter(Boolean);
   const pathSegs = segs(normalizePath(path));
   let best: PageManifestEntry | undefined;
-  let bestLen = -1;
+  let bestScore = -1;
   for (const e of manifest) {
     const entrySegs = segs(e.path);
     // The root entry ("/") describes only the root.
     if (!entrySegs.length) {
-      if (!pathSegs.length && bestLen < 0) {
+      if (!pathSegs.length && bestScore < 0) {
         best = e;
-        bestLen = 0;
+        bestScore = 0;
       }
       continue;
     }
@@ -225,9 +225,24 @@ export function matchManifest(
     const hit = entrySegs.every(
       (seg, i) => seg.startsWith(":") || seg === pathSegs[off + i]
     );
-    if (hit && entrySegs.length > bestLen) {
+    if (!hit) continue;
+
+    // DEPTH FIRST, THEN LITERALS — and the second half is not a refinement.
+    //
+    // `/reports/all` and `/reports/:reportId` are both two segments and both
+    // match `/reports/all`. Scoring on length alone leaves the winner decided
+    // by ARRAY ORDER, so the list page would be described as "a single report"
+    // purely because the wildcard happened to be written first. A literal
+    // segment is more specific than a parameter and has to win on its own
+    // merits, wherever it sits in the file.
+    const literals = entrySegs.reduce(
+      (n, seg) => n + (seg.startsWith(":") ? 0 : 1),
+      0
+    );
+    const score = entrySegs.length * 1000 + literals;
+    if (score > bestScore) {
       best = e;
-      bestLen = entrySegs.length;
+      bestScore = score;
     }
   }
   return best;
