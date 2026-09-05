@@ -31,6 +31,19 @@ export {
   type HostActionsConfig,
   type HostActionHandler,
 } from "./host-actions";
+// The ids the widget stamps on ITSELF, so the manifest and the DOM cannot
+// disagree by typo — see widget-manifest.ts.
+import { WIDGET_TARGETS } from "./widget-manifest.js";
+// Re-exported so a host can read the widget's own surface without a second
+// import specifier — and so `WIDGET_MANIFEST` travels with the build that
+// actually renders those ids.
+export {
+  WIDGET_MANIFEST,
+  WIDGET_TARGETS,
+  WIDGET_SURFACE,
+  WIDGET_CONDITIONAL_TARGETS,
+  type WidgetTargetId,
+} from "./widget-manifest.js";
 // Used locally too (the block above only RE-exports for consumers): the
 // auto-navigate gate needs to know what counts as navigation.
 import {
@@ -1168,6 +1181,7 @@ export function createAiChatWidget(
 
   const bubble = el("button", `${PREFIX}-bubble`);
   bubble.setAttribute("aria-label", L("openBubble", { name }));
+  bubble.setAttribute("data-ai-target", WIDGET_TARGETS.bubble);
   bubble.innerHTML =
     `<span class="${PREFIX}-bubble-av">${uniquifySvgIds(avatarInner)}</span>` +
     `<span class="${PREFIX}-bubble-label"></span>` +
@@ -1593,6 +1607,7 @@ export function createAiChatWidget(
   // New chat — start a fresh conversation (keeps the prior one in history).
   const newChatBtn = el("button", `${PREFIX}-icon`);
   newChatBtn.setAttribute("aria-label", L("newChat"));
+  newChatBtn.setAttribute("data-ai-target", WIDGET_TARGETS.newChat);
   newChatBtn.title = L("newChat");
   newChatBtn.innerHTML =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
@@ -1602,6 +1617,7 @@ export function createAiChatWidget(
   if (opts.listThreads) {
     historyBtn = el("button", `${PREFIX}-icon`);
     historyBtn.setAttribute("aria-label", L("pastConversations"));
+    historyBtn.setAttribute("data-ai-target", WIDGET_TARGETS.history);
     historyBtn.title = L("history");
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
@@ -1616,6 +1632,7 @@ export function createAiChatWidget(
   const moreWrap = el("div", `${PREFIX}-morewrap`);
   const moreBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
   moreBtn.setAttribute("aria-label", L("moreOptions"));
+  moreBtn.setAttribute("data-ai-target", WIDGET_TARGETS.more);
   moreBtn.setAttribute("aria-haspopup", "menu");
   moreBtn.setAttribute("aria-expanded", "false");
   moreBtn.title = L("more");
@@ -1957,6 +1974,7 @@ export function createAiChatWidget(
   if (expandable) {
     expandBtn = el("button", `${PREFIX}-icon ${PREFIX}-expand`);
     expandBtn.setAttribute("aria-label", L("expandChat"));
+    expandBtn.setAttribute("data-ai-target", WIDGET_TARGETS.expand);
     expandBtn.title = L("expand");
     expandBtn.innerHTML = ICON_EXPAND;
     hActions.appendChild(expandBtn);
@@ -1979,6 +1997,7 @@ export function createAiChatWidget(
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
   closeBtn.setAttribute("aria-label", L("closeChat"));
+  closeBtn.setAttribute("data-ai-target", WIDGET_TARGETS.close);
   hActions.appendChild(closeBtn);
   header.append(avatar, hName, hActions);
 
@@ -2855,6 +2874,7 @@ export function createAiChatWidget(
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
   input.placeholder = L("askAnything", { name });
   input.setAttribute("aria-label", L("messageAria", { name }));
+  input.setAttribute("data-ai-target", WIDGET_TARGETS.composer);
   input.autocomplete = "off";
   // Restore an unsent draft from a prior session; keep it in sync as they type.
   input.value = loadDraft();
@@ -3074,6 +3094,7 @@ export function createAiChatWidget(
     attachBtn.type = "button";
     attachBtn.innerHTML = ICON_ATTACH;
     attachBtn.setAttribute("aria-label", L("attachFile"));
+    attachBtn.setAttribute("data-ai-target", WIDGET_TARGETS.attach);
     attachBtn.title = L("attachFileHint");
     attachBtn.addEventListener("click", () => fileInput!.click());
     // Paste-to-attach: a screenshot (or copied file) pasted into the composer

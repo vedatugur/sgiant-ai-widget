@@ -1,7 +1,7 @@
 {
   "name": "sgiant-ai-widget",
-  "version": "1.8.1",
-  "description": "Framework-agnostic embeddable AI chat widget. One call mounts a streaming chat bubble into any page — no React, no framework, themeable.",
+  "version": "1.9.0",
+  "description": "Framework-agnostic embeddable AI chat widget. One call mounts a streaming chat bubble into any page \u2014 no React, no framework, themeable.",
   "license": "MIT",
   "keywords": [
     "ai",
@@ -54,7 +54,7 @@
     "test": "npm run build && node --test \"tests/*.test.ts\""
   },
   "dependencies": {
-    "sgiant-ai-agent-bridge": "1.0.0"
+    "sgiant-ai-agent-bridge": "1.1.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
