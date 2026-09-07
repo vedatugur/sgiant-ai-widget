@@ -42,6 +42,16 @@ import type { WidgetLabels } from "./labels";
  * for no reason other than living in the same file, and are now unreachable
  * from it — which is most of what this split is for.
  */
+/** One control as the host described it — see `describeTargets` host-side. */
+export interface TargetDescription {
+  label?: string;
+  purpose?: string;
+  mutates?: boolean;
+  severity?: "reversible" | "destructive";
+  /** The page carries this id and no manifest describes it. */
+  undeclared?: boolean;
+}
+
 export interface UiRenderCtx {
   /** Label lookup; `L("prev")`. Host translation falling back to English. */
   L: (
@@ -59,6 +69,18 @@ export interface UiRenderCtx {
   ) => Promise<void>;
   /** Teardown callbacks for renderers holding subscriptions or timers. */
   richDisposers: Array<() => void>;
+  /**
+   * What the host says about one on-page control, by `data-ai-target` id.
+   *
+   * THE CONFIRM CARD IS THE SECURITY BOUNDARY: the user approves the SENTENCE,
+   * not the tool call. So the sentence has to be true and legible, and until
+   * this existed it was neither — a purge that permanently deletes a
+   * connection's whole ingest history asked "Click
+   * admin-gbp-purge-a1b2c3 for you?", which names no consequence and is not
+   * even English. Someone reading that has been shown a slug and asked to
+   * take responsibility for it.
+   */
+  describeTarget?: (id: string) => TargetDescription | undefined;
   /** Hand an action to the host app. */
   dispatchAction: (
     name: string,
@@ -101,6 +123,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     showPaneWidget,
     input,
     opts,
+    describeTarget,
   } = ctx;
 
   /** Render an inline data widget (stat / kpis / list / table) in the log. */
@@ -714,18 +737,16 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     scrollDown(true);
   }
 
-  // Default confirm copy for a state-changing UI action the model didn't caption.
+  /**
+   * Default confirm copy for a state-changing UI action the model didn't caption.
+   * Thin wrapper: the sentence itself is `confirmSentence`, which is pure and
+   * therefore actually testable.
+   */
   function operateConfirmText(spec: ActionSpec): string {
-    const target = spec.data?.target ?? "this control";
-    if (spec.name === "fill") {
-      const v = spec.data?.value ?? "";
-      const short = v.length > 40 ? `${v.slice(0, 40)}…` : v;
-      return short
-        ? `Type “${short}” into ${target}?`
-        : `Fill ${target} for you?`;
-    }
-    return `Click ${target} for you?`;
+    const id = spec.data?.target ?? "";
+    return confirmSentence(spec, id && describeTarget ? describeTarget(id) : undefined);
   }
+
 
   return {
     renderWidget,
@@ -735,4 +756,65 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     renderPreview,
     operateConfirmText,
   };
+}
+
+
+/**
+ * THE SENTENCE THE USER APPROVES.
+ *
+ * The confirm card is the security boundary — a person approves this sentence,
+ * not a tool call — so it has to be true and legible. Until #356 it was neither:
+ * a purge that permanently deletes a connection's entire ingest history asked
+ * "Click admin-gbp-purge-a1b2c3 for you?", which names no consequence and is
+ * not even English. Someone reading that has been shown a slug and asked to take
+ * responsibility for it.
+ *
+ * FRICTION IS ONLY EVER ADDED HERE, NEVER REMOVED. A `mutates: false` does not
+ * skip the confirm: clicking something on a person's behalf is itself an act,
+ * and a manifest describes a page rather than granting permission to use it. So
+ * a description can make this louder and can never make it silent — the rule
+ * `effectiveMutates` follows one level down.
+ *
+ * Pure on purpose: it takes the description rather than looking it up, so the
+ * wording can be tested without a DOM, a host or a network.
+ */
+export function confirmSentence(
+  spec: ActionSpec,
+  info?: TargetDescription
+): string {
+  const id = spec.data?.target ?? "";
+  // Prefer what the user can actually read on screen over the slug.
+  const name = info?.label ? `\u201c${info.label}\u201d` : id || "this control";
+  const base =
+    spec.name === "fill"
+      ? fillQuestion(name, spec.data?.value ?? "")
+      : `Click ${name} for you?`;
+  if (!info) return base;
+  if (info.undeclared) {
+    // Say the honest thing. A bare "Click X for you?" asks for approval while
+    // quietly implying that someone has vouched for it.
+    return `${base} Nobody has described this control, so I cannot tell you what it does.`;
+  }
+  if (info.severity === "destructive") {
+    // The one case where the purpose is not a nicety: these are written to say
+    // what is LOST, e.g. "PERMANENTLY DELETES everything ingested from that
+    // connection".
+    return info.purpose
+      ? `${base} This cannot be undone \u2014 ${lowerFirst(info.purpose)}`
+      : `${base} This cannot be undone.`;
+  }
+  if (info.mutates && info.purpose) return `${base} ${info.purpose}`;
+  return base;
+}
+
+function fillQuestion(name: string, value: string): string {
+  const short = value.length > 40 ? `${value.slice(0, 40)}\u2026` : value;
+  return short ? `Type \u201c${short}\u201d into ${name}?` : `Fill ${name} for you?`;
+}
+
+/** Join a sentence onto a clause without a capital in the middle of it. An
+ *  ALL-CAPS opening is deliberate emphasis in these purposes \u2014 leave it. */
+function lowerFirst(s: string): string {
+  if (/^[A-Z]{2,}/.test(s)) return s;
+  return s.charAt(0).toLowerCase() + s.slice(1);
 }

@@ -1088,6 +1088,30 @@ export function createAiChatWidget(
     title?: string;
     action?: string;
   }> = [];
+  /**
+   * What the host said about this turn's on-page controls (#356).
+   *
+   * The host joins its live DOM scan against its surface manifests and sends
+   * the result as `uiTargets`; this keeps the last one so the CONFIRM CARD can
+   * name the control and its consequence. Without it the card asked "Click
+   * admin-gbp-purge-a1b2c3 for you?" — a slug, for an act that permanently
+   * deletes a connection's entire ingest history.
+   *
+   * Empty is the honest default: a host that describes nothing gets the old
+   * behaviour, minus any claim that someone vouched for the control.
+   */
+  let knownUiTargets: Array<{
+    id?: string;
+    label?: string;
+    purpose?: string;
+    mutates?: boolean;
+    severity?: "reversible" | "destructive";
+    undeclared?: boolean;
+  }> = [];
+  const describeTarget = (
+    id: string
+  ): (typeof knownUiTargets)[number] | undefined =>
+    knownUiTargets.find((t) => t.id === id);
   /** Read the catalogue straight from the host, for a navigation dispatched
    *  before this session has sent a turn (a chip in a restored transcript). */
   async function refreshNavTargets(): Promise<void> {
@@ -4572,6 +4596,12 @@ export function createAiChatWidget(
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
       if (Array.isArray(ctxTargets)) knownNavTargets = ctxTargets;
+      // Same for the controls, and from the SAME context object the turn was
+      // built from — so the confirm card describes the page the model was
+      // actually looking at, not whatever the page has become since.
+      const ctxUi = (pageContext as { uiTargets?: unknown } | undefined)
+        ?.uiTargets;
+      if (Array.isArray(ctxUi)) knownUiTargets = ctxUi;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -5094,6 +5124,7 @@ export function createAiChatWidget(
     showPaneWidget,
     input,
     opts,
+    describeTarget,
   });
 
   /** Render a navigation suggestion. With auto-navigate ON it follows the link
