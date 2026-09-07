@@ -37,7 +37,7 @@ test("a destructive control says what is lost, before the button is pressed", ()
     severity: "destructive",
   });
   assert.match(s, /“Purge this connection's data”/, "name it, do not slug it");
-  assert.match(s, /cannot be undone/);
+  assert.match(s, /deletes something and cannot be undone/);
   assert.match(s, /PERMANENTLY DELETES/, "the emphasis is deliberate — keep it");
   assert.doesNotMatch(s, /a1b2c3/, "the slug is not what a person approves");
 });
@@ -75,8 +75,8 @@ test("a reversible change explains itself without crying wolf", () => {
   assert.match(s, /where they can be restored/);
   assert.doesNotMatch(
     s,
-    /cannot be undone/,
-    "reserving that phrase for destructive is what keeps it meaning something"
+    /cannot be (undone|taken back)/,
+    "reserving those phrases for the other two is what keeps them meaning something"
   );
 });
 
@@ -107,4 +107,42 @@ test("the sentence reads as one sentence, not two glued together", () => {
     severity: "destructive",
   });
   assert.match(s, /undone — removes the account/);
+});
+
+test("IRREVERSIBLE gets its own sentence, which is why the word exists", () => {
+  // Nothing is removed here — a notification is sent, a link is opened. So
+  // "this deletes something" would be false, and saying nothing would hide the
+  // property that decides how carefully to treat it: it has left, and we
+  // cannot call it back.
+  const s = confirmSentence(
+    { name: "click", data: { target: "admin-notification-send" } } as never,
+    {
+      label: "Send the notification",
+      purpose: "Delivers it to real people. It CANNOT be unsent.",
+      mutates: true,
+      severity: "irreversible",
+    }
+  );
+  assert.match(s, /cannot be taken back/);
+  assert.doesNotMatch(
+    s,
+    /deletes something/,
+    "nothing is deleted, and a warning that says otherwise is simply false"
+  );
+  assert.match(s, /CANNOT be unsent/, "the purpose's own emphasis survives");
+});
+
+test("the three severities produce three different warnings", () => {
+  // A vocabulary whose words render the same sentence is a vocabulary with one
+  // word and two synonyms.
+  const spec = { name: "click", data: { target: "x" } } as never;
+  const said = (severity: string) =>
+    confirmSentence(spec, {
+      label: "Do it",
+      purpose: "Something happens.",
+      mutates: true,
+      severity: severity as never,
+    });
+  const all = ["reversible", "irreversible", "destructive"].map(said);
+  assert.equal(new Set(all).size, 3, all.join(" | "));
 });
