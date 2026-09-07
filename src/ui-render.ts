@@ -47,7 +47,7 @@ export interface TargetDescription {
   label?: string;
   purpose?: string;
   mutates?: boolean;
-  severity?: "reversible" | "destructive";
+  severity?: "reversible" | "irreversible" | "destructive";
   /** The page carries this id and no manifest describes it. */
   undeclared?: boolean;
 }
@@ -800,8 +800,18 @@ export function confirmSentence(
     // what is LOST, e.g. "PERMANENTLY DELETES everything ingested from that
     // connection".
     return info.purpose
-      ? `${base} This cannot be undone \u2014 ${lowerFirst(info.purpose)}`
-      : `${base} This cannot be undone.`;
+      ? `${base} This deletes something and cannot be undone \u2014 ${lowerFirst(info.purpose)}`
+      : `${base} This deletes something and cannot be undone.`;
+  }
+  if (info.severity === "irreversible") {
+    // DELIBERATELY A DIFFERENT SENTENCE, and that is the entire reason the word
+    // exists. Nothing is removed here — a notification is sent, a link is
+    // opened — so warning that it "deletes something" would be false, and
+    // warning nothing at all would hide the property that matters: it has left,
+    // and we cannot call it back.
+    return info.purpose
+      ? `${base} This cannot be taken back \u2014 ${lowerFirst(info.purpose)}`
+      : `${base} This cannot be taken back.`;
   }
   if (info.mutates && info.purpose) return `${base} ${info.purpose}`;
   return base;
