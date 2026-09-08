@@ -33,6 +33,83 @@ export interface WidgetSpec {
   /** table: header columns + row cells. */
   columns?: string[];
   rows?: Array<Array<string | number>>;
+  /**
+   * The whole payload nested one level, as an object or as a JSON STRING.
+   *
+   * Not a field any producer is asked for — `normalizeWidgetSpec` unwraps it
+   * because models emit it anyway. Measured on the live hub 2026-09-08: a
+   * staff turn read the estate, had all ten rows, and sent
+   * `{kind:"table", title:"…", data:"{\"columns\":[…],\"rows\":[…]}"}`. Both
+   * schemas take the fields flat, so the payload was dropped and the card drew
+   * a heading over an empty bullet list. The person reading it sees "there was
+   * nothing to show", which is the opposite of the truth.
+   *
+   * `data` is a natural envelope name and `ActionSpec.data` sits two interfaces
+   * below this one, so it will keep happening. The renderer knows the shape and
+   * is where the failure is silent, so the tolerance belongs here rather than in
+   * a prompt asking the model to stop.
+   */
+  data?: string | Record<string, unknown>;
+}
+
+/** Keys a nested `data` envelope may carry up into the spec. Listed rather than
+ *  spread wholesale: an envelope must not be able to set `kind` or `title` and
+ *  reshape the card the producer asked for. */
+const DATA_FIELDS = [
+  "value",
+  "caption",
+  "delta",
+  "items",
+  "lines",
+  "columns",
+  "rows",
+] as const;
+
+/**
+ * Lift a nested `data` envelope into the spec, filling ONLY fields the spec
+ * does not already have. Returns the spec unchanged when there is no envelope
+ * or it will not parse — a malformed one is not worth an error path, because
+ * the caller's next step (drawing nothing rather than an empty card) is already
+ * the right answer for it.
+ */
+export function normalizeWidgetSpec(spec: WidgetSpec): WidgetSpec {
+  const { data } = spec;
+  if (!data) return spec;
+  let inner: Record<string, unknown> | undefined;
+  if (typeof data === "string") {
+    try {
+      const parsed: unknown = JSON.parse(data);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        inner = parsed as Record<string, unknown>;
+    } catch {
+      return spec;
+    }
+  } else if (!Array.isArray(data)) {
+    inner = data;
+  }
+  if (!inner) return spec;
+  const out: WidgetSpec = { ...spec };
+  delete out.data;
+  for (const key of DATA_FIELDS)
+    if (out[key] === undefined && inner[key] !== undefined)
+      (out as Record<string, unknown>)[key] = inner[key];
+  return out;
+}
+
+/**
+ * Has this spec anything to DRAW for its kind?
+ *
+ * An empty card is a claim about the data — "there was nothing" — and on the
+ * hub that claim was false while the model held ten rows. Drawing nothing says
+ * less, and everything it says is true.
+ */
+export function widgetHasContent(spec: WidgetSpec): boolean {
+  const kind =
+    spec.kind ?? (spec.rows ? "table" : spec.items ? "kpis" : "list");
+  if (kind === "stat") return spec.value !== undefined && spec.value !== "";
+  if (kind === "kpis") return (spec.items?.length ?? 0) > 0;
+  if (kind === "table") return (spec.rows?.length ?? 0) > 0;
+  return (spec.lines?.length ?? 0) > 0;
 }
 
 /** A navigation suggestion the assistant emits via `[[navigate:{json}]]`. */
@@ -81,13 +158,7 @@ export interface FormField {
    *  ask for a control the builder cannot render is a promise to the model that
    *  the UI then breaks. */
   type?:
-    | "text"
-    | "email"
-    | "number"
-    | "textarea"
-    | "select"
-    | "checkbox"
-    | "radio";
+    "text" | "email" | "number" | "textarea" | "select" | "checkbox" | "radio";
   placeholder?: string;
   required?: boolean;
   options?: string[];
@@ -161,7 +232,7 @@ export function proposalFields(raw: unknown): ProposalField[] {
         Boolean(f) &&
         typeof f === "object" &&
         typeof (f as ProposalField).arg === "string" &&
-        Boolean((f as ProposalField).arg)
+        Boolean((f as ProposalField).arg),
     )
     .slice(0, 6);
 }
@@ -169,7 +240,7 @@ export function proposalFields(raw: unknown): ProposalField[] {
 /** Pull a `[[form:{json}]]` directive out of assistant text, if present. Uses
  *  the shared brace-matching extractor, then validates the form shape. */
 export function parseFormDirective(
-  text: string
+  text: string,
 ): { spec: FormSpec; stripped: string } | null {
   const r = parseJsonDirective<FormSpec>(text, "form");
   if (!r) return null;

@@ -1,6 +1,7 @@
 import { el, wrapPreviewHtml } from "./dom";
 import { PREFIX } from "./prefix";
 import type { ActionSpec, ChipsSpec, PreviewSpec, WidgetSpec } from "./specs";
+import { normalizeWidgetSpec, widgetHasContent } from "./specs";
 import {
   UI_SAY_ACTION,
   normalizeUiSpec,
@@ -56,7 +57,7 @@ export interface UiRenderCtx {
   /** Label lookup; `L("prev")`. Host translation falling back to English. */
   L: (
     key: keyof WidgetLabels,
-    params?: Record<string, string | number>
+    params?: Record<string, string | number>,
   ) => string;
   /** The conversation log element every renderer appends into. */
   log: HTMLElement;
@@ -65,7 +66,7 @@ export interface UiRenderCtx {
   /** Send a turn, as the chip renderer does when a suggestion is clicked. */
   send: (
     content: string,
-    fork?: { parentId?: string | null; regenerate?: boolean }
+    fork?: { parentId?: string | null; regenerate?: boolean },
   ) => Promise<void>;
   /** Teardown callbacks for renderers holding subscriptions or timers. */
   richDisposers: Array<() => void>;
@@ -84,7 +85,7 @@ export interface UiRenderCtx {
   /** Hand an action to the host app. */
   dispatchAction: (
     name: string,
-    data: Record<string, string>
+    data: Record<string, string>,
   ) => Promise<string | void>;
   /** Live job updates for a tile that is watching one. `kind` is the narrow
    *  union rather than `string`: a report id and a job id are two namespaces,
@@ -92,13 +93,13 @@ export interface UiRenderCtx {
   subscribeJob: (
     ref: { kind: "job" | "report"; id: string },
     node: HTMLElement,
-    paint: (view: WidgetJobView) => void
+    paint: (view: WidgetJobView) => void,
   ) => void;
   /** Try to render into the host's pane; false when it cannot take it. */
   showPaneWidget: (
     spec: unknown,
     rows: unknown,
-    comparisonRows?: unknown
+    comparisonRows?: unknown,
   ) => boolean;
   /** The composer input, focused when a chip is dismissed. */
   input: HTMLInputElement;
@@ -127,7 +128,13 @@ export function createUiRenderers(ctx: UiRenderCtx) {
   } = ctx;
 
   /** Render an inline data widget (stat / kpis / list / table) in the log. */
-  function renderWidget(spec: WidgetSpec): void {
+  function renderWidget(raw: WidgetSpec): void {
+    // Unwrap a nested `data` envelope first, then refuse to draw a card with
+    // nothing in it — see `normalizeWidgetSpec` for the turn that made both
+    // necessary. Order matters: normalising first is what turns the hub's ten
+    // rows from "nothing to draw" into a table.
+    const spec = normalizeWidgetSpec(raw);
+    if (!widgetHasContent(spec)) return;
     const card = el("div", `${PREFIX}-widget`);
     if (spec.title) {
       const t = el("div", `${PREFIX}-widget-title`);
@@ -369,7 +376,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     tile.appendChild(box);
     if (it.jobId) {
       subscribeJob({ kind: "job", id: it.jobId }, tile, (view) =>
-        paintUiTileLive(tile, view)
+        paintUiTileLive(tile, view),
       );
     }
     if (it.title) {
@@ -432,7 +439,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
       const isAudio = kind === "audio";
       const node = el(
         isAudio ? "audio" : isVideo ? "video" : "img",
-        `${PREFIX}-ui-media-el`
+        `${PREFIX}-ui-media-el`,
       ) as HTMLImageElement & HTMLVideoElement & HTMLAudioElement;
       node.src = url;
       if (isVideo || isAudio) {
@@ -478,7 +485,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     const paint = (): void => {
       items.style.transform = `translateX(-${index * 100}%)`;
       dots.forEach((d, i) =>
-        d.classList.toggle(`${PREFIX}-ui-dot-on`, i === index)
+        d.classList.toggle(`${PREFIX}-ui-dot-on`, i === index),
       );
       counter.textContent = `${index + 1}/${count}`;
     };
@@ -490,7 +497,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     const arrow = (side: "left" | "right"): HTMLElement => {
       const b = el(
         "button",
-        `${PREFIX}-ui-arrow ${PREFIX}-ui-arrow-${side}`
+        `${PREFIX}-ui-arrow ${PREFIX}-ui-arrow-${side}`,
       ) as HTMLButtonElement;
       b.type = "button";
       b.setAttribute("aria-label", side === "left" ? L("prev") : L("next"));
@@ -546,7 +553,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     if (spec.items.length) {
       const items = el(
         "div",
-        `${PREFIX}-ui-items ${PREFIX}-ui-${spec.layout} ${PREFIX}-ui-a-${spec.aspect}`
+        `${PREFIX}-ui-items ${PREFIX}-ui-${spec.layout} ${PREFIX}-ui-a-${spec.aspect}`,
       );
       for (const it of spec.items) items.appendChild(buildUiTile(it));
       // A CAROUSEL shows one item at a time, because the client is judging each
@@ -574,7 +581,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
   function renderServerWidget(
     spec: { title?: string; chartType?: string } | undefined,
     rows: unknown,
-    comparisonRows?: unknown
+    comparisonRows?: unknown,
   ): void {
     // ADVANCED VIEW: the big surface is the right place for a chart.
     //
@@ -612,7 +619,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
           host,
           spec,
           rows,
-          comparisonRows
+          comparisonRows,
         );
         if (dispose) richDisposers.push(dispose);
         scrollDown(true);
@@ -691,7 +698,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     if (spec.other !== false) {
       const other = el(
         "button",
-        `${PREFIX}-chip ${PREFIX}-chip-other`
+        `${PREFIX}-chip ${PREFIX}-chip-other`,
       ) as HTMLButtonElement;
       other.type = "button";
       other.textContent = L("otherOption");
@@ -702,7 +709,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     if (multi) {
       const go = el(
         "button",
-        `${PREFIX}-chip ${PREFIX}-chip-send`
+        `${PREFIX}-chip ${PREFIX}-chip-send`,
       ) as HTMLButtonElement;
       go.type = "button";
       go.textContent = L("send");
@@ -744,9 +751,11 @@ export function createUiRenderers(ctx: UiRenderCtx) {
    */
   function operateConfirmText(spec: ActionSpec): string {
     const id = spec.data?.target ?? "";
-    return confirmSentence(spec, id && describeTarget ? describeTarget(id) : undefined);
+    return confirmSentence(
+      spec,
+      id && describeTarget ? describeTarget(id) : undefined,
+    );
   }
-
 
   return {
     renderWidget,
@@ -757,7 +766,6 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     operateConfirmText,
   };
 }
-
 
 /**
  * THE SENTENCE THE USER APPROVES.
@@ -780,7 +788,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
  */
 export function confirmSentence(
   spec: ActionSpec,
-  info?: TargetDescription
+  info?: TargetDescription,
 ): string {
   const id = spec.data?.target ?? "";
   // Prefer what the user can actually read on screen over the slug.
@@ -819,7 +827,9 @@ export function confirmSentence(
 
 function fillQuestion(name: string, value: string): string {
   const short = value.length > 40 ? `${value.slice(0, 40)}\u2026` : value;
-  return short ? `Type \u201c${short}\u201d into ${name}?` : `Fill ${name} for you?`;
+  return short
+    ? `Type \u201c${short}\u201d into ${name}?`
+    : `Fill ${name} for you?`;
 }
 
 /** Join a sentence onto a clause without a capital in the middle of it. An
