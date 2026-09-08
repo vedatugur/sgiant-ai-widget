@@ -29,6 +29,7 @@
 
 import {
   verifySurface,
+  flattenControls,
   type SurfaceManifest,
   type ManifestDrift,
   type ManifestRoot,
@@ -326,3 +327,35 @@ export function hostTargetsOnly(
 ): ScannedTarget[] {
   return splitSurfaceTargets(targets).host;
 }
+
+/**
+ * The panel's own controls, flattened for a page context.
+ *
+ * A constant rather than a call: the manifest is static, so computing this per
+ * turn would be work with no question behind it. Shipped as `widgetTargets`
+ * alongside the host's `uiTargets`, which is what lets the api label the two
+ * surfaces apart — "close" answers to two things on screen and the model has to
+ * be able to say which one it means (sgiant-platform#356).
+ *
+ * `mutates` travels with each control, and that is the point of declaring
+ * rather than scanning: opening history changes nothing, starting a new chat
+ * abandons what is on screen, and both are buttons with an icon on them.
+ *
+ * Flattened by the BRIDGE's own `flattenControls`, not by a hand-walk here.
+ * The first version of this mapped `views[].controls` directly and produced ONE
+ * control out of eight — views nest, and a hand-walk that assumes they do not
+ * is wrong quietly. The shape's owner is the one that should walk it.
+ */
+export const WIDGET_TARGET_DECLARATIONS: ReadonlyArray<{
+  id: string;
+  label?: string;
+  purpose?: string;
+  kind?: string;
+  mutates?: boolean;
+}> = flattenControls(WIDGET_MANIFEST).map((c) => ({
+  id: c.id,
+  ...(c.label ? { label: c.label } : {}),
+  ...(c.purpose ? { purpose: c.purpose } : {}),
+  ...(c.kind ? { kind: c.kind } : {}),
+  ...(typeof c.mutates === "boolean" ? { mutates: c.mutates } : {}),
+}));

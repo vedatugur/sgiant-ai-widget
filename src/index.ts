@@ -33,7 +33,10 @@ export {
 } from "./host-actions";
 // The ids the widget stamps on ITSELF, so the manifest and the DOM cannot
 // disagree by typo — see widget-manifest.ts.
-import { WIDGET_TARGETS } from "./widget-manifest.js";
+import {
+  WIDGET_TARGETS,
+  WIDGET_TARGET_DECLARATIONS as widgetTargets,
+} from "./widget-manifest.js";
 // Re-exported so a host can read the widget's own surface without a second
 // import specifier — and so `WIDGET_MANIFEST` travels with the build that
 // actually renders those ids.
@@ -48,6 +51,7 @@ export {
   splitSurfaceTargets,
   hostTargetsOnly,
   type ScannedTarget,
+  WIDGET_TARGET_DECLARATIONS,
   type WidgetTargetId,
 } from "./widget-manifest.js";
 // Used locally too (the block above only RE-exports for consumers): the
@@ -4598,6 +4602,29 @@ export function createAiChatWidget(
               uiTargets: transport.getTargets(),
             }
           : baseCtx;
+      // THE PANEL DECLARES ITSELF.
+      //
+      // Hosts send the PAGE's controls (`hostTargetsOnly`), because a raw
+      // `scanAiTargets` mixes the panel's own buttons in with them: "close"
+      // then means two things on two surfaces, and the scan's cap lets the
+      // panel push the page's controls out of the list silently.
+      //
+      // But excluding them without offering them elsewhere would leave the
+      // assistant unable to reach its own history, menu or composer at all —
+      // and sgiant-platform#356 exists partly to make that reachable ("it can
+      // open the assets page; it cannot show you your last three
+      // conversations"). Measured before the change: zero calls at a
+      // widget-stamped target in thirty days, so nothing regressed — the
+      // capability never existed.
+      //
+      // So the panel sends its OWN manifest rather than relying on being
+      // scraped off the page. Declared, not derived, which is what lets
+      // `mutates` be true: opening history changes nothing, starting a new chat
+      // abandons what is on screen, and a DOM walk cannot tell those apart.
+      const ctxWithPanel =
+        pageContext && typeof pageContext === "object"
+          ? { ...(pageContext as Record<string, unknown>), widgetTargets }
+          : pageContext;
       // Cache this turn's navigable pages for the #111 prose-nav fallback below.
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
@@ -4624,7 +4651,7 @@ export function createAiChatWidget(
         signal: alive.signal,
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
-          ...(pageContext ? { pageContext } : {}),
+          ...(ctxWithPanel ? { pageContext: ctxWithPanel } : {}),
           accountId: opts.getAccountScope?.() ?? opts.accountId ?? "",
           threadId,
           content,

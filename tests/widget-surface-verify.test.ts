@@ -26,6 +26,7 @@ import {
   WIDGET_TARGETS,
   splitSurfaceTargets,
   hostTargetsOnly,
+  WIDGET_TARGET_DECLARATIONS,
 } from "../dist/index.js";
 // The manifest nests controls under views, so the ids come from the bridge's
 // own flattener rather than a hand-walk that would drift from the shape.
@@ -170,4 +171,50 @@ test("every id the widget stamps is claimed by the widget", () => {
   const { host, widget } = splitSurfaceTargets(scan);
   assert.deepEqual(host, [], "a widget control leaked into the host's list");
   assert.equal(widget.length, scan.length);
+});
+
+/**
+ * AND THE PANEL DECLARES ITSELF, so excluding it from the host's scan does not
+ * make it unreachable.
+ *
+ * `hostTargetsOnly` keeps the panel's buttons out of the page's control list —
+ * necessary, because "close" otherwise means two things on two surfaces and the
+ * scan's cap lets the panel push the page's controls out silently. But removing
+ * them without offering them elsewhere would leave the assistant unable to
+ * reach its own history or composer at all, which sgiant-platform#356 exists
+ * partly to make possible.
+ *
+ * So the panel sends its own manifest instead of being scraped off the page.
+ */
+test("every id the widget stamps is also declared", () => {
+  // The two lists are the same set from two directions: WIDGET_TARGETS is what
+  // the DOM gets stamped with, the declarations are what the model is told
+  // about. A control added to one and not the other is the drift this whole
+  // contract exists to prevent.
+  const declared = new Set(
+    WIDGET_TARGET_DECLARATIONS.map((c: { id: string }) => c.id),
+  );
+  const stamped = Object.values(WIDGET_TARGETS) as string[];
+  assert.deepEqual(
+    stamped.filter((id) => !declared.has(id)),
+    [],
+    "a control the widget stamps but never declares is invisible to the model",
+  );
+  assert.equal(declared.size, stamped.length, "a declaration with no control");
+});
+
+test("mutating and non-mutating are told apart, which a DOM walk cannot do", () => {
+  const by = (id: string) =>
+    WIDGET_TARGET_DECLARATIONS.find((c: { id: string }) => c.id === id);
+  // Both are buttons with an icon. Only a person can say that one abandons what
+  // is on screen and the other does not.
+  assert.equal(by(WIDGET_TARGETS.newChat)?.mutates, true);
+  assert.equal(by(WIDGET_TARGETS.history)?.mutates, false);
+  assert.equal(
+    WIDGET_TARGET_DECLARATIONS.filter(
+      (c: { mutates?: boolean }) => typeof c.mutates !== "boolean",
+    ).length,
+    0,
+    "an undeclared `mutates` reads as unknown, and unknown must not look safe",
+  );
 });
