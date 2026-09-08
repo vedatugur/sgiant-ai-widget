@@ -23,6 +23,9 @@ import {
   describeWidgetDrift,
   WIDGET_MANIFEST,
   WIDGET_CONDITIONAL_TARGETS,
+  WIDGET_TARGETS,
+  splitSurfaceTargets,
+  hostTargetsOnly,
 } from "../dist/index.js";
 // The manifest nests controls under views, so the ids come from the bridge's
 // own flattener rather than a hand-walk that would drift from the shape.
@@ -113,4 +116,58 @@ test("the two are reported separately, in one sentence", () => {
   const said = describeWidgetDrift(verifyWidgetSurface(rootWith(ids)));
   assert.match(said, /manifest is out of date/);
   assert.match(said, /not available in this configuration/);
+});
+
+/**
+ * AND THE TWO SURFACES MUST NOT BE ONE LIST.
+ *
+ * `scanAiTargets` walks the whole document for `[data-ai-target]`, and the
+ * widget stamps that attribute on its own controls. A host passing the scan
+ * straight through as `uiTargets` therefore hands the assistant a list where
+ * its own panel's buttons are indistinguishable from the page's — "click the
+ * close button" becomes ambiguous in a way prompting cannot fix.
+ *
+ * And the scan is CAPPED. On a rich page the widget's own controls can push the
+ * host's out of the list entirely, silently — the same truncation this issue
+ * was opened about, arriving from the other end.
+ */
+test("a scan splits into the host's controls and the widget's own", () => {
+  const scan = [
+    { id: "assets-upload", label: "Upload" },
+    { id: WIDGET_TARGETS.composer, label: "Message" },
+    { id: "assets-delete", label: "Delete" },
+    { id: WIDGET_TARGETS.close, label: "Close" },
+  ];
+  const { host, widget } = splitSurfaceTargets(scan);
+  assert.deepEqual(
+    host.map((t: { id: string }) => t.id),
+    ["assets-upload", "assets-delete"],
+  );
+  assert.deepEqual(
+    widget.map((t: { id: string }) => t.id),
+    [WIDGET_TARGETS.composer, WIDGET_TARGETS.close],
+  );
+});
+
+test("hostTargetsOnly is the call a host makes", () => {
+  // Separate from the split because `splitSurfaceTargets(...).host` at a call
+  // site is one refactor away from sending `.widget` by mistake.
+  const scan = [{ id: "page-save" }, { id: WIDGET_TARGETS.newChat }];
+  assert.deepEqual(
+    hostTargetsOnly(scan).map((t: { id: string }) => t.id),
+    ["page-save"],
+  );
+});
+
+test("every id the widget stamps is claimed by the widget", () => {
+  // The authority is WIDGET_TARGETS, not a prefix convention: an id the widget
+  // stamps is the widget's whatever the page around it looks like. If a control
+  // is ever added to the panel without going through WIDGET_TARGETS, it lands
+  // in the host's list and this fails.
+  const scan = Object.values(WIDGET_TARGETS).map((id) => ({
+    id: id as string,
+  }));
+  const { host, widget } = splitSurfaceTargets(scan);
+  assert.deepEqual(host, [], "a widget control leaked into the host's list");
+  assert.equal(widget.length, scan.length);
 });

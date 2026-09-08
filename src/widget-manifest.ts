@@ -274,3 +274,55 @@ export function describeWidgetDrift(check: WidgetSurfaceCheck): string {
     );
   return parts.join(". ");
 }
+
+/** One scanned control, as `scanAiTargets` returns them. Declared here rather
+ *  than imported so this file stays usable by a host that scans its own way. */
+export interface ScannedTarget {
+  id: string;
+  label?: string;
+}
+
+/**
+ * SPLIT A SCAN INTO THE HOST'S CONTROLS AND THE WIDGET'S OWN.
+ *
+ * `scanAiTargets` walks the whole document for `[data-ai-target]`, and the
+ * widget stamps that same attribute on its own bubble, composer, history and
+ * menu. So a host that passes the scan straight through as `uiTargets` sends
+ * the assistant a list in which its own panel's buttons are indistinguishable
+ * from the page's — and the model is asked to choose between them with nothing
+ * to choose on.
+ *
+ * Two costs, and the second is the one that bites. The model cannot tell "a
+ * button on the page" from "a button inside the assistant", so "click the close
+ * button" is ambiguous in a way no amount of prompting fixes. And the scan is
+ * CAPPED (40 by default): on a rich page the widget's eight controls can push
+ * eight of the host's out of the list entirely, silently.
+ *
+ * This is the `surface` field of the contract doing its job — the manifest says
+ * which thing it describes so a host's and the widget's can coexist
+ * (sgiant-platform#356). `WIDGET_TARGETS` is the authority: an id the widget
+ * stamps is the widget's, whatever the page around it looks like.
+ */
+export function splitSurfaceTargets(targets: readonly ScannedTarget[]): {
+  host: ScannedTarget[];
+  widget: ScannedTarget[];
+} {
+  const mine = new Set<string>(Object.values(WIDGET_TARGETS));
+  const host: ScannedTarget[] = [];
+  const widget: ScannedTarget[] = [];
+  for (const t of targets) (mine.has(t.id) ? widget : host).push(t);
+  return { host, widget };
+}
+
+/**
+ * The host's controls only — what a page context should carry.
+ *
+ * Named separately from `splitSurfaceTargets` because this is the call a host
+ * actually makes, and a host reading `splitSurfaceTargets(...).host` at the
+ * call site is one refactor away from sending `.widget` by mistake.
+ */
+export function hostTargetsOnly(
+  targets: readonly ScannedTarget[],
+): ScannedTarget[] {
+  return splitSurfaceTargets(targets).host;
+}

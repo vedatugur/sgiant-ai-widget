@@ -45,6 +45,9 @@ export {
   verifyWidgetSurface,
   describeWidgetDrift,
   type WidgetSurfaceCheck,
+  splitSurfaceTargets,
+  hostTargetsOnly,
+  type ScannedTarget,
   type WidgetTargetId,
 } from "./widget-manifest.js";
 // Used locally too (the block above only RE-exports for consumers): the
