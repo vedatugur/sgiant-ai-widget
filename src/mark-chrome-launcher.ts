@@ -33,7 +33,13 @@ export const CHROME_LAUNCHER: Record<string, string> = {
   "launcher-icon": "56px",
   "launcher-lift": "0%",
   "launcher-parked-icon": "40px",
-  "launcher-pill-icon": "30px",
+  // 36 in a 48px pill, not 30. The pebble gives this mark the WHOLE button
+  // (56 in 56) because it has no disc to sit inside; the pill was quietly
+  // giving it 62% and the head read as small next to the word beside it —
+  // reported from sgiant's own UI, which is the only place the pill ships.
+  // The ratio the comment above asks to hold is the one between STATES, and
+  // 30 was not holding it.
+  "launcher-pill-icon": "36px",
   "launcher-bg": "transparent",
   "launcher-shadow": "none",
   "launcher-fg": "currentColor",
