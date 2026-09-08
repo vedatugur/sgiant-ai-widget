@@ -27,7 +27,12 @@
  * not left to discipline.
  */
 
-import type { SurfaceManifest } from "sgiant-ai-agent-bridge/manifest";
+import {
+  verifySurface,
+  type SurfaceManifest,
+  type ManifestDrift,
+  type ManifestRoot,
+} from "sgiant-ai-agent-bridge/manifest";
 
 /** The surface name. Distinct from any host's, so both can be loaded at once
  *  and a control is never ambiguous about which one it belongs to. */
@@ -51,7 +56,8 @@ export const WIDGET_TARGETS = {
   attach: "widget-attach",
 } as const;
 
-export type WidgetTargetId = (typeof WIDGET_TARGETS)[keyof typeof WIDGET_TARGETS];
+export type WidgetTargetId =
+  (typeof WIDGET_TARGETS)[keyof typeof WIDGET_TARGETS];
 
 /**
  * The widget, described.
@@ -187,3 +193,84 @@ export const WIDGET_CONDITIONAL_TARGETS: readonly string[] = [
   WIDGET_TARGETS.attach,
   WIDGET_TARGETS.history,
 ];
+
+/**
+ * WHAT THE MANIFEST CLAIMS, AGAINST WHAT THE PANEL ACTUALLY HAS.
+ *
+ * The bridge has shipped `verifySurface` since the contract was written and
+ * nothing called it — the manifest half was wired and the verification half was
+ * not, which is the "declared but unwired" shape the estate has now been bitten
+ * by four times (sgiant-platform#348, #365, #367 and this).
+ *
+ * A manifest describes; the panel IS. When they disagree the panel wins,
+ * because the panel is what the user is looking at — and an assistant acting on
+ * the manifest instead is #348 with a click attached.
+ *
+ * THE ANSWER IS THREE BUCKETS, not a boolean, because the three mean different
+ * things to a person:
+ *
+ *   `expected`   a conditional control the host did not enable. "Not available
+ *                here" is TRUE and useful; reporting it as a fault would cry
+ *                wolf on a correctly configured widget.
+ *   `stale`      a control this manifest declares unconditionally and the panel
+ *                does not have. The manifest is wrong. Say so; never act.
+ *   `other`      hidden or undeclared — worth reporting, never a reason to
+ *                refuse: a hidden control may simply be behind a closed menu.
+ */
+export interface WidgetSurfaceCheck {
+  /** Conditional controls the host did not wire — a true "not available here". */
+  expected: ManifestDrift[];
+  /** Declared unconditionally and absent: the manifest is out of date. */
+  stale: ManifestDrift[];
+  /** Hidden or undeclared. Reported, never fatal. */
+  other: ManifestDrift[];
+  /** Nothing declared is missing. `expected` may still be non-empty. */
+  ok: boolean;
+}
+
+/**
+ * Verify the widget's own surface against a live root.
+ *
+ * Takes the root rather than reaching for `document`, so it works on a detached
+ * panel and can be tested without a browser — the same reason the bridge's own
+ * `ManifestRoot` is a two-method interface.
+ */
+export function verifyWidgetSurface(root: ManifestRoot): WidgetSurfaceCheck {
+  const conditional = new Set<string>(WIDGET_CONDITIONAL_TARGETS);
+  const drift = verifySurface(WIDGET_MANIFEST, root);
+  const expected: ManifestDrift[] = [];
+  const stale: ManifestDrift[] = [];
+  const other: ManifestDrift[] = [];
+  for (const d of drift) {
+    if (d.kind !== "missing") other.push(d);
+    else if (conditional.has(d.id)) expected.push(d);
+    else stale.push(d);
+  }
+  return { expected, stale, other, ok: stale.length === 0 };
+}
+
+/**
+ * One sentence a person can read, or "" when there is nothing to say.
+ *
+ * Returned rather than logged: where this belongs — a console, a chip, an
+ * answer to the user — is the caller's decision, and a helper that picks for
+ * them is a helper that gets worked around.
+ */
+export function describeWidgetDrift(check: WidgetSurfaceCheck): string {
+  const parts: string[] = [];
+  if (check.stale.length)
+    parts.push(
+      `${check.stale.length} control(s) this widget declares are not on the panel (${check.stale
+        .map((d) => d.id)
+        .join(", ")}) — the manifest is out of date, do not act on them`,
+    );
+  if (check.expected.length)
+    parts.push(
+      `not available in this configuration: ${check.expected.map((d) => d.id).join(", ")}`,
+    );
+  if (check.other.length)
+    parts.push(
+      check.other.map((d) => `${d.id} ${d.kind}: ${d.detail}`).join("; "),
+    );
+  return parts.join(". ");
+}

@@ -42,6 +42,9 @@ export {
   WIDGET_TARGETS,
   WIDGET_SURFACE,
   WIDGET_CONDITIONAL_TARGETS,
+  verifyWidgetSurface,
+  describeWidgetDrift,
+  type WidgetSurfaceCheck,
   type WidgetTargetId,
 } from "./widget-manifest.js";
 // Used locally too (the block above only RE-exports for consumers): the
