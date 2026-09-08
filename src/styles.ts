@@ -128,11 +128,11 @@ export function injectStyles(side: "left" | "right"): void {
   // loosened to understand `${...}` spans.
   const darkWhenHostSaysSo = darkRules(
     `.dark .${PREFIX}-bubble`,
-    `.dark .${PREFIX}-panel`
+    `.dark .${PREFIX}-panel`,
   );
   const darkWhenNobodySaid = darkRules(
     `.${PREFIX}-bubble:not(.${PREFIX}-host-tokens)`,
-    `.${PREFIX}-panel:not(.${PREFIX}-host-tokens)`
+    `.${PREFIX}-panel:not(.${PREFIX}-host-tokens)`,
   );
   const css = `
 /* Theme tokens — every color in this sheet reads from these. Light defaults
@@ -757,7 +757,7 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-history-date{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);flex:0 0 auto}
 .${PREFIX}-history-star{font-size:var(--aiw-font-lg);line-height:1;color:#cbcbcb;flex:0 0 auto;padding:0 2px;cursor:pointer}
 .${PREFIX}-history-star:hover{color:#f59e0b}
-.${PREFIX}-widget{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-widget{align-self:stretch;max-width:100%;min-width:0;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-widget-title{font-size:var(--aiw-font-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
 /* A single-stat card sizes to its content instead of stretching. The generic
    card stretches because a table needs the width; one number does not, and a
@@ -873,9 +873,10 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-kpi-v{font-size:var(--aiw-font-2xl);font-weight:700;color:var(--aiw-text)}
 .${PREFIX}-kpi-l{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);margin-top:1px}
 .${PREFIX}-kpi-d{font-size:var(--aiw-font-2xs);font-weight:600;color:var(--aiw-accent-ink);margin-top:2px}
-.${PREFIX}-widget-table{width:100%;border-collapse:collapse;font-size:var(--aiw-font-xs)}
+.${PREFIX}-widget-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:thin}
+.${PREFIX}-widget-table{width:100%;min-width:max-content;border-collapse:collapse;font-size:var(--aiw-font-xs)}
 .${PREFIX}-widget-table th{text-align:left;font-weight:700;color:var(--aiw-text-2);border-bottom:1px solid var(--aiw-border);padding:6px 8px}
-.${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:var(--aiw-text)}
+.${PREFIX}-widget-table td{border-bottom:1px solid var(--aiw-border-soft);padding:6px 8px;color:var(--aiw-text);white-space:nowrap}
 .${PREFIX}-widget-list{margin:0;padding-left:18px;font-size:var(--aiw-font-sm);color:var(--aiw-text);display:flex;flex-direction:column;gap:3px}
 .${PREFIX}-nav{align-self:flex-start;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-nav-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--aiw-accent);background:color-mix(in srgb,var(--aiw-accent) 6%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-lg);padding:9px 14px;font-size:var(--aiw-font-sm);font-weight:600;cursor:pointer}

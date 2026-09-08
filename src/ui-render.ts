@@ -179,6 +179,14 @@ export function createUiRenderers(ctx: UiRenderCtx) {
       }
       card.appendChild(grid);
     } else if (kind === "table" && spec.rows) {
+      // The table scrolls inside its OWN box. A five-column status table of ten
+      // domains is wider than a 530px chat panel, and without this the table
+      // painted outside the card and put a horizontal scrollbar on the whole
+      // conversation — measured on the hub the day the card first had data in
+      // it. Nothing catches that: it type-checks, it tests, and it is only
+      // visible by looking at it (which is why sgiant's CLAUDE.md says to open
+      // the UI when a change adds any).
+      const scroller = el("div", `${PREFIX}-widget-scroll`);
       const table = document.createElement("table");
       table.className = `${PREFIX}-widget-table`;
       if (spec.columns?.length) {
@@ -194,7 +202,8 @@ export function createUiRenderers(ctx: UiRenderCtx) {
         const tr = tbody.insertRow();
         for (const cell of row) tr.insertCell().textContent = String(cell);
       }
-      card.appendChild(table);
+      scroller.appendChild(table);
+      card.appendChild(scroller);
     } else {
       const ul = el("ul", `${PREFIX}-widget-list`);
       for (const line of (spec.lines ?? []).slice(0, 30)) {

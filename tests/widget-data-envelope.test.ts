@@ -90,3 +90,40 @@ test("each kind knows whether it has anything to show", () => {
   assert.equal(widgetHasContent({ kind: "list", lines: ["a"] }), true);
   assert.equal(widgetHasContent({ title: "just a title" }), false);
 });
+
+/**
+ * AND A WIDE TABLE SCROLLS INSIDE ITS OWN CARD.
+ *
+ * The first table the hub ever drew was five columns of ten domains in a 380px
+ * panel: it painted past the card and put a horizontal scrollbar on the whole
+ * conversation. Measured in a browser against the built stylesheet — table
+ * 651px, card 380px — the scroller now takes the overflow (356 → 651) and the
+ * log does not move. Asserted here on the source, because a stylesheet is not
+ * something the node suite can lay out.
+ */
+test("the table has a scroll container and the card cannot be stretched", async () => {
+  const { readFileSync } = await import("node:fs");
+  const styles = readFileSync(
+    new URL("../src/styles.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    styles,
+    /-widget-scroll\{overflow-x:auto/,
+    "the table needs a box of its own to scroll in",
+  );
+  assert.match(
+    styles,
+    /-widget\{align-self:stretch;max-width:100%;min-width:0/,
+    "and the card must not be widened by what is inside it",
+  );
+  const render = readFileSync(
+    new URL("../src/ui-render.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    render,
+    /scroller\.appendChild\(table\)/,
+    "the table goes INTO the scroller — appending it to the card is the bug",
+  );
+});
