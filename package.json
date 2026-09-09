@@ -37,6 +37,10 @@
       "types": "./dist/charts.d.ts",
       "default": "./dist/charts.js",
       "browser": "./dist/sgiant-ai-widget-charts.global.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
     }
   },
   "unpkg": "./dist/sgiant-ai-widget.global.js",
