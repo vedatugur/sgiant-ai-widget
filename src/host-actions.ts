@@ -209,7 +209,7 @@ function navPathSegments(path: unknown): string[] | null {
  */
 export function matchManifest(
   path: string,
-  manifest: PageManifestEntry[]
+  manifest: PageManifestEntry[],
 ): PageManifestEntry | undefined {
   const segs = (p: string): string[] => p.split("/").filter(Boolean);
   const pathSegs = segs(normalizePath(path));
@@ -228,7 +228,7 @@ export function matchManifest(
     if (entrySegs.length > pathSegs.length) continue;
     const off = pathSegs.length - entrySegs.length;
     const hit = entrySegs.every(
-      (seg, i) => seg.startsWith(":") || seg === pathSegs[off + i]
+      (seg, i) => seg.startsWith(":") || seg === pathSegs[off + i],
     );
     if (!hit) continue;
 
@@ -242,7 +242,7 @@ export function matchManifest(
     // merits, wherever it sits in the file.
     const literals = entrySegs.reduce(
       (n, seg) => n + (seg.startsWith(":") ? 0 : 1),
-      0
+      0,
     );
     const score = entrySegs.length * 1000 + literals;
     if (score > bestScore) {
@@ -294,7 +294,7 @@ export function matchManifest(
  */
 export function isKnownNavTarget(
   path: unknown,
-  targets: readonly { path?: string }[] | undefined | null
+  targets: readonly { path?: string }[] | undefined | null,
 ): path is string {
   const segs = navPathSegments(path);
   if (segs === null) return false;
@@ -320,7 +320,7 @@ export function makePageContext(
   app: AppSurface,
   path: string,
   recentPages: string[] = [],
-  manifest?: PageManifestEntry[]
+  manifest?: PageManifestEntry[],
 ): PageContext {
   const page = path.split("/").filter(Boolean).slice(-1)[0] || "home";
   const ctx: PageContext = {
@@ -432,7 +432,7 @@ function alreadyThere(path: string): boolean {
 }
 
 export type HostActionHandler = (
-  data: Record<string, string>
+  data: Record<string, string>,
 ) => Promise<string | void> | string | void;
 
 export interface HostActionsConfig {
@@ -458,6 +458,22 @@ export interface HostActionsConfig {
    */
   pages?: readonly { path?: string }[];
   /**
+   * Whether this surface HAS an account plane. Default true.
+   *
+   * The four named actions resolve to account-relative paths — with an
+   * `accountId`, "open-dashboards" is `/accounts/<id>/dashboards`; without one
+   * the base is empty and it becomes `/dashboards`. On a surface that has no
+   * such page the assistant then navigates, confidently, to nothing, and to the
+   * user that reads as the app breaking rather than as an action that does not
+   * apply here.
+   *
+   * Pass false and those names are refused like any other unknown action, which
+   * is the truth: the hub has four hash anchors and no dashboards. The
+   * UI-control half (highlight / scroll-to / focus-field / fill / click) is
+   * unaffected — it never went through this map.
+   */
+  standardActions?: boolean;
+  /**
    * Where to look when verifying the widget's own manifest at action time.
    * Defaults to `document`. Injectable so the gate can be tested without a
    * browser — the same reason the bridge's `ManifestRoot` is two methods.
@@ -466,7 +482,9 @@ export interface HostActionsConfig {
     querySelectorAll(selector: string): ArrayLike<{
       getAttribute(name: string): string | null;
     }>;
-    querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+    querySelector(
+      selector: string,
+    ): { getAttribute(name: string): string | null } | null;
   };
   /**
    * The host's translator, for the CHIP OUTCOMES below.
@@ -486,7 +504,7 @@ export interface HostActionsConfig {
  * actions + any app-specific handlers. Pass to `createAiChatWidget`.
  */
 export function createHostActions(
-  cfg: HostActionsConfig
+  cfg: HostActionsConfig,
 ): (action: string, data: Record<string, string>) => Promise<string | void> {
   const base = cfg.accountId ? `/accounts/${cfg.accountId}` : "";
   const tr = cfg.t ?? ((_k: string, d: string) => d);
@@ -521,7 +539,7 @@ export function createHostActions(
         if (!isKnownNavTarget(data.path, cfg.pages))
           return tr(
             "aiAssistant.action.actionNotAPage",
-            "That is not a page I can open"
+            "That is not a page I can open",
           );
         // Compare what the host will ACTUALLY open, not what the model wrote.
         // The AI emits account-relative paths ("/assets"); the host prefixes
@@ -544,17 +562,17 @@ export function createHostActions(
       if (alreadyThere(target))
         return tr(
           `aiAssistant.action.actionAlready_${name.replace(/-/g, "_")}`,
-          STANDARD_ACTION_ALREADY[name] ?? "Already there"
+          STANDARD_ACTION_ALREADY[name] ?? "Already there",
         );
       cfg.navigate(target);
       return tr(
         `aiAssistant.action.actionDone_${name.replace(/-/g, "_")}`,
-        STANDARD_ACTION_DONE[name] ?? "Opened"
+        STANDARD_ACTION_DONE[name] ?? "Opened",
       );
     };
   }
   const map: Record<string, HostActionHandler> = {
-    ...standard,
+    ...(cfg.standardActions === false ? {} : standard),
     ...(cfg.handlers ?? {}),
   };
   const manifestRoot =
@@ -571,7 +589,10 @@ export function createHostActions(
     // guessing an id. Half those cases are OUR manifest being wrong, and the
     // other half are a control this host never wired, which is not a failure at
     // all. Three outcomes deserve three sentences.
-    if (manifestRoot && (isUiControlAction(action) || isOperateAction(action))) {
+    if (
+      manifestRoot &&
+      (isUiControlAction(action) || isOperateAction(action))
+    ) {
       const refusal = checkWidgetTarget(data.target ?? "", manifestRoot);
       if (refusal) throw new Error(refusal);
     }
