@@ -278,6 +278,44 @@ export function describeWidgetDrift(check: WidgetSurfaceCheck): string {
 
 /** One scanned control, as `scanAiTargets` returns them. Declared here rather
  *  than imported so this file stays usable by a host that scans its own way. */
+/**
+ * GATE ONE TARGET, AT THE MOMENT IT IS ABOUT TO BE USED.
+ *
+ * This is the caller `verifyWidgetSurface` and `describeWidgetDrift` did not
+ * have. Both were written, exported, and re-exported through `./manifest`, and
+ * measured on 2026-09-09 nothing called either — so #356's "verifies at action
+ * time" and "a stale manifest is detected and reported, never acted on
+ * silently" were true of the code and false of the running widget. That is the
+ * estate's house defect appearing inside the issue that documents it.
+ *
+ * Returns a SENTENCE to refuse with, or null to proceed. A sentence rather than
+ * a boolean because the two refusals mean opposite things to whoever reads
+ * them: a conditional control the host never wired is the widget working
+ * correctly, and a declared control the panel lacks is OUR bug — not a bad
+ * guess by the model, which is what "no such control on this page" would have
+ * blamed.
+ *
+ * An id that is not the widget's own returns null: the host owns its page, and
+ * checking a page control against the WIDGET's manifest would answer a question
+ * nobody asked.
+ */
+export function checkWidgetTarget(
+  id: string,
+  root: ManifestRoot,
+): string | null {
+  if (!WIDGET_TARGET_IDS.has(id)) return null;
+  const check = verifyWidgetSurface(root);
+  if (check.stale.some((d) => d.id === id)) return describeWidgetDrift(check);
+  if (check.expected.some((d) => d.id === id))
+    return `${id} is not available in this configuration`;
+  return null;
+}
+
+/** The widget's own ids, for the "is this mine?" question above. */
+const WIDGET_TARGET_IDS: ReadonlySet<string> = new Set(
+  Object.values(WIDGET_TARGETS),
+);
+
 export interface ScannedTarget {
   id: string;
   label?: string;

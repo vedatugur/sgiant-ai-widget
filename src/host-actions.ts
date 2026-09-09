@@ -15,6 +15,11 @@ import {
   isOperateAction,
   runOperateAction,
 } from "./ui-control";
+// The manifest gate for the widget's OWN controls. Kept separate from
+// `./ui-control` because that module answers "is this element here?" and this
+// one answers "does what we PUBLISHED about ourselves still hold?" — the second
+// question is the one #356 is about, and it had no caller until now.
+import { checkWidgetTarget } from "./widget-manifest.js";
 // Type-only: erased at build, so this stays a zero-runtime-dependency module.
 import type { Locale } from "./limits";
 
@@ -453,6 +458,17 @@ export interface HostActionsConfig {
    */
   pages?: readonly { path?: string }[];
   /**
+   * Where to look when verifying the widget's own manifest at action time.
+   * Defaults to `document`. Injectable so the gate can be tested without a
+   * browser — the same reason the bridge's `ManifestRoot` is two methods.
+   */
+  manifestRoot?: {
+    querySelectorAll(selector: string): ArrayLike<{
+      getAttribute(name: string): string | null;
+    }>;
+    querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+  };
+  /**
    * The host's translator, for the CHIP OUTCOMES below.
    *
    * Every visible string the widget itself renders goes through
@@ -541,7 +557,24 @@ export function createHostActions(
     ...standard,
     ...(cfg.handlers ?? {}),
   };
+  const manifestRoot =
+    cfg.manifestRoot ??
+    (typeof document === "undefined" ? undefined : document);
   return async (action, data) => {
+    // BEFORE ANYTHING: if the target is one the WIDGET declares about itself,
+    // check the declaration against the panel. `verifySurface` has existed since
+    // the contract was written and nothing called it, so "the manifest verifies
+    // at action time" was a sentence in an issue rather than a thing that ran.
+    //
+    // The distinction it buys is not pedantic. Without it, every failure came
+    // back as "no such control on this page" — which blames the model for
+    // guessing an id. Half those cases are OUR manifest being wrong, and the
+    // other half are a control this host never wired, which is not a failure at
+    // all. Three outcomes deserve three sentences.
+    if (manifestRoot && (isUiControlAction(action) || isOperateAction(action))) {
+      const refusal = checkWidgetTarget(data.target ?? "", manifestRoot);
+      if (refusal) throw new Error(refusal);
+    }
     // Read-only UI control (highlight / scroll-to / focus-field) works on EVERY
     // surface via the pure-DOM twin — no per-app wiring, no confirm (reversible).
     if (isUiControlAction(action)) {

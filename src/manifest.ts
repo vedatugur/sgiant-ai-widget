@@ -78,6 +78,7 @@ export {
   // declared unconditionally and absent means the manifest is wrong.
   verifyWidgetSurface,
   describeWidgetDrift,
+  checkWidgetTarget,
   // Keep the two surfaces apart in a scan: an id the widget stamps is the
   // widget's, whatever the page around it looks like.
   splitSurfaceTargets,

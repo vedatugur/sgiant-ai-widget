@@ -47,6 +47,7 @@ export {
   WIDGET_CONDITIONAL_TARGETS,
   verifyWidgetSurface,
   describeWidgetDrift,
+  checkWidgetTarget,
   type WidgetSurfaceCheck,
   splitSurfaceTargets,
   hostTargetsOnly,
