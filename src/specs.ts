@@ -262,10 +262,12 @@ export function stripDirectivesForReplay(text: string): {
   notes: string[];
   navs: NavigateSpec[];
   uis: unknown[];
+  widgets: WidgetSpec[];
 } {
   let t = text;
   const notes: string[] = [];
   const uis: unknown[] = [];
+  const widgets: WidgetSpec[] = [];
   // Navigation is idempotent and side-effect-free, so on replay we hand it back
   // to be re-rendered as a REAL clickable chip rather than flattened to an inert
   // note — otherwise every "Open <page>" the assistant offered goes dead the
@@ -286,11 +288,22 @@ export function stripDirectivesForReplay(text: string): {
     t = w.stripped;
     notes.push(`• ${w.spec.label || w.spec.name}`);
   }
+  // Data widgets are handed BACK to be re-drawn, for the same reason as the
+  // composed cards below and with less risk: a `[[widget]]` is a stat, a KPI
+  // row, a list or a TABLE, and its `columns`/`rows` live inside the spec, so
+  // re-drawing reads nothing and calls nothing.
+  //
+  // Flattening them was the third instance of one bug. `[[navigate]]` was
+  // flattened until #111, composed `[[ui]]` cards until the note below, and
+  // this one survived both — visibly, because `send()` reloads the thread after
+  // every turn for canonical ids. So the table did not wait for tomorrow's
+  // reopen to vanish: it was drawn, the reload replaced it with `▦ <title>`,
+  // and it read as a table that flashed and disappeared (sgiant-platform#395).
   for (let i = 0; i < 8; i++) {
     const w = parseJsonDirective<WidgetSpec>(t, "widget");
     if (!w) break;
     t = w.stripped;
-    notes.push(`▦ ${w.spec.title || "widget"}`);
+    widgets.push(w.spec);
   }
   // Composed UI cards are handed BACK to be re-drawn, not flattened to a note.
   // A card is the substance of the turn, not a decoration on it: a client who
@@ -325,7 +338,7 @@ export function stripDirectivesForReplay(text: string): {
     t = t.replace(LEAD_TOKEN, "").trim();
     notes.push("📝 Form — submitted");
   }
-  return { clean: t, notes, navs, uis };
+  return { clean: t, notes, navs, uis, widgets };
 }
 
 /**

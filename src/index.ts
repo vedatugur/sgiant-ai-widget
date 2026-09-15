@@ -2268,7 +2268,8 @@ export function createAiChatWidget(
   function addAssistantMessage(text: string): HTMLElement {
     // Replay: render clean prose (directives the live turn already handled are
     // stripped) + an inert note per directive — never raw [[…]] code.
-    const { clean, notes, navs, uis } = stripDirectivesForReplay(text);
+    const { clean, notes, navs, uis, widgets } =
+      stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
     applyAssistantRich(bubble, clean);
     for (const n of notes) {
@@ -2279,6 +2280,9 @@ export function createAiChatWidget(
     // Composed cards are re-drawn in full — see the note in
     // stripDirectivesForReplay for why they are not flattened to a note.
     for (const u of uis) renderUiCard(u);
+    // …and so are data widgets, for the same reason (#395). Their rows are in
+    // the spec, so this draws the table that was there and fetches nothing.
+    for (const w of widgets) renderWidget(w);
     // Re-render navigation as a REAL chip so "Open <page>" stays clickable after
     // a reload/restore (#111) — in replay mode so it never auto-navigates on open.
     if (opts.onWidgetAction)
