@@ -50,6 +50,8 @@ export const WIDGET_LABELS = {
   flagConversationHint: "Flag this conversation for review",
   flagSendFirst: "Send a message first — then you can flag this chat.",
   flagPrompt: "Flag this conversation — why? (reason is logged for review)",
+  flagReasonPlaceholder: "What went wrong?",
+  flagSubmit: "Flag",
   flagged: "🚩 Conversation flagged for review ✓",
   flagFailed: "Couldn't flag: {msg}",
   flagFailedGeneric: "please try again",

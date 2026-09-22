@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — flagging a conversation</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        border:1px solid var(--line,rgba(127,127,127,.28)); border-radius:.4rem; padding:.28rem .7rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600;
+        background:rgba(127,127,127,.16); }
+      #out { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./automation.html">Automation</a>
+      <a href="./uploads.html">Attachments</a>
+      <a href="./history.html">Past chats</a>
+      <a href="./ui.html">Chrome</a>
+      <a href="./theming.html">Theming</a>
+      <a href="./flagging.html" aria-current="page">Flagging</a>
+    </nav>
+    <h1>Flagging a conversation</h1>
+    <p class="sub">
+      Pass <code>onFlag</code> and a flag control appears in the header menu.
+      Clicking it opens a reason field <em>inside the panel</em> — never a
+      native <code>window.prompt</code>, which freezes the renderer, cannot be
+      themed or translated, and is blocked outright in some embeds.
+    </p>
+
+    <div class="demo">
+      <pre><code>createAiChatWidget({
+  endpoint: "/chat",
+  onFlag: async ({ reason, threadId }) =&gt; {
+    await fetch(`/admin/ai/conversations/public/${threadId}/flag`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+  },
+});</code></pre>
+    </div>
+
+    <p>
+      Send a message first — the thread id is created on the first turn, and
+      the control says so rather than silently doing nothing. Then open the
+      <strong>⋮</strong> menu and choose <strong>Flag this conversation</strong>.
+      Enter sends, Shift+Enter writes a second line, Escape cancels. A reason
+      starting with <code>fail</code> makes the stub throw, so you can see that
+      a failed send keeps the form <em>and</em> the text.
+    </p>
+
+    <p id="out">Nothing flagged yet.</p>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      // A stubbed endpoint so a turn completes offline: the widget reads
+      // newline-delimited SSE frames, and the thread id arrives IN a frame.
+      const realFetch = window.fetch;
+      window.fetch = async (url, init) => {
+        if (String(url).includes("/stub-chat")) {
+          const body = [
+            'data: {"threadId":"th_example_1"}',
+            'data: {"text":"Hello from the stub."}',
+            'data: {"type":"done"}',
+            "",
+          ].join("\n");
+          return new Response(new Blob([body]).stream(), {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return realFetch(url, init);
+      };
+
+      const chat = SgiantAiWidget.createAiChatWidget({
+        endpoint: "/stub-chat",
+        onFlag: async ({ reason, threadId }) => {
+          if (reason.startsWith("fail")) throw new Error("server said no");
+          document.getElementById("out").textContent =
+            "onFlag → " + JSON.stringify({ reason, threadId });
+        },
+      });
+      chat.open();
+    </script>
+  </body>
+</html>

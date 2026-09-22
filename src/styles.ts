@@ -495,6 +495,10 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-form-title{font-size:var(--aiw-font-sm);font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
+/* The flag reason form (#433) reuses the lead card, and adds one row so
+   Cancel and Flag sit together at the end rather than stacking full width. */
+.${PREFIX}-flag-row{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.${PREFIX}-flag-form .${PREFIX}-lead-btn{padding:8px 14px;font-size:var(--aiw-font-sm)}
 /* ── Form controls ───────────────────────────────────────────────────────
    Everything the chat can draw as an input goes through ONE token layer
    (--aiw-field-*) instead of its own hexes and radii, and that layer is

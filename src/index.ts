@@ -1799,26 +1799,10 @@ export function createAiChatWidget(
         flagNote(L("flagSendFirst"), false);
         return;
       }
-      const reason = window.prompt(L("flagPrompt"));
-      if (!reason || !reason.trim()) return;
       flagItem.btn.disabled = true;
-      Promise.resolve(opts.onFlag!({ reason: reason.trim(), threadId }))
-        .then(() => {
-          // Visible confirmation — a tooltip change alone is invisible, so the
-          // user couldn't tell the flag worked.
-          flagNote(L("flagged"), true);
-        })
-        .catch((err) => {
-          flagNote(
-            L("flagFailed", {
-              msg: (err as Error)?.message || L("flagFailedGeneric"),
-            }),
-            false
-          );
-        })
-        .finally(() => {
-          flagItem.btn.disabled = false;
-        });
+      flagForm(threadId, () => {
+        flagItem.btn.disabled = false;
+      });
     });
     moreMenu.appendChild(flagItem.btn);
   }
@@ -2769,6 +2753,99 @@ export function createAiChatWidget(
     scrollDown(true);
     // Auto-dismiss the ephemeral notice so it doesn't clutter the transcript.
     setTimeout(() => note.remove(), 6000);
+  }
+
+  /**
+   * Ask for the flag reason INLINE, in the transcript, and hand it to the host.
+   *
+   * This was `window.prompt` until 2026-09-22 (#433), and a native prompt is
+   * wrong here in three separate ways: it freezes the renderer (browser
+   * automation could not type into it, and the Chrome extension timed out on
+   * every call until the tab was closed), it is the only native dialog
+   * anywhere in the product so it cannot be themed or translated past its
+   * label, and some embedding contexts block `window.prompt` outright — where
+   * the flag would then silently do nothing.
+   *
+   * The host contract does not move: `onFlag({ reason, threadId })` is called
+   * with exactly what the prompt used to return, and the result still lands in
+   * `flagNote`. `done()` re-enables the menu item whatever the outcome.
+   */
+  function flagForm(threadId: string, done: () => void): void {
+    const wrap = el("div", `${PREFIX}-lead ${PREFIX}-flag-form`);
+    const title = el("div", `${PREFIX}-form-title`);
+    title.textContent = L("flagPrompt");
+    wrap.appendChild(title);
+    const f = el("form", `${PREFIX}-lead-form`) as HTMLFormElement;
+    const input = el("textarea", `${PREFIX}-field`) as HTMLTextAreaElement;
+    input.rows = 2;
+    input.placeholder = L("flagReasonPlaceholder");
+    f.appendChild(input);
+    const row = el("div", `${PREFIX}-flag-row`);
+    const submit = el("button", `${PREFIX}-lead-btn`) as HTMLButtonElement;
+    submit.type = "submit";
+    submit.textContent = L("flagSubmit");
+    const cancel = el("button", `${PREFIX}-edit-cancel`) as HTMLButtonElement;
+    cancel.type = "button";
+    cancel.textContent = L("cancel");
+    row.appendChild(cancel);
+    row.appendChild(submit);
+    f.appendChild(row);
+    wrap.appendChild(f);
+    log.appendChild(wrap);
+    scrollDown(true);
+    // Focus after the node is in the tree, or there is nothing to focus.
+    input.focus();
+    const close = (): void => {
+      wrap.remove();
+      done();
+    };
+    cancel.addEventListener("click", close);
+    // Enter sends, Shift+Enter writes a second line — the composer's own rule,
+    // so the reason field does not behave differently from every other box in
+    // this panel. Escape is the keyboard half of Cancel.
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        f.requestSubmit();
+      }
+    });
+    f.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const reason = input.value.trim();
+      // No reason, no flag — and say so on the control rather than closing the
+      // form, which would read as "sent".
+      if (!reason) {
+        input.classList.add(`${PREFIX}-field-invalid`);
+        input.focus();
+        return;
+      }
+      input.classList.remove(`${PREFIX}-field-invalid`);
+      submit.disabled = true;
+      submit.textContent = L("sending");
+      Promise.resolve(opts.onFlag!({ reason, threadId }))
+        .then(() => {
+          wrap.remove();
+          // Visible confirmation — a tooltip change alone is invisible, so the
+          // user couldn't tell the flag worked.
+          flagNote(L("flagged"), true);
+          done();
+        })
+        .catch((err) => {
+          // The form STAYS, with the text still in it: a failed send that
+          // throws the reason away makes the user retype it.
+          submit.disabled = false;
+          submit.textContent = L("flagSubmit");
+          flagNote(
+            L("flagFailed", {
+              msg: (err as Error)?.message || L("flagFailedGeneric"),
+            }),
+            false
+          );
+        });
+    });
   }
 
   // Token meter — shown only for the free visitor preview (when signupUrl is
