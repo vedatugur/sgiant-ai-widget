@@ -230,20 +230,37 @@ plus `{type:"thread",threadId}`, `{type:"error",message}`, `{type:"done"}`.
 
 ## Security
 
-The widget holds no long-lived secret — the host supplies a token (Clerk session
-in-app, or a short-lived **embed token** for external sites). The backend's OBO
-scoping is the real ceiling; this is presentation only. The public embed-token
-endpoint is the next backend step (tracked with the managed-AI build).
+The widget holds no long-lived secret. In-app surfaces pass a Clerk session
+token; external sites pass no token at all — they identify themselves with a
+**public site key** in the POST body (`extraBody: { siteKey }`), which the
+backend verifies against the paired site and rate-limits per site on top of
+the per-IP ceiling. An unknown or inactive key is a 403, never a silent fall
+back to anonymous. The backend's OBO scoping is the real ceiling; this is
+presentation only.
+
+This section said until 2026-09-22 that external sites use "a short-lived
+embed token" and that the endpoint minting it "is the next backend step".
+There is no such endpoint and there never was: the site-key design shipped
+instead (sgiant-platform#339), and the `sgiant-connect` WordPress plugin has
+been emitting `extraBody: { siteKey: … }` since.
 
 ## External embedding
 
 The single-file IIFE build ships: `npm run build:global` writes
 `dist/sgiant-ai-widget.global.js`, exposed as the `./global` export and as
 `window.SgiantAiWidget` (see "As a `<script>` tag" above) — NOT
-`window.SgiantChat`, which never existed. What is still missing for
-third-party sites is the public **embed-token** endpoint; until it lands, an
-external page has no short-lived token to pass, so embedding is limited to
-hosts that already hold a session.
+`window.SgiantChat`, which never existed. A third-party page needs no token:
+pass its public site key and the endpoint does the rest — see *Security*.
+
+```html
+<script src="https://unpkg.com/sgiant-ai-widget/dist/sgiant-ai-widget.global.js"></script>
+<script>
+  SgiantAiWidget.createAiChatWidget({
+    endpoint: "https://api.sgiant.io/public/ai/chat",
+    extraBody: { siteKey: "…" },
+  });
+</script>
+```
 
 ## Flagging a conversation
 

@@ -355,7 +355,8 @@ export interface AiChatWidgetOptions {
   toolRoles?: Record<string, string>;
   /** Host action name -> role id. Flips the badge when the action is invoked. */
   actionRoles?: Record<string, string>;
-  /** Bearer token (Clerk session or embed token). Use getToken for refresh. */
+  /** Bearer token (a Clerk session token). Use getToken for refresh. External
+   *  sites send no token — they pass a public site key in `extraBody`. */
   token?: string;
   /** Async token provider — called before each send (overrides `token`). */
   getToken?: () => string | Promise<string>;
