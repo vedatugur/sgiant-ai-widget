@@ -256,7 +256,7 @@ pass its public site key and the endpoint does the rest — see *Security*.
 <script src="https://unpkg.com/sgiant-ai-widget/dist/sgiant-ai-widget.global.js"></script>
 <script>
   SgiantAiWidget.createAiChatWidget({
-    endpoint: "https://api.sgiant.io/public/ai/chat",
+    endpoint: "https://api.example.com/public/ai/chat",
     extraBody: { siteKey: "…" },
   });
 </script>
