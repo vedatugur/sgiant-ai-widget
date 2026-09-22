@@ -237,9 +237,29 @@ endpoint is the next backend step (tracked with the managed-AI build).
 
 ## External embedding
 
-For drop-in `<script>` use on third-party sites, bundle this module to a single
-IIFE/UMD file that exposes `window.SgiantChat.init(opts)` — not yet wired (needs
-the embed-token endpoint first).
+The single-file IIFE build ships: `npm run build:global` writes
+`dist/sgiant-ai-widget.global.js`, exposed as the `./global` export and as
+`window.SgiantAiWidget` (see "As a `<script>` tag" above) — NOT
+`window.SgiantChat`, which never existed. What is still missing for
+third-party sites is the public **embed-token** endpoint; until it lands, an
+external page has no short-lived token to pass, so embedding is limited to
+hosts that already hold a session.
+
+## Flagging a conversation
+
+Pass `onFlag` to put a flag control in the header: clicking it asks for a
+reason and calls back with the reason plus the live thread id. Wire it to a
+flags API (`POST /admin/ai/conversations/:kind/:threadId/flag` for staff
+surfaces, `POST /public/ai/threads/:threadId/flag` for the visitor widget).
+Omit it and the control does not render.
+
+## The surface manifest (`sgiant-ai-widget/manifest`)
+
+An opt-in entry point re-exporting the bridge's `generateManifest`,
+`verifySurface`, `canAct` and `hashManifest`. It is separate on purpose: the
+core is one runtime dependency with no React, and a host that never generates
+or verifies a manifest should pay nothing for the machinery. Importing the
+main entry pulls none of it.
 
 ## About the `#123` references in the source
 
