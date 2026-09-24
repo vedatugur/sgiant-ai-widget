@@ -4952,7 +4952,7 @@ export function createAiChatWidget(
     // with QUIC drops through the edge; the reply arrived minutes later).
     if (transportLost && turnThread && opts.loadThread) {
       typing.remove();
-      if (live()) showError(L("streamLostRecovering"));
+      if (live()) showError(L("streamLostRecovering"), { retry: false });
       void recoverLostTurn(turnThread, isRegen ? null : content);
       return;
     }
@@ -5397,23 +5397,45 @@ export function createAiChatWidget(
     scrollDown(true);
   }
 
-  /** Render a recoverable error card: friendly copy + retry + (optional) report. */
-  function showError(raw: string): void {
+  /**
+   * Render a recoverable error card: friendly copy + retry + (optional) report.
+   *
+   * `retry: false` for a card that reports a turn STILL RUNNING. The stream-lost
+   * card says "still working on the reply" and used to offer "Try again" beside
+   * it — which re-sent the same message as a second, concurrent turn. Measured
+   * on prod (sgiant-platform#483): a hotel owner's "tablo oluştur" was POSTed at
+   * 13:28:09 and again, identically, at 13:28:29, while the first was still
+   * running; the second forked a sibling branch and its model, holding the
+   * first in its session, answered "we already made the table".
+   */
+  function showError(raw: string, show: { retry?: boolean } = {}): void {
     const wrap = el("div", `${PREFIX}-error`);
     const txt = el("div", `${PREFIX}-error-text`);
-    txt.textContent = L("errorSnag", { name });
+    // A card with no retry reports a turn STILL RUNNING, so it must not lead
+    // with "couldn't answer — please try again". Checked in a browser against a
+    // dropped stream: the button was gone and the headline still invited the
+    // person to send it again, which is the second way a duplicate turn starts.
+    // There the message IS the headline.
+    txt.textContent =
+      show.retry === false ? raw : L("errorSnag", { name });
     const detail = el("div", `${PREFIX}-error-detail`);
-    detail.textContent = raw;
+    detail.textContent = show.retry === false ? "" : raw;
     const actions = el("div", `${PREFIX}-error-actions`);
 
-    const retry = el("button", `${PREFIX}-error-btn ${PREFIX}-error-retry`);
-    retry.setAttribute("type", "button");
-    retry.textContent = L("tryAgain");
-    retry.addEventListener("click", () => {
-      wrap.remove();
-      if (lastUserContent) void send(lastUserContent);
-    });
-    actions.appendChild(retry);
+    if (show.retry !== false) {
+      const retry = el("button", `${PREFIX}-error-btn ${PREFIX}-error-retry`);
+      retry.setAttribute("type", "button");
+      retry.textContent = L("tryAgain");
+      retry.addEventListener("click", () => {
+        // A turn already in flight on this thread is not retried — it is
+        // waited for. The composer refuses a send while `busy`; this button
+        // did not, and was the one way to start a duplicate turn.
+        if (busy) return;
+        wrap.remove();
+        if (lastUserContent) void send(lastUserContent);
+      });
+      actions.appendChild(retry);
+    }
 
     if (opts.onReportIssue) {
       const report = el("button", `${PREFIX}-error-btn`);

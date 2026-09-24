@@ -83,17 +83,46 @@ export function normalizeWidgetSpec(spec: WidgetSpec): WidgetSpec {
   const { data } = spec;
   if (!data) return spec;
   let inner: Record<string, unknown> | undefined;
+  let parsed: unknown = data;
   if (typeof data === "string") {
     try {
-      const parsed: unknown = JSON.parse(data);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-        inner = parsed as Record<string, unknown>;
+      parsed = JSON.parse(data);
     } catch {
       return spec;
     }
-  } else if (!Array.isArray(data)) {
-    inner = data;
   }
+  if (Array.isArray(parsed)) {
+    // ROWS SENT AS AN ARRAY OF OBJECTS (sgiant-platform#487). Measured on prod
+    // 2026-09-17: a real two-year channel table arrived as
+    // `data: "[{channel, revenue, bookings}, …]"`, this function unwrapped only
+    // an object, `rows` stayed empty, widgetHasContent said false — and the
+    // table the reply was talking about was simply never drawn. Columns come
+    // from the first row's keys, in order; a cell a later row lacks is blank.
+    const objects = parsed.filter(
+      (r): r is Record<string, unknown> =>
+        !!r && typeof r === "object" && !Array.isArray(r)
+    );
+    if (!objects.length) return spec;
+    const columns = Object.keys(objects[0]);
+    if (!columns.length) return spec;
+    const out: WidgetSpec = { ...spec };
+    delete out.data;
+    if (out.columns === undefined) out.columns = columns;
+    if (out.rows === undefined)
+      out.rows = objects.map((o) =>
+        columns.map((k) => {
+          const v = o[k];
+          return typeof v === "number" || typeof v === "string"
+            ? v
+            : v == null
+              ? ""
+              : String(v);
+        })
+      );
+    return out;
+  }
+  if (parsed && typeof parsed === "object")
+    inner = parsed as Record<string, unknown>;
   if (!inner) return spec;
   const out: WidgetSpec = { ...spec };
   delete out.data;
