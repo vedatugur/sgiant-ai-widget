@@ -21,6 +21,13 @@ import { PREFIX } from "./prefix";
 export interface WidgetSpec {
   /** "stat" | "kpis" | "list" | "table". Unknown kinds fall back to a list. */
   kind?: string;
+  /**
+   * Where the figures came from, as the assistant declared it and the gateway
+   * checked it: "fetched" (a tool returned them this turn), "admin-provided"
+   * (the person typed them), "estimate" (the assistant's own projection).
+   * Absent on widgets drawn before sgiant-platform#483 — treated as fetched.
+   */
+  source?: string;
   title?: string;
   /** stat: the big value + caption + optional delta. */
   value?: string | number;
@@ -94,6 +101,24 @@ export function normalizeWidgetSpec(spec: WidgetSpec): WidgetSpec {
     if (out[key] === undefined && inner[key] !== undefined)
       (out as Record<string, unknown>)[key] = inner[key];
   return out;
+}
+
+/**
+ * Which provenance badge a widget needs, if any (sgiant-platform#483).
+ *
+ * A figure the assistant ESTIMATED and one it MEASURED used to be drawn
+ * identically: `source` reached this package and nothing read it, while the
+ * gateway told the model its estimate was "labelled as an ESTIMATE on screen".
+ * Measured data is the default and carries no badge; the two exceptions do,
+ * because an unlabelled projection is the thing that made a hotel owner's 2027
+ * price list look like fact.
+ */
+export function widgetSourceBadge(
+  spec: Pick<WidgetSpec, "source">
+): "estimate" | "provided" | null {
+  if (spec.source === "estimate") return "estimate";
+  if (spec.source === "admin-provided") return "provided";
+  return null;
 }
 
 /**

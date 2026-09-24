@@ -16,6 +16,10 @@
  * at runtime by the widget (single-brace so a host's i18next leaves it intact).
  */
 export const WIDGET_LABELS = {
+  // Provenance badges on a data widget (sgiant-platform#483). Measured figures
+  // carry none; these two are the exceptions a reader must not mistake for data.
+  widgetSourceEstimate: "Estimate — not measured",
+  widgetSourceProvided: "Figures you provided",
   // Question cards — the assistant asking the human to decide.
   questionConfirm: "Send",
   questionPlaceholder: "Type your answer…",

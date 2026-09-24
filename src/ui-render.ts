@@ -1,7 +1,11 @@
 import { el, wrapPreviewHtml } from "./dom";
 import { PREFIX } from "./prefix";
 import type { ActionSpec, ChipsSpec, PreviewSpec, WidgetSpec } from "./specs";
-import { normalizeWidgetSpec, widgetHasContent } from "./specs";
+import {
+  normalizeWidgetSpec,
+  widgetHasContent,
+  widgetSourceBadge,
+} from "./specs";
 import {
   UI_SAY_ACTION,
   normalizeUiSpec,
@@ -140,6 +144,14 @@ export function createUiRenderers(ctx: UiRenderCtx) {
       const t = el("div", `${PREFIX}-widget-title`);
       t.textContent = spec.title;
       card.appendChild(t);
+    }
+    const badge = widgetSourceBadge(spec);
+    if (badge) {
+      const b = el("div", `${PREFIX}-widget-source ${PREFIX}-widget-source-${badge}`);
+      b.textContent = L(
+        badge === "estimate" ? "widgetSourceEstimate" : "widgetSourceProvided",
+      );
+      card.appendChild(b);
     }
     const kind =
       spec.kind ?? (spec.rows ? "table" : spec.items ? "kpis" : "list");

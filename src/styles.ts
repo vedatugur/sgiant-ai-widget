@@ -100,7 +100,7 @@ export function hostDefinesPlatformTokens(): boolean {
  * palette is a palette that drifts, and this one has three separate blocks.
  */
 const darkRules = (bubble: string, panel: string): string => `
-${bubble},${panel}{--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-accent-ink:var(--aiw-accent-ink-dark,var(--aiw-accent));--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}
+${bubble},${panel}{--aiw-header-bg:#151D2F;--aiw-header-fg:#FCF7E3;--aiw-accent-ink:var(--aiw-accent-ink-dark,var(--aiw-accent));--aiw-surface:#161616;--aiw-surface-raised:#1d1d1d;--aiw-surface-2:#2c2c2c;--aiw-bg:#101010;--aiw-text:#eee;--aiw-text-2:#ddd;--aiw-muted:#9b9b9b;--aiw-border:#2a2a2a;--aiw-border-strong:#444;--aiw-border-soft:#262626;--aiw-danger-bg:#231613;--aiw-danger-border:#5a2c1d;--aiw-danger-text:#ff9b7a;--aiw-caution-bg:#241c0e;--aiw-caution-border:#6b4a12;--aiw-caution-text:#fcd34d;--aiw-danger-text-2:#d3a08d;--aiw-ok-bg:#122017;--aiw-ok-border:#2c4d36;--aiw-ok-text:#7fd39a}
 ${panel} .${PREFIX}-assistant code{background:rgba(255,255,255,.1)}
 ${panel} .${PREFIX}-assistant blockquote{color:#aaa;border-left-color:color-mix(in srgb,var(--aiw-accent) 53%,transparent)}
 ${panel} .${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#2a2a2a}
@@ -193,7 +193,7 @@ export function injectStyles(side: "left" | "right"): void {
      doing a job the mark is already doing, and the two shapes compete. Set
      these three to transparent / none / inherit and the mark becomes the
      launcher, with no other change. Defaults keep the disc, because most
-     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:28px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#FCF7E3;--aiw-header-fg:#151D2F;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:28px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#FCF7E3;--aiw-header-fg:#151D2F;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-caution-bg:#fffbeb;--aiw-caution-border:#f5d38a;--aiw-caution-text:#92400e;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -763,6 +763,10 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-history-star:hover{color:#f59e0b}
 .${PREFIX}-widget{align-self:stretch;max-width:100%;min-width:0;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-widget-title{font-size:var(--aiw-font-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--aiw-muted);margin-bottom:8px}
+/* Provenance badge (sgiant-platform#483): says where the figures came from when
+   they were NOT measured. Measured data carries none, so a badge is always news. */
+.${PREFIX}-widget-source{display:inline-block;font-size:var(--aiw-font-xs);font-weight:600;line-height:1.4;padding:2px 8px;border-radius:999px;margin-bottom:8px;border:1px solid var(--aiw-border);color:var(--aiw-text-2);background:var(--aiw-surface)}
+.${PREFIX}-widget-source-estimate{background:var(--aiw-caution-bg);border-color:var(--aiw-caution-border);color:var(--aiw-caution-text)}
 /* A single-stat card sizes to its content instead of stretching. The generic
    card stretches because a table needs the width; one number does not, and a
    full-width box holding six characters reads as a layout mistake.
