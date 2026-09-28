@@ -182,10 +182,19 @@ export function computeBranchNav(
 }
 
 /**
+ * Where a replayed row sits among those sharing its anchor time: a turn's
+ * question, the steps it took, its reply, then its decisions. See
+ * `buildThreadReplay`'s `items`.
+ */
+const RANK = { question: 0, step: 1, reply: 2, decision: 3 } as const;
+
+/**
  * Map a thread's messages + artifacts (the `/ai/threads/:id/messages` response)
  * into an ordered replay list — text messages interleaved with their data
- * widgets by `createdAt`, exactly like the full-page assistant. Pure; hosts pass
- * it the fetched payload so the widget reopens a conversation WITH its charts.
+ * widgets by `createdAt`, exactly like the full-page assistant, and the steps
+ * and proposals a turn saved WHILE it ran placed by that turn's reply (see
+ * `byTurn` below). Pure; hosts pass it the fetched payload so the widget
+ * reopens a conversation WITH its charts.
  *
  * Branching: when the server sends a non-empty `activePath`, the visible
  * transcript is that branch ONLY — messages (and message-scoped artifacts) are
@@ -226,7 +235,19 @@ export function buildThreadReplay(payload: {
   const branchNav = activePathIds
     ? computeBranchNav(payload.messages ?? [], activePathIds)
     : null;
-  const items: Array<{ t: string; item: LoadedThreadItem }> = [];
+  /**
+   * Sorted by `t`, then `rank`, then `t2`. The rank orders the rows that share
+   * an anchor time: a turn's question, its steps, its reply, its decisions.
+   * Both the question and the reply are saved when the turn ends, so they can
+   * carry the same timestamp, and a step anchored to the reply must still land
+   * between the two.
+   */
+  const items: Array<{
+    t: string;
+    rank: number;
+    t2: string;
+    item: LoadedThreadItem;
+  }> = [];
   for (const m of payload.messages ?? []) {
     // Off-branch messages don't appear in the active transcript.
     if (activeSet && m.id && !activeSet.has(m.id)) continue;
@@ -242,14 +263,43 @@ export function buildThreadReplay(payload: {
           ? { branch: branchNav.get(m.id) }
           : {}),
       };
-      items.push({ t: m.createdAt ?? "", item });
+      items.push({
+        t: m.createdAt ?? "",
+        rank: m.role === "user" ? RANK.question : RANK.reply,
+        t2: "",
+        item,
+      });
     }
   }
   // Every assistant reply in the thread (every branch), oldest first: where a
-  // proposal finds the reply of the turn that proposed it. See below.
+  // step or a proposal finds the reply of its own turn. See byTurn.
   const replies = (payload.messages ?? [])
     .filter((m) => m.role === "assistant" && m.createdAt)
     .sort((x, y) => (x.createdAt ?? "").localeCompare(y.createdAt ?? ""));
+  /**
+   * PLACED BY THE REPLY OF ITS OWN TURN, as the live widget draws it: the
+   * question, the steps, the reply, then the decision.
+   *
+   * Its own `createdAt` cannot place it. A step or a proposal is saved the
+   * moment it streams, and the turn's question and reply are both saved when
+   * the turn ENDS, minutes later on a long turn. By time alone it would sit
+   * above the question that asked for it (sgiant-platform#503 for proposals,
+   * #504 for steps). So it takes the first reply saved after it, which is its
+   * own turn's (turns in one thread do not overlap), and sorts just before
+   * that reply (a step) or just behind it (a decision). If that reply is on
+   * another branch, so is the artifact. With no reply yet (the turn is still
+   * running) it goes by its own time, which is after every earlier reply.
+   */
+  const byTurn = (
+    a: { createdAt?: string },
+    rank: number,
+    item: LoadedThreadItem
+  ) => {
+    const own = a.createdAt ?? "";
+    const reply = replies.find((m) => (m.createdAt ?? "") >= own);
+    if (reply && activeSet && reply.id && !activeSet.has(reply.id)) return;
+    items.push({ t: reply?.createdAt ?? own, rank, t2: own, item });
+  };
   for (const a of payload.artifacts ?? []) {
     // Branch-scoped artifacts (tied to a message) only belong to the active
     // branch; artifacts with no messageId are thread-wide and always stay.
@@ -257,21 +307,8 @@ export function buildThreadReplay(payload: {
     if (a.kind === "proposal") {
       const item = proposalItem(a);
       if (!item) continue;
-      // AFTER THE REPLY OF ITS OWN TURN, as the live widget draws it: the
-      // explanation, then the decision.
-      //
-      // Its own `createdAt` cannot place it. A proposal is saved the moment
-      // it streams, and the turn's user message and reply are both saved when
-      // the turn ENDS, minutes later on a long turn. By time alone, the card
-      // would sit above the question that asked for it. So it takes the first
-      // reply saved after it, which is its own turn's (turns in one thread do
-      // not overlap), and sorts just behind that. If that reply is on another
-      // branch, so is the proposal. With no reply yet (the turn is still
-      // running) it goes by its own time, which is after every earlier reply.
-      const t = a.createdAt ?? "";
-      const reply = replies.find((m) => (m.createdAt ?? "") >= t);
-      if (reply && activeSet && reply.id && !activeSet.has(reply.id)) continue;
-      items.push({ t: reply ? `${reply.createdAt}~${t}` : t, item });
+      // After the reply: the explanation, then the decision.
+      byTurn(a, RANK.decision, item);
     } else if (a.kind === "widget") {
       const p = (a.payload ?? {}) as {
         spec?: unknown;
@@ -281,6 +318,8 @@ export function buildThreadReplay(payload: {
       if (!p.spec) continue;
       items.push({
         t: a.createdAt ?? "",
+        rank: RANK.reply,
+        t2: "",
         item: {
           kind: "widget",
           spec: p.spec,
@@ -304,20 +343,21 @@ export function buildThreadReplay(payload: {
         p.status !== "error" && typeof p.reportId === "string" && p.reportId
           ? p.reportId
           : undefined;
-      items.push({
-        t: a.createdAt ?? "",
-        item: {
-          kind: "activity",
-          label: p.label,
-          status: p.status ?? "ok",
-          agent: p.agent,
-          model: p.model,
-          ...(reportId ? { reportId } : {}),
-        },
+      // Before the reply: the steps its turn took to get there.
+      byTurn(a, RANK.step, {
+        kind: "activity",
+        label: p.label,
+        status: p.status ?? "ok",
+        agent: p.agent,
+        model: p.model,
+        ...(reportId ? { reportId } : {}),
       });
     }
   }
-  items.sort((x, y) => x.t.localeCompare(y.t));
+  items.sort(
+    (x, y) =>
+      x.t.localeCompare(y.t) || x.rank - y.rank || x.t2.localeCompare(y.t2)
+  );
   return items.map((s) => s.item);
 }
 
