@@ -99,10 +99,11 @@ test("auto-apply refuses a card that asked the user something", () => {
   //
   // The accessor is optional in the pattern because the extraction turned a
   // closure `let` into `ctx.getAutoApply()` — passing it by value would have
-  // frozen each card at the moment it was built.
+  // frozen each card at the moment it was built. Whitespace is free because
+  // #503 added a fourth condition and the guard now spans lines.
   assert.match(
     widgetSrc,
-    /[Aa]utoApply(\(\))? && !fields\.length && (ctx\.)?opts\.autoApplyOption/
+    /[Aa]utoApply(\(\))?\s*&&\s*!fields\.length\s*&&\s*(ctx\.)?opts\.autoApplyOption/
   );
 });
 

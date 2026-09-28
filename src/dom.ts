@@ -48,6 +48,11 @@ export interface StreamFrame {
    *  `apply_dashboard` and `save_template` rendered a confirm card whose Apply
    *  could only reach `throw new Error("Unsupported action")`. */
   artifactId?: string;
+  /** tool_proposal frame — the backend's id for a proposal it PERSISTED
+   *  (sgiant-platform#503). With it the card reports its outcome through
+   *  `onProposalResolved`, and a transcript reload keeps the card in place.
+   *  Without it the card works exactly as before and lives only in the stream. */
+  proposalId?: string;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;

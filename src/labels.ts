@@ -157,6 +157,9 @@ export const WIDGET_LABELS = {
   applying: "Applying…",
   applied: "Applied",
   openReport: "Open the report",
+  /** The link on an applied card to what the write made, when the host gave a
+   *  link but no name for it (#503). */
+  openResult: "Open",
   tryAgain: "Try again",
   // History panel
   close: "Close",

@@ -1,6 +1,7 @@
 import { el, escapeHtml } from "./dom";
 import { PREFIX } from "./prefix";
 import { genericProposalSummary } from "./proposal-summary";
+import { isHttpUrl } from "./safe-url";
 import {
   type ProposalField,
   buildField,
@@ -56,16 +57,39 @@ export interface DecisionCardContext {
   getThreadId: () => string | undefined;
   getAutoApply: () => boolean;
   isBusy: () => boolean;
+  /** The widget's note of a card the person dismissed, so a replay that runs
+   *  before the server hears about it does not draw the card again. */
+  onProposalDismissed: (proposalId: string) => void;
 
   opts: Pick<
     AiChatWidgetOptions,
     | "autoApplyOption"
     | "onAnswer"
     | "onApplyProposal"
+    | "onProposalResolved"
     | "proposalSummary"
     | "proposalTitles"
     | "reportHref"
   >;
+}
+
+/** Everything about a proposal card beyond the tool and its arguments. */
+export interface ProposalCardOptions {
+  /** The acting agent, shown so the person sees WHO proposed this. */
+  agent?: string;
+  /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
+  fields?: ProposalField[];
+  /** The account this write targets, per the worker. */
+  accountId?: string;
+  /** The persisted artifact a dashboard/template apply needs. */
+  artifactId?: string;
+  /** The server's id for this proposal (#503): what Apply and Dismiss are
+   *  reported against, and what a transcript reload matches the card by. */
+  proposalId?: string;
+  /** Drawn from the transcript rather than the live stream. Never
+   *  auto-applied: the person was not there when it was proposed, and a write
+   *  they never saw must not happen on a page load. */
+  replayed?: boolean;
 }
 
 export interface DecisionCards {
@@ -80,13 +104,12 @@ export interface DecisionCards {
   renderProposal: (
     name: string,
     args: Record<string, unknown>,
-    agent?: string,
-    /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
-    fields?: ProposalField[],
-    /** The account this write targets, per the worker. */
-    proposalAccountId?: string,
-    /** The persisted artifact a dashboard/template apply needs. */
-    proposalArtifactId?: string
+    card?: ProposalCardOptions
+  ) => void;
+  /** A REPLAYED proposal that was already applied: its outcome, not a card. */
+  renderAppliedProposal: (
+    proposalId: string,
+    result?: { message?: string; href?: string; hrefLabel?: string }
   ) => void;
 }
 
@@ -100,6 +123,56 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     args: Record<string, unknown>
   ): string =>
     ctx.opts.proposalSummary?.(name, args) || genericProposalSummary(args);
+  /**
+   * Tell the host what happened to a card (#503), so a replay shows the
+   * outcome instead of asking again. Fire-and-forget: the person already has
+   * their answer on screen, and a failed report must not turn a successful
+   * apply into an error. It is logged, though, because the cost is real. The
+   * card replays as live, and a second Apply can make a second draft.
+   */
+  const reportResolved = (
+    proposalId: string | undefined,
+    status: "applied" | "discarded",
+    result?: { message?: string; href?: string; hrefLabel?: string }
+  ): void => {
+    const cb = ctx.opts.onProposalResolved;
+    if (!proposalId || !cb) return;
+    void Promise.resolve()
+      .then(() => cb(proposalId, status, result))
+      .catch((err: unknown) => {
+        console.warn(
+          "sgiant-ai-widget: could not record a proposal as " + status,
+          err
+        );
+      });
+  };
+  /**
+   * The applied outcome: a tick, the host's sentence, and a link to what the
+   * write made when the host gave one. ONE painter for the live card and the
+   * replayed one, so the two cannot drift apart.
+   */
+  const paintApplied = (
+    wrap: HTMLElement,
+    msg: string | undefined,
+    link?: { href: string; label?: string }
+  ): HTMLElement => {
+    const ok = el("div", `${PREFIX}-proposal-ok`);
+    ok.innerHTML =
+      `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
+      `<span>${escapeHtml(ctx.stripTick(msg || ctx.L("applied")))}</span>`;
+    if (link) {
+      // A NEW TAB: the thing the write made usually lives on another site (a
+      // WordPress draft), and following it must not take the chat away.
+      const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;
+      open.href = link.href;
+      open.target = "_blank";
+      open.rel = "noopener noreferrer";
+      open.textContent = link.label || ctx.L("openResult");
+      ok.appendChild(open);
+    }
+    wrap.appendChild(ok);
+    return ok;
+  };
   /**
    * Render a `question` frame — the assistant asking the human to DECIDE.
    *
@@ -249,20 +322,25 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
   function renderProposal(
     name: string,
     args: Record<string, unknown>,
-    agent?: string,
-    /** Inputs the ASSISTANT asked for on this card — see ProposalField. */
-    fields: ProposalField[] = [],
-    /** The account this write targets, per the worker. */
-    proposalAccountId?: string,
-    /** The persisted artifact a dashboard/template apply needs. */
-    proposalArtifactId?: string
+    card: ProposalCardOptions = {}
   ): void {
+    const {
+      agent,
+      fields = [],
+      accountId: proposalAccountId,
+      artifactId: proposalArtifactId,
+      proposalId,
+      replayed = false,
+    } = card;
     // `-pending` marks a card that is still AWAITING the user, and it is what
     // the end-of-turn reload checks. The reload used to look for `-proposal`,
     // which also matches an already-applied card (the success path empties the
     // node but keeps the class) — so one Apply disabled the reload for the
     // whole session and with it every edit/regenerate/branch control.
     const wrap = el("div", `${PREFIX}-proposal ${PREFIX}-proposal-pending`);
+    // What a transcript reload matches this card by, so the node — with its
+    // listeners, its typed-in fields and its outcome — survives the wipe.
+    if (proposalId) wrap.dataset.proposalId = proposalId;
     const title = el("div", `${PREFIX}-proposal-title`);
     /**
      * Args the user may correct before applying — see EDITABLE_ARGS.
@@ -378,6 +456,8 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     cancel.addEventListener("click", () => {
       disposePreview?.();
       wrap.remove();
+      if (proposalId) ctx.onProposalDismissed(proposalId);
+      reportResolved(proposalId, "discarded");
     });
     apply.addEventListener("click", async () => {
       // Collect the edits BEFORE anything is disabled or dispatched: a required
@@ -450,24 +530,31 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
               }
             : undefined
         );
-        const msg = typeof res === "string" ? res : res?.message;
+        const out = res && typeof res === "object" ? res : undefined;
+        const msg = typeof res === "string" ? res : out?.message;
         // An apply that ENQUEUED answers with a job id. Keeping it is the whole
         // difference between "I'll notify you when it's ready ✓" followed by
         // minutes of silence, and a card that shows the work happening.
-        const jobId = res && typeof res === "object" ? res.jobId : undefined;
+        const jobId = out?.jobId;
+        // A link to what the write MADE (#503) — the WordPress draft the owner
+        // went looking for in the chat and could not find. http(s) only: it is
+        // persisted and replayed, so a script URL would run on every reopen.
+        const link = isHttpUrl(out?.href)
+          ? { href: out.href, label: out.hrefLabel }
+          : undefined;
         disposePreview?.();
         // Resolved: it no longer blocks the end-of-turn reload.
         wrap.classList.remove(`${PREFIX}-proposal-pending`);
         wrap.innerHTML = "";
-        const ok = el("div", `${PREFIX}-proposal-ok`);
-        ok.innerHTML =
-          `<span class="${PREFIX}-act-ok" aria-hidden="true">✓</span>` +
-          `<span>${escapeHtml(ctx.stripTick(msg || ctx.L("applied")))}</span>`;
-        wrap.appendChild(ok);
+        const ok = paintApplied(wrap, msg, link);
+        reportResolved(proposalId, "applied", {
+          ...(msg ? { message: msg } : {}),
+          ...(link ? { href: link.href } : {}),
+          ...(link?.label ? { hrefLabel: link.label } : {}),
+        });
         // A REPORT is a document, not just a task: once it exists it has a
         // page, and the useful thing to hand the user is a way in.
-        const reportId =
-          res && typeof res === "object" ? res.reportId : undefined;
+        const reportId = out?.reportId;
         // TRACK THE REPORT, NOT ITS JOB ROW. Both ids come back today, but the
         // generic row is being retired — a card polling it would go blind the
         // moment the contract migration lands, and it would go blind SILENTLY,
@@ -492,7 +579,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     wrap.appendChild(row);
     ctx.log.appendChild(wrap);
     ctx.scrollDown(true);
-    // AUTO-APPLY — three conditions, all required, and each one is a decision.
+    // AUTO-APPLY — four conditions, all required, and each one is a decision.
     //
     //  1. the user turned it on. Off by default, browser-local, theirs.
     //  2. the HOST says this particular write is safe to apply unasked. The
@@ -501,12 +588,40 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     //  3. the card asks the user for NOTHING. `fields` are inputs the assistant
     //     explicitly requested; applying past them would answer a question that
     //     was put to the person, using whatever the model guessed.
+    //  4. the card is LIVE (#503). A replayed card was proposed while the
+    //     person was not watching, possibly hours ago on another page load.
     //
     // The card is still rendered and still says what happened. Auto-apply
     // removes a click, not the record of the change.
-    if (ctx.getAutoApply() && !fields.length && ctx.opts.autoApplyOption?.(name, args)) {
+    if (
+      !replayed &&
+      ctx.getAutoApply() &&
+      !fields.length &&
+      ctx.opts.autoApplyOption?.(name, args)
+    ) {
       apply.click();
     }
   }
-  return { renderQuestion, renderProposal };
+  /**
+   * A replayed proposal that was ALREADY applied (#503): the outcome the
+   * person saw when they applied it, link included. Not a card, because there
+   * is nothing left to decide, and offering Apply again could repeat the
+   * write.
+   */
+  function renderAppliedProposal(
+    proposalId: string,
+    result?: { message?: string; href?: string; hrefLabel?: string }
+  ): void {
+    const wrap = el("div", `${PREFIX}-proposal`);
+    wrap.dataset.proposalId = proposalId;
+    paintApplied(
+      wrap,
+      result?.message,
+      isHttpUrl(result?.href)
+        ? { href: result.href, label: result.hrefLabel }
+        : undefined
+    );
+    ctx.log.appendChild(wrap);
+  }
+  return { renderQuestion, renderProposal, renderAppliedProposal };
 }

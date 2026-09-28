@@ -103,6 +103,27 @@ frame is ignored. A frame that is missing one of these now logs a specific
 console warning once per page — it used to be dropped in silence, which is how
 this table came to exist.
 
+### A proposal card that outlives its stream
+
+A `tool_proposal` exists only in the stream unless you keep it. The widget holds
+each card until the reply's text is drawn, so a turn whose stream does not reach
+the end (a page load, a remount, a dropped connection) loses its cards, and the
+reply goes on to mention approval cards nobody can see. That happened in
+production, and these three pieces are the fix:
+
+1. **Persist the proposal and send its id** as `proposalId` on the frame.
+2. **Return it from your transcript read** as an artifact
+   `{ id, kind: "proposal", status, payload: { name, args, agent?, fields?,
+   accountId?, artifactId?, result? }, createdAt }`. `buildThreadReplay` draws
+   a `proposed` one as a live Apply card, and an `applied` one as its outcome,
+   after the reply of the turn that proposed it. It skips a `discarded` one.
+3. **Wire `onProposalResolved(proposalId, status, result)`** to record what the
+   person did: `applied`, with the sentence and link your `onApplyProposal`
+   returned, or `discarded`. Store `result` in the payload so the replay shows
+   it.
+
+Skip all three and nothing changes: cards work exactly as they always have.
+
 Two directives have a host requirement rather than a field one, for the same
 reason a confirm gate does: `[[form:…]]` and a UI card's action buttons only
 render when the host passes `onWidgetAction` (or `onLead`). A form with nowhere

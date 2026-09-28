@@ -55,7 +55,37 @@ export type LoadedThreadItem =
        *  host context, and the widget runs in three shells with different route
        *  shapes. The renderer turns it into a path via `opts.reportHref`. */
       reportId?: string;
-    };
+    }
+  | ReplayProposalItem;
+
+/**
+ * A write the assistant PROPOSED, replayed from the thread (sgiant-platform#503).
+ *
+ * An Apply card used to exist only in the live stream, so a reload, a remount
+ * or a dropped connection lost it for good, while the reply went on talking
+ * about "the approval cards". The server now keeps each proposal with its
+ * outcome, and a replay draws it again: `proposed` as a live Apply card,
+ * `applied` as what the apply produced. A dismissed card is not replayed,
+ * because dismissing removed it from the live chat too.
+ */
+export interface ReplayProposalItem {
+  kind: "proposal";
+  /** The persisted proposal's id: what the card resolves by. */
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  agent?: string;
+  /** The confirm fields as the assistant declared them (raw; the renderer
+   *  normalizes them exactly as it does a live frame's). */
+  fields?: unknown;
+  /** The account the write is FOR, when the worker said. */
+  accountId?: string;
+  /** The saved artifact a dashboard/template apply needs. */
+  artifactId?: string;
+  status: "proposed" | "applied";
+  /** The host's account of an applied write: its sentence and a link. */
+  result?: { message?: string; href?: string; hrefLabel?: string };
+}
 /** The message variant of a replay item (carries the branch metadata). */
 export type ReplayMessageItem = Extract<
   LoadedThreadItem,
@@ -176,6 +206,8 @@ export function buildThreadReplay(payload: {
     outputTokens?: number | null;
   }>;
   artifacts?: Array<{
+    /** The row id. A proposal card resolves by it. */
+    id?: string;
     kind: string;
     messageId?: string | null;
     payload?: unknown;
@@ -213,11 +245,34 @@ export function buildThreadReplay(payload: {
       items.push({ t: m.createdAt ?? "", item });
     }
   }
+  // Every assistant reply in the thread (every branch), oldest first: where a
+  // proposal finds the reply of the turn that proposed it. See below.
+  const replies = (payload.messages ?? [])
+    .filter((m) => m.role === "assistant" && m.createdAt)
+    .sort((x, y) => (x.createdAt ?? "").localeCompare(y.createdAt ?? ""));
   for (const a of payload.artifacts ?? []) {
     // Branch-scoped artifacts (tied to a message) only belong to the active
     // branch; artifacts with no messageId are thread-wide and always stay.
     if (activeSet && a.messageId && !activeSet.has(a.messageId)) continue;
-    if (a.kind === "widget") {
+    if (a.kind === "proposal") {
+      const item = proposalItem(a);
+      if (!item) continue;
+      // AFTER THE REPLY OF ITS OWN TURN, as the live widget draws it: the
+      // explanation, then the decision.
+      //
+      // Its own `createdAt` cannot place it. A proposal is saved the moment
+      // it streams, and the turn's user message and reply are both saved when
+      // the turn ENDS, minutes later on a long turn. By time alone, the card
+      // would sit above the question that asked for it. So it takes the first
+      // reply saved after it, which is its own turn's (turns in one thread do
+      // not overlap), and sorts just behind that. If that reply is on another
+      // branch, so is the proposal. With no reply yet (the turn is still
+      // running) it goes by its own time, which is after every earlier reply.
+      const t = a.createdAt ?? "";
+      const reply = replies.find((m) => (m.createdAt ?? "") >= t);
+      if (reply && activeSet && reply.id && !activeSet.has(reply.id)) continue;
+      items.push({ t: reply ? `${reply.createdAt}~${t}` : t, item });
+    } else if (a.kind === "widget") {
       const p = (a.payload ?? {}) as {
         spec?: unknown;
         rows?: unknown;
@@ -264,4 +319,52 @@ export function buildThreadReplay(payload: {
   }
   items.sort((x, y) => x.t.localeCompare(y.t));
   return items.map((s) => s.item);
+}
+
+/** A persisted proposal artifact as a replay item, or null when it has nothing
+ *  to draw: no id or tool name, or it was dismissed. */
+function proposalItem(a: {
+  id?: string;
+  payload?: unknown;
+  status?: string;
+}): ReplayProposalItem | null {
+  const p = (a.payload ?? {}) as {
+    name?: unknown;
+    args?: unknown;
+    agent?: unknown;
+    fields?: unknown;
+    accountId?: unknown;
+    artifactId?: unknown;
+    result?: unknown;
+  };
+  if (!a.id || typeof p.name !== "string" || !p.name) return null;
+  if (a.status !== "proposed" && a.status !== "applied") return null;
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" && v ? v : undefined;
+  const r =
+    p.result && typeof p.result === "object"
+      ? (p.result as Record<string, unknown>)
+      : null;
+  const result = r
+    ? {
+        ...(str(r.message) ? { message: str(r.message) } : {}),
+        ...(str(r.href) ? { href: str(r.href) } : {}),
+        ...(str(r.hrefLabel) ? { hrefLabel: str(r.hrefLabel) } : {}),
+      }
+    : undefined;
+  return {
+    kind: "proposal",
+    id: a.id,
+    name: p.name,
+    args:
+      p.args && typeof p.args === "object" && !Array.isArray(p.args)
+        ? (p.args as Record<string, unknown>)
+        : {},
+    ...(str(p.agent) ? { agent: str(p.agent) } : {}),
+    ...(p.fields !== undefined ? { fields: p.fields } : {}),
+    ...(str(p.accountId) ? { accountId: str(p.accountId) } : {}),
+    ...(str(p.artifactId) ? { artifactId: str(p.artifactId) } : {}),
+    status: a.status,
+    ...(result && Object.keys(result).length ? { result } : {}),
+  };
 }

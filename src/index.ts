@@ -182,7 +182,12 @@ export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 // Thread replay + branch navigation moved to `./replay.ts` (#320): a pure
 // transform, server payload in and render items out, with no DOM and no
 // host context — the shape #306 needs more of.
-import { type LoadedThreadItem, type ReplayMessageItem } from "./replay";
+import {
+  buildThreadReplay,
+  type LoadedThreadItem,
+  type ReplayMessageItem,
+  type ReplayProposalItem,
+} from "./replay";
 import { startMarkMotion, type MarkMotionHandle } from "./mark-motion";
 export { buildThreadReplay } from "./replay";
 export type { LoadedThreadItem } from "./replay";
@@ -737,8 +742,36 @@ export interface AiChatWidgetOptions {
      *  about, and on a platform page is not an account at all. */
     opts?: { accountId?: string; artifactId?: string }
   ) => Promise<
-    string | void | { message?: string; jobId?: string; reportId?: string }
+    | string
+    | void
+    | {
+        message?: string;
+        jobId?: string;
+        reportId?: string;
+        /** A link to what the write MADE — a WordPress draft, say. http(s)
+         *  only; the card shows it, and a replay shows it again (#503). */
+        href?: string;
+        /** Its name ("Open in WordPress"). Defaults to the `openResult` label. */
+        hrefLabel?: string;
+      }
   >;
+  /**
+   * Record what the person did with a proposal card, so a replay shows the
+   * outcome instead of asking again (sgiant-platform#503).
+   *
+   * Called after `onApplyProposal` succeeds (`applied`, with its sentence and
+   * link) and when the card is dismissed (`discarded`), and ONLY for cards
+   * whose `tool_proposal` frame carried a `proposalId`, i.e. ones the server
+   * persisted. Fire-and-forget: a failure is logged, never shown, because the
+   * person already has their answer. But an unrecorded apply replays as a
+   * live card, and a second Apply repeats the write, so wire it wherever
+   * proposals are persisted.
+   */
+  onProposalResolved?: (
+    proposalId: string,
+    status: "applied" | "discarded",
+    result?: { message?: string; href?: string; hrefLabel?: string }
+  ) => Promise<unknown> | void;
   /**
    * OBSERVE the human's answer to a `question` frame — analytics, or resolving
    * the same question on another surface (a critical one also pushed to
@@ -1183,11 +1216,36 @@ export function createAiChatWidget(
    * recent one comes back on its own.
    */
   const RESTORE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  /**
+   * A TURN STILL RUNNING WHEN THE PAGE WENT AWAY (sgiant-platform#503).
+   *
+   * The server finishes a turn whatever happens to the browser, so a page load
+   * mid-turn loses only the STREAM. The widget had no way to know a turn was
+   * out there, though. wp-admin reloads the whole page on every click, and on
+   * 2026-09-28 a five-minute turn lost its stream at minute three: its reply
+   * landed on the server sixteen seconds after the reload, and the reloaded
+   * chat never looked for it. Remembering the turn lets the reloaded widget
+   * wait for it exactly as it waits after a dropped connection.
+   *
+   * Bounded like that wait (15 minutes): an older marker is a turn that is
+   * never coming.
+   */
+  let inflight: {
+    threadId: string;
+    /** What was sent; null for a regenerate, which sends no new message. */
+    content: string | null;
+    at: number;
+  } | null = null;
+  const INFLIGHT_MAX_AGE_MS = 15 * 60 * 1000;
+  /** Proposal cards dismissed this session — so a transcript reload that
+   *  outruns the server's record of it does not draw the card again. */
+  const dismissedProposals = new Set<string>();
   function loadState(): void {
     type Saved = {
       threadId?: string;
       messages?: StoredMsg[];
       savedAt?: number;
+      inflight?: { threadId?: unknown; content?: unknown; at?: unknown };
     };
     const s = readJson<Saved>(
       storeKey,
@@ -1203,12 +1261,22 @@ export function createAiChatWidget(
     }
     threadId = s.threadId;
     if (Array.isArray(s.messages)) history.push(...s.messages);
+    const f = s.inflight;
+    if (
+      f &&
+      typeof f.threadId === "string" &&
+      typeof f.at === "number" &&
+      (typeof f.content === "string" || f.content === null)
+    ) {
+      inflight = { threadId: f.threadId, content: f.content, at: f.at };
+    }
   }
   function saveState(): void {
     writeJson(storeKey, {
       threadId,
       messages: history.slice(-40),
       savedAt: Date.now(),
+      ...(inflight ? { inflight } : {}),
     });
   }
   loadState();
@@ -2316,11 +2384,32 @@ export function createAiChatWidget(
             )
           )
         : [];
+    // PROPOSAL CARDS SURVIVE THE WIPE TOO (#503), keyed by the server's id so
+    // the transcript can put each one back where it belongs. It has to be the
+    // SAME node: a card someone is filling in, or one whose Apply is in flight,
+    // rebuilt from the row would lose the typed values, or offer Apply again
+    // over a write already on its way. Cards with no id (the server did not
+    // persist them) are kept if still undecided, since this reload cannot draw
+    // them again.
+    const carriedProposals = new Map<string, HTMLElement>();
+    const carriedUnsaved: HTMLElement[] = [];
+    if (tid === threadId) {
+      for (const node of Array.from(
+        log.querySelectorAll<HTMLElement>(`.${PREFIX}-proposal`)
+      )) {
+        const id = node.dataset.proposalId;
+        if (id) carriedProposals.set(id, node);
+        else if (node.classList.contains(`${PREFIX}-proposal-pending`))
+          carriedUnsaved.push(node);
+      }
+    }
     clearRich();
     log.innerHTML = "";
     history.length = 0;
     for (const it of items) {
-      if ("kind" in it && it.kind === "widget") {
+      if ("kind" in it && it.kind === "proposal") {
+        renderReplayedProposal(it, carriedProposals);
+      } else if ("kind" in it && it.kind === "widget") {
         renderServerWidget(
           it.spec as { title?: string; chartType?: string } | undefined,
           it.rows,
@@ -2352,8 +2441,11 @@ export function createAiChatWidget(
         }
         history.push({ role: it.role, content: it.content });
         // Branch controls (edit / regenerate / ‹n/m›) on branching hosts, and/or
-        // the per-message vote when a vote endpoint is wired.
-        if (opts.setActiveLeaf || opts.vote) {
+        // the per-message vote when a vote endpoint is wired. Not on a branching
+        // host's id-less message: that is the question a page load cut off
+        // mid-turn (#503), not saved yet, so there is nothing to fork from.
+        const unsaved = !!opts.setActiveLeaf && !it.id;
+        if ((opts.setActiveLeaf || opts.vote) && !unsaved) {
           const anchor = before ? before.nextSibling : log.firstChild;
           addMessageActions(it, anchor);
         }
@@ -2363,8 +2455,48 @@ export function createAiChatWidget(
     // started that is STILL running goes back underneath it, live — and so does
     // the question the assistant is still blocked on.
     for (const q of carriedQuestions) log.appendChild(q);
+    // Undecided cards the transcript did not include (their turn is still
+    // being written, or their save failed) go back at the end, still live. An
+    // applied one it did not include is dropped: its outcome was shown, and
+    // the write is on record where it happened.
+    for (const node of carriedProposals.values())
+      if (node.classList.contains(`${PREFIX}-proposal-pending`))
+        log.appendChild(node);
+    for (const node of carriedUnsaved) log.appendChild(node);
     reattachTrackedJobs(tid);
     scrollDown(true);
+  }
+
+  /**
+   * One persisted proposal, replayed (#503): the card already on screen if
+   * there is one, else its outcome if it was applied, else a live Apply card.
+   */
+  function renderReplayedProposal(
+    it: ReplayProposalItem,
+    onScreen: Map<string, HTMLElement>
+  ): void {
+    const node = onScreen.get(it.id);
+    if (node) {
+      onScreen.delete(it.id);
+      log.appendChild(node);
+      return;
+    }
+    // Dismissed here, and the server may not have heard yet.
+    if (dismissedProposals.has(it.id)) return;
+    if (it.status === "applied") {
+      renderAppliedProposal(it.id, it.result);
+      return;
+    }
+    // A host that cannot apply draws no card, live or replayed.
+    if (!opts.onApplyProposal) return;
+    renderProposal(it.name, it.args, {
+      agent: it.agent,
+      fields: proposalFields(it.fields),
+      accountId: it.accountId,
+      artifactId: it.artifactId,
+      proposalId: it.id,
+      replayed: true,
+    });
   }
 
   /**
@@ -2645,7 +2777,7 @@ export function createAiChatWidget(
     if (busy || !threadId || !opts.setActiveLeaf || !opts.loadThread) return;
     try {
       await opts.setActiveLeaf(threadId, leaf);
-      const items = await opts.loadThread(threadId);
+      const items = await loadThreadItems(threadId);
       renderThreadItems(items);
       saveState();
     } catch {
@@ -2691,17 +2823,77 @@ export function createAiChatWidget(
     // thread id + a loader, re-fetch the full thread and re-render WITH its
     // widgets — matching reopen-from-history. Async + best-effort; the text
     // restore above is the instant fallback.
+    //
+    // Then wait for a turn this page did not live to see finish (#503) — only
+    // after that render, so the note saying so is not wiped by it.
     if (threadId && opts.loadThread) {
       const tid = threadId;
-      void opts
-        .loadThread(tid)
+      void loadThreadItems(tid)
         .then((items) => {
-          if (items.length) renderThreadItems(items);
+          const shown = withPendingQuestion(items);
+          if (shown.length) renderThreadItems(shown);
+          resumeInflight(items);
         })
         .catch(() => {
-          /* keep the text-only restore */
+          // Keep the text-only restore; still wait for the turn.
+          resumeInflight();
         });
+    } else resumeInflight();
+  }
+
+  /**
+   * The ONE way this widget reads a transcript (#503).
+   *
+   * `loadThread` is documented as resolving to replay items, and a host
+   * written in plain JS has nothing to hold it to that. wp-admin's resolved
+   * the SERVER's payload instead, and every reader failed in its own quiet
+   * way: a reopen said "couldn't open", a page load kept the text-only
+   * restore, and a dropped stream's recovery threw on its first poll and never
+   * showed the reply. So the server's own shape is replayed here, and anything
+   * else fails with a sentence instead of a TypeError.
+   */
+  async function loadThreadItems(tid: string): Promise<LoadedThreadItem[]> {
+    const raw: unknown = await opts.loadThread!(tid);
+    if (Array.isArray(raw)) return raw as LoadedThreadItem[];
+    if (
+      raw &&
+      typeof raw === "object" &&
+      Array.isArray((raw as { messages?: unknown }).messages)
+    ) {
+      return buildThreadReplay(raw as Parameters<typeof buildThreadReplay>[0]);
     }
+    throw new Error(
+      "sgiant-ai-widget: loadThread must resolve to buildThreadReplay's items"
+    );
+  }
+
+  /**
+   * The transcript as a page load MID-TURN should show it: with the question
+   * still being answered (#503). The server saves a turn's question when the
+   * turn ENDS, so until then only this browser knows it was asked. Without
+   * this the question vanished on reload while the chips and cards it
+   * started were drawn, so the cards answered nothing on screen. It goes after
+   * the last saved message, ahead of its own turn's chips and cards.
+   */
+  function withPendingQuestion(items: LoadedThreadItem[]): LoadedThreadItem[] {
+    const f = inflight;
+    if (
+      !f ||
+      f.content === null ||
+      f.threadId !== threadId ||
+      Date.now() - f.at >= INFLIGHT_MAX_AGE_MS ||
+      turnLanded(items, f.content)
+    )
+      return items;
+    let lastMsg = -1;
+    items.forEach((it, i) => {
+      if ("role" in it) lastMsg = i;
+    });
+    return [
+      ...items.slice(0, lastMsg + 1),
+      { role: "user", content: f.content },
+      ...items.slice(lastMsg + 1),
+    ];
   }
 
   // Smooth auto-scroll: stay pinned to the newest message ONLY while the user is
@@ -4096,7 +4288,7 @@ export function createAiChatWidget(
   ): Promise<void> {
     if (!opts.loadThread) return;
     try {
-      const items = await opts.loadThread(id);
+      const items = await loadThreadItems(id);
       viewGen++; // fence: an in-flight turn from the previous view goes silent
       // Replace the visible conversation with the chosen thread (messages +
       // inline data widgets). renderThreadItems clears rich roots + the log.
@@ -4351,21 +4543,23 @@ export function createAiChatWidget(
    * each card at the moment it was built — a proposal applied ten seconds later
    * would carry the thread the user was reading when it appeared.
    */
-  const { renderQuestion, renderProposal } = createDecisionCards({
-    L,
-    log,
-    panel,
-    side,
-    scrollDown,
-    send,
-    toggle,
-    stripTick,
-    trackConfirmedJob,
-    getThreadId: () => threadId,
-    getAutoApply: () => autoApply,
-    isBusy: () => busy,
-    opts,
-  });
+  const { renderQuestion, renderProposal, renderAppliedProposal } =
+    createDecisionCards({
+      L,
+      log,
+      panel,
+      side,
+      scrollDown,
+      send,
+      toggle,
+      stripTick,
+      trackConfirmedJob,
+      getThreadId: () => threadId,
+      getAutoApply: () => autoApply,
+      isBusy: () => busy,
+      onProposalDismissed: (id) => dismissedProposals.add(id),
+      opts,
+    });
 
   /**
    * Stream-loss recovery. The api runs a turn to completion and persists the
@@ -4395,21 +4589,11 @@ export function createAiChatWidget(
         if (alive.signal.aborted) return;
         let items: LoadedThreadItem[];
         try {
-          items = await opts.loadThread(turnThread);
+          items = await loadThreadItems(turnThread);
         } catch {
           continue; // transient — the same outage that killed the stream
         }
-        const msgs = items.filter(
-          (it): it is Extract<LoadedThreadItem, { role: string }> =>
-            "role" in it
-        );
-        const last = msgs[msgs.length - 1];
-        if (!last || last.role !== "assistant") continue;
-        if (sentContent !== null) {
-          const lastUser = [...msgs].reverse().find((m) => m.role === "user");
-          if (!lastUser || lastUser.content.trim() !== sentContent.trim())
-            continue; // still the PREVIOUS exchange — our turn hasn't landed
-        }
+        if (!turnLanded(items, sentContent)) continue;
         pendingThreads.delete(turnThread);
         syncBusy();
         if (threadId === turnThread) {
@@ -4423,7 +4607,55 @@ export function createAiChatWidget(
     } finally {
       pendingThreads.delete(turnThread);
       syncBusy();
+      // Landed or given up on: either way there is nothing left to resume.
+      if (inflight?.threadId === turnThread) {
+        inflight = null;
+        saveState();
+      }
     }
+  }
+
+  /** Has THIS turn's exchange landed in the transcript? The last message must
+   *  be a reply, and — unless it was a regenerate, which sends none — the last
+   *  user message must be the one sent, or it is the previous exchange. */
+  function turnLanded(
+    items: LoadedThreadItem[],
+    sentContent: string | null
+  ): boolean {
+    const msgs = items.filter(
+      (it): it is Extract<LoadedThreadItem, { role: string }> => "role" in it
+    );
+    const last = msgs[msgs.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    if (sentContent === null) return true;
+    const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+    return !!lastUser && lastUser.content.trim() === sentContent.trim();
+  }
+
+  /**
+   * Wait for a turn a PAGE LOAD cut off (#503), exactly as for a dropped
+   * connection: the note, the "answering…" lock, the poll. Skipped when the
+   * transcript this page just loaded already has the reply.
+   */
+  function resumeInflight(restored?: LoadedThreadItem[]): void {
+    const f = inflight;
+    if (!f) return;
+    const landed =
+      restored !== undefined &&
+      threadId === f.threadId &&
+      turnLanded(restored, f.content);
+    if (
+      landed ||
+      !opts.loadThread ||
+      Date.now() - f.at >= INFLIGHT_MAX_AGE_MS
+    ) {
+      inflight = null;
+      saveState();
+      return;
+    }
+    if (threadId === f.threadId)
+      showError(L("streamLostRecovering"), { retry: false });
+    void recoverLostTurn(f.threadId, f.content);
   }
 
   async function send(
@@ -4458,6 +4690,15 @@ export function createAiChatWidget(
         ...(atts.length ? { attachments: atts } : {}),
       });
     }
+    // Remembered so a page load mid-turn can wait for the reply — see
+    // `inflight`. A new conversation has no thread yet; its `threadId` frame
+    // sets this below.
+    if (turnThread)
+      inflight = {
+        threadId: turnThread,
+        content: isRegen ? null : content,
+        at: Date.now(),
+      };
     saveState();
     // Animated typing indicator until the first token lands.
     const typing = el("div", `${PREFIX}-typing`);
@@ -4487,7 +4728,22 @@ export function createAiChatWidget(
       /** The artifact a dashboard/template apply needs — the runner emits it,
        *  and until now nothing on this side carried it. */
       artifactId?: string;
+      /** The server's id for this proposal (#503), when it persisted it. */
+      proposalId?: string;
     }> = [];
+    /** Draw the held cards, in the order the model proposed them. */
+    const drawDeferred = (skip?: ReadonlySet<string>): void => {
+      for (const p of deferredProposals) {
+        if (p.proposalId && skip?.has(p.proposalId)) continue;
+        renderProposal(p.name, p.args, {
+          agent: p.agent,
+          fields: p.fields,
+          accountId: p.accountId,
+          artifactId: p.artifactId,
+          proposalId: p.proposalId,
+        });
+      }
+    };
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
@@ -4767,10 +5023,16 @@ export function createAiChatWidget(
               // The server named this turn's thread. Re-key the pending entry;
               // update the GLOBAL threadId only while the user is still here —
               // after a switch it must not clobber the view they moved to.
-              if (turnThread !== frame.threadId) {
+              const named = turnThread !== frame.threadId;
+              if (named) {
                 pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
                 turnThread = frame.threadId;
                 pendingThreads.add(turnThread);
+                inflight = {
+                  threadId: turnThread,
+                  content: isRegen ? null : content,
+                  at: Date.now(),
+                };
               }
               if (live()) {
                 threadId = frame.threadId;
@@ -4778,6 +5040,9 @@ export function createAiChatWidget(
                 // stop hiding itself.
                 paintStarItem();
               }
+              // After the view took the id, so a reload restores the thread
+              // the marker points at.
+              if (named) saveState();
             }
             const piece = frame.text ?? frame.d;
             if (piece && live()) {
@@ -4878,6 +5143,7 @@ export function createAiChatWidget(
                 fields: proposalFields((frame as { fields?: unknown }).fields),
                 accountId: (frame as { accountId?: string }).accountId,
                 artifactId: (frame as { artifactId?: string }).artifactId,
+                proposalId: frame.proposalId,
               });
               producedAny = true;
             }
@@ -4937,22 +5203,35 @@ export function createAiChatWidget(
       // A generation/import may have just landed — refresh the artifact strip
       // (thread-scoped, so only when this turn's thread is the one on screen).
       if (threadId === turnThread) void refreshArtifacts();
+      // The stream reached its end, so a page load has nothing left to wait
+      // for. A LOST stream keeps the marker: its turn is still running.
+      if (!transportLost && turnThread && inflight?.threadId === turnThread) {
+        inflight = null;
+        saveState();
+      }
     }
 
     // Stale turn finished in the background (the user switched away while it
     // streamed). Nothing here may touch the visible view UNLESS the user has
     // switched BACK to this turn's thread — then reload the canonical
-    // transcript (the reply is persisted server-side) and surface any pending
-    // proposal cards (they are ephemeral, never persisted, so this is their
-    // only way to reach the user). Otherwise leave everything for the thread
-    // to show on next open; the History spinner has just cleared.
+    // transcript (the reply is persisted server-side) and surface the held
+    // proposal cards the transcript did not already draw. Otherwise leave
+    // everything for the thread to show on next open; the History spinner has
+    // just cleared.
     // Transport died mid-stream but the api runs the turn to completion and
     // persists the transcript at the end — recover instead of giving up: keep
     // the thread marked "answering…" and poll until the reply lands (seen live
     // with QUIC drops through the edge; the reply arrived minutes later).
     if (transportLost && turnThread && opts.loadThread) {
       typing.remove();
-      if (live()) showError(L("streamLostRecovering"), { retry: false });
+      if (live()) {
+        // THE HELD CARDS FIRST (#503). They waited for the reply's text, and
+        // that text is now minutes away at best. Returning here used to drop
+        // them: the reply landed talking about approval cards that were never
+        // drawn. The recovery's reload keeps each one in place by its id.
+        drawDeferred();
+        showError(L("streamLostRecovering"), { retry: false });
+      }
       void recoverLostTurn(turnThread, isRegen ? null : content);
       return;
     }
@@ -4960,20 +5239,20 @@ export function createAiChatWidget(
     if (!live()) {
       typing.remove(); // detached or not — harmless either way
       if (turnThread && threadId === turnThread && opts.loadThread) {
+        // Proposals the transcript already holds are drawn BY it, in place.
+        let replayed: Set<string> | undefined;
         try {
-          renderThreadItems(await opts.loadThread(turnThread), turnThread);
+          const items = await loadThreadItems(turnThread);
+          renderThreadItems(items, turnThread);
+          replayed = new Set(
+            items.flatMap((it) =>
+              "kind" in it && it.kind === "proposal" ? [it.id] : []
+            )
+          );
         } catch {
           /* the thread shows the reply on its next open */
         }
-        for (const p of deferredProposals)
-          renderProposal(
-            p.name,
-            p.args,
-            p.agent,
-            p.fields,
-            p.accountId,
-            p.artifactId
-          );
+        drawDeferred(replayed);
         maybeDing();
         scrollDown();
         saveState();
@@ -4987,15 +5266,7 @@ export function createAiChatWidget(
     const lastBubble = flushSegment(true);
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
-    for (const p of deferredProposals)
-      renderProposal(
-        p.name,
-        p.args,
-        p.agent,
-        p.fields,
-        p.accountId,
-        p.artifactId
-      );
+    drawDeferred();
     if (deferredProposals.length) scrollDown();
     if (!producedAny) {
       if (failure) showError(failure);
@@ -5022,15 +5293,15 @@ export function createAiChatWidget(
     // fork turn (edit / regenerate) also needs this to land the rewritten tree.
     // Only when branching is wired (setActiveLeaf) — otherwise the streamed view
     // is already canonical and reloading would just cause a needless re-render.
-    // A live, un-applied WRITE PROPOSAL card is ephemeral — it is NOT
-    // persisted as a thread artifact, so a full renderThreadItems()
-    // reload (which does `log.innerHTML = ""`) would silently WIPE it: the
-    // agent proposes, the card flashes in, the end-of-turn reload deletes it,
-    // and the admin never gets to click Apply. When a proposal card is on
-    // screen, keep the streamed view instead. The only thing the reload adds is
-    // the ‹n/m› branch switcher + persisted ids on this turn's messages, which
-    // self-heal on the next send or when the thread is reopened — a fair trade
-    // to avoid destroying a pending Apply card.
+    // A live, un-applied WRITE PROPOSAL card suppresses this reload. It was
+    // once the only copy of the proposal, so the reload (which does
+    // `log.innerHTML = ""`) wiped it: the agent proposed, the card flashed in,
+    // and the admin never got to click Apply. Since #503 the server keeps each
+    // proposal and renderThreadItems carries a card across the wipe by its id,
+    // but a card the server did not persist still has only this copy, so the
+    // guard stays. The only thing the reload adds is the ‹n/m› branch switcher
+    // + persisted ids on this turn's messages, which self-heal on the next send
+    // or when the thread is reopened — a fair trade.
     const hasLiveProposal = !!log.querySelector(`.${PREFIX}-proposal-pending`);
     // Same wipe hazard for a FAILED turn: the error card (Retry/Report) is
     // ephemeral UI and the failed turn persisted nothing, so the canonical
@@ -5050,7 +5321,7 @@ export function createAiChatWidget(
       !hasErrorCard
     ) {
       try {
-        const reloaded = await opts.loadThread(turnThread);
+        const reloaded = await loadThreadItems(turnThread);
         if (live()) renderThreadItems(reloaded, turnThread);
       } catch {
         /* keep the streamed view if the reload fails */
@@ -5482,8 +5753,7 @@ export function createAiChatWidget(
     if (!e.domains?.includes("ai")) return;
     if (busy || !threadId || !opts.loadThread) return;
     if (log.querySelector(`.${PREFIX}-proposal-pending`)) return;
-    void opts
-      .loadThread(threadId)
+    void loadThreadItems(threadId)
       .then((t) => renderThreadItems(t))
       .catch(() => {
         /* a missed refresh just means the old manual reload */

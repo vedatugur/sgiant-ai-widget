@@ -87,3 +87,22 @@ export function isSafeFrameUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Gate in front of a link a HOST handed back from an apply (sgiant-platform
+ * #503) — "Draft saved on WordPress", and a way to open it.
+ *
+ * Any origin is allowed, because the thing a write made lives wherever it was
+ * written. Only the scheme is refused: the link is persisted and replayed, so
+ * a `javascript:` or `data:` value would run on every reopen, long after the
+ * apply that produced it.
+ */
+export function isHttpUrl(url: unknown): url is string {
+  if (typeof url !== "string" || !url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
