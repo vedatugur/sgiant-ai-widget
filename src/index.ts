@@ -98,7 +98,7 @@ export {
 // Same reason: the block below re-exports these for consumers, but the widget
 // itself subscribes so a finished background job can refresh the transcript.
 import { subscribeAiChange } from "./ai-invalidation";
-// Read-only UI control — point the Copilot at on-page controls by their stable
+// Read-only UI control — point the AYCA at on-page controls by their stable
 // `data-ai-target` id. `scanAiTargets` feeds the current page's controls into
 // the turn context so the model knows what it may highlight/scroll-to/focus.
 export {
@@ -392,11 +392,11 @@ export interface AiChatWidgetOptions {
   withCredentials?: boolean;
   /**
    * Authed surfaces (org + admin): a persistent status bar shows the remaining
-   * AI credits and which Copilot role is acting. Called on open + after each turn;
+   * AI credits and which AYCA role is acting. Called on open + after each turn;
    * return the current credit balance (null = unknown/hidden).
    */
   getBalance?: () => Promise<number | null> | number | null;
-  /** Assistant name shown in the header + bubble aria-label. Default "Copilot". */
+  /** Assistant name shown in the header + bubble aria-label. Default "AYCA". */
   title?: string;
   /** Small line under the name. Default "Growth assistant". */
   subtitle?: string;
@@ -621,7 +621,7 @@ export interface AiChatWidgetOptions {
   /**
    * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
    * full-screen split: the chat on the left and the app in an <iframe> on the
-   * right that Copilot can DRIVE (highlight / fill / click) via the postMessage
+   * right that AYCA can DRIVE (highlight / fill / click) via the postMessage
    * agent bridge (`sgiant-ai-agent-bridge`). The framed page must mount the
    * agent (`mountAiAgent`). `getAdvancedUrl()` returns the embed URL for the
    * CURRENT page; `getAdvancedUrl(path)` returns it for an account-relative path
@@ -1081,7 +1081,7 @@ export function createAiChatWidget(
     opts.gradient ?? `linear-gradient(135deg,${accent},${accent})`;
   const side = opts.position === "bottom-left" ? "left" : "right";
   const root = opts.container ?? document.body;
-  const name = opts.title ?? "Copilot";
+  const name = opts.title ?? "AYCA";
   // Resolve a widget-chrome label: host-provided translation (opts.labels) →
   // English default (WIDGET_LABELS). `{token}` placeholders are filled from
   // params so runtime values (name, filename, error) interpolate in any language.
@@ -1944,7 +1944,7 @@ export function createAiChatWidget(
       /* audio blocked — non-fatal */
     }
   }
-  // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, Copilot follows its
+  // Auto-navigate toggle — a BROWSER-LOCAL setting: when on, AYCA follows its
   // own navigation suggestions automatically (no confirm button). Off by default.
   // DECLARED HERE, not with the rest of the advanced-view state further down.
   // The auto-navigate toggle reads it while the header menu is being built, and
@@ -2175,7 +2175,7 @@ export function createAiChatWidget(
     }
   }
   // One process-step chip (spinner while running → check / cross when done).
-  // `agent` is the AI role that ran the step (Vega/AYCA/…) — shown as a small
+  // `agent` is the AI role that ran the step (AYCA) — shown as a small
   // badge so the user sees WHICH agent did WHAT.
   // A model id → a compact label for the flow chip ("claude-sonnet-4-6" →
   // "sonnet-4-6"; "managed" stays). Keeps the badge short.
@@ -3090,7 +3090,7 @@ export function createAiChatWidget(
     meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="transform:scaleX(${pct / 100})"></span></div><div class="${PREFIX}-meter-row"><span>${escapeHtml(remTxt)}</span><span>${escapeHtml(usedTxt)}</span></div>`;
   }
 
-  // Authed status bar — remaining credits + the active Copilot role. Shown only
+  // Authed status bar — remaining credits + the active AYCA role. Shown only
   // when a balance provider is wired (org + admin), independent of the visitor
   // token meter above.
   // Host-supplied, empty by default. See the option docs above for why these
@@ -3710,7 +3710,7 @@ export function createAiChatWidget(
 
   // --- Advanced view -----------------------------------------------------------
   // A full-screen split: chat on the left, the app in an <iframe> on the right
-  // that Copilot drives via the agent bridge. Navigation moves the FRAME; on-page
+  // that AYCA drives via the agent bridge. Navigation moves the FRAME; on-page
   // actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
   // hit the app the user is watching — not the parent shell behind the overlay.
   let advancedFull = false;
@@ -4109,7 +4109,7 @@ export function createAiChatWidget(
   }
 
   /**
-   * The single funnel for every in-app action Copilot requests. In advanced view
+   * The single funnel for every in-app action AYCA requests. In advanced view
    * it retargets: on-page control/operate → the iframe (via the bridge); a
    * navigation-class action → the iframe's URL. Otherwise (and for any
    * app-specific handlers) it falls back to the host's `onWidgetAction`.

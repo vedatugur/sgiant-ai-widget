@@ -1,5 +1,5 @@
 /**
- * Every SVG the widget draws: the Copilot mark, its gradient defs, and the
+ * Every SVG the widget draws: the AYCA mark, its gradient defs, and the
  * chrome icons.
  *
  * Extracted from index.ts (#320). Pure data â one import and no behaviour â
@@ -15,7 +15,7 @@
  */
 import { PREFIX } from "./prefix";
 
-// Copilot — the CRESCENT (#305). "Copilot = moonlight (tr)" is already the
+// AYCA — the CRESCENT (#305). "AYCA = moonlight (tr)" is already the
 // comment on the ASSISTANT design token, and this file's own avatar fallback
 // was documented as "else a crescent glyph" — describing a mark nobody had
 // drawn. This draws it.
@@ -63,7 +63,7 @@ export const ICON_BOLT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="
 /** The automation explainer: a question mark in a circle. */
 export const ICON_HELP_CIRCLE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7"/><path d="M12 17h.01"/></svg>`;
 export const ICON_COMPASS = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8"/></svg>`;
-// Advanced view: a panel split into a sidebar + main area (Copilot ⇆ live app).
+// Advanced view: a panel split into a sidebar + main area (AYCA ⇆ live app).
 export const ICON_ADVANCED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="4" x2="10" y2="20"/></svg>`;
 export const ICON_CHEVRON_R = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
 // Download — export the current conversation as a .txt transcript.

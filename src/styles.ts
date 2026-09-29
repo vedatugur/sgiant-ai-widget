@@ -984,7 +984,7 @@ ${darkWhenHostSaysSo}
      button (static, z-auto, in the bottom action bar), and the two read as one
      smudge. The pebble is 56px and clears it.
      The word buys least where it costs most. A first-time reader on desktop
-     gets "Copilot" spelled out because there is room; on a phone the same
+     gets "AYCA" spelled out because there is room; on a phone the same
      reader gets a tappable mark, which is what every other chat launcher on a
      phone already is. Done in CSS rather than by changing the VARIANT, so a
      host asking for the pill still gets it on desktop and needs no

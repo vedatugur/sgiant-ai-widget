@@ -356,7 +356,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
       read: () => string;
       node: HTMLElement;
     }> = [];
-    // Show the acting agent (e.g. Vega) so the user sees WHO proposed this.
+    // Show the acting agent (e.g. AYCA) so the user sees WHO proposed this.
     if (agent) {
       const badge = el("span", `${PREFIX}-act-agent`);
       badge.textContent = agent;

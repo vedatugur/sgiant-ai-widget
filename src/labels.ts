@@ -67,29 +67,29 @@ export const WIDGET_LABELS = {
   soundOnHint: "Chime when a reply arrives — click to mute",
   soundOffHint: "Muted — click to enable the reply chime",
   autoNavigate: "Auto-navigate",
-  autoNavOnHint: "Copilot opens pages for you — click to turn off",
-  autoNavOffHint: "Copilot asks before opening pages — click to turn on",
+  autoNavOnHint: "AYCA opens pages for you — click to turn off",
+  autoNavOffHint: "AYCA asks before opening pages — click to turn on",
   autoNavPinnedHint:
     "Advanced view always opens pages itself — this cannot be turned off here",
   autoApply: "Auto-apply",
   autoApplyOnHint:
-    "Copilot applies safe changes for you — click to turn off",
+    "AYCA applies safe changes for you — click to turn off",
   autoApplyOffHint:
-    "Copilot asks before applying any change — click to turn on",
+    "AYCA asks before applying any change — click to turn on",
   automationHelp: "How automation works",
-  automationHelpTitle: "What Copilot may do on its own",
+  automationHelpTitle: "What AYCA may do on its own",
   automationHelpNav:
-    "Auto-navigate — Copilot opens pages by itself. Only pages: anything that changes something still asks.",
+    "Auto-navigate — AYCA opens pages by itself. Only pages: anything that changes something still asks.",
   automationHelpNavPinned:
-    "In Advanced view Copilot always opens pages itself. That is what Advanced view is, so it cannot be switched off here.",
+    "In Advanced view AYCA always opens pages itself. That is what Advanced view is, so it cannot be switched off here.",
   automationHelpApply:
-    "Auto-apply — Copilot applies changes this site has marked as safe to undo, such as saving a draft, without asking each time.",
+    "Auto-apply — AYCA applies changes this site has marked as safe to undo, such as saving a draft, without asking each time.",
   automationHelpNever:
     "Never done automatically, whatever these are set to: publishing, deleting, anything that costs credits, and anything that types or clicks on your behalf. Those always ask you first.",
   automationHelpLocal:
     "Both settings live in this browser only. They are yours, not the site's, and other people see their own.",
   automationHelpClose: "Close",
-  // Status bar (Copilot role + credits)
+  // Status bar (AYCA role + credits)
   roleTalk: "Talk",
   roleAnalytics: "Analytics",
   creditsSuffix: " credits",
