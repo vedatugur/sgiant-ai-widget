@@ -55,6 +55,7 @@ export const WIDGET_TARGETS = {
   close: "widget-close",
   composer: "widget-composer",
   attach: "widget-attach",
+  model: "widget-model",
 } as const;
 
 export type WidgetTargetId =
@@ -106,6 +107,17 @@ export const WIDGET_MANIFEST: SurfaceManifest = {
               // The old gate could not tell those apart because it keyed on the
               // action name, not on the control.
               mutates: true,
+            },
+            {
+              id: WIDGET_TARGETS.model,
+              label: "Model",
+              purpose:
+                "Chooses which AI model answers the next message. Only present when the host offers a choice; a stronger model can spend more credits.",
+              kind: "button",
+              // It changes what the next turn costs, so it is a change, and the
+              // person can pick again, so it is reversible.
+              mutates: true,
+              severity: "reversible",
             },
             {
               id: WIDGET_TARGETS.attach,
@@ -182,7 +194,8 @@ export const WIDGET_MANIFEST: SurfaceManifest = {
  * Controls that are only present in some configurations.
  *
  * `expand` exists only when the host passes `expandable`; `attach` only when
- * uploads are wired; `history` only when the host supplies `listThreads`. So a
+ * uploads are wired; `history` only when the host supplies `listThreads`;
+ * `model` only when the host passes `models`. So a
  * drift report naming these is EXPECTED, not a fault, and a caller that treats
  * every `missing` as a bug would cry wolf on a correctly configured widget.
  *
@@ -193,6 +206,7 @@ export const WIDGET_CONDITIONAL_TARGETS: readonly string[] = [
   WIDGET_TARGETS.expand,
   WIDGET_TARGETS.attach,
   WIDGET_TARGETS.history,
+  WIDGET_TARGETS.model,
 ];
 
 /**

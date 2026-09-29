@@ -25,6 +25,10 @@ export const WIDGET_LABELS = {
   questionPlaceholder: "Type your answer…",
   questionSendFailed:
     "Couldn't send your answer — wait for the current reply to finish, then try again.",
+  // Model picker (sgiant-platform#465): shown only when the host passes
+  // `models`. The model names themselves come from the host, not from here.
+  modelPicker: "Model",
+  modelPickerAria: "Model: {model}. Choose another model",
   // Header / bubble
   openBubble: "Open {name}",
   openBubbleUnread: "Open {name} — {count} unread",

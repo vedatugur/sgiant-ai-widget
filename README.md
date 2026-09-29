@@ -211,6 +211,35 @@ Built-in tags are reserved (a plugin can't hijack the confirm-gated
 `action`/`form` security model). A throwing renderer removes its host card
 instead of breaking the message.
 
+## Letting people choose the model
+
+Pass `models` and a small pill appears in the composer, next to Send. The chosen
+option's `id` is sent as `model` with every message.
+
+```js
+createAiChatWidget({
+  endpoint: "/api/chat",
+  models: [
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5",  hint: "Fastest, lightest", cost: "1×" },
+    { id: "claude-sonnet-5-5",         label: "Sonnet 5.5", hint: "Fast and capable",  cost: "2×" },
+    { id: "claude-opus-5-5",           label: "Opus 5.5",   hint: "Most capable",      cost: "4×" },
+  ],
+  defaultModel: "claude-sonnet-5-5",
+  onModelChange: (id) => { /* optional */ },
+});
+```
+
+The widget knows nothing about models. Which ones exist, which company serves
+each and what they cost belongs to your server; the options are plain data, and
+`id` is opaque. Give options a `group` (the vendor, say) and they are listed
+under it, so offering a second vendor's models is a longer list rather than a
+widget change.
+
+The choice is remembered per `storageNamespace` and layout scope, and checked
+against `models` on every mount: a model you stop offering is never sent again,
+the person gets `defaultModel` instead. Omit `models` and there is no pill and
+no `model` field. See `examples/models.html`.
+
 ## Charts without React
 
 In-app hosts wire `renderDataWidget` (real `@sgiant/ui` charts). A standalone
@@ -220,7 +249,8 @@ lightweight chart lib.
 
 ## Transport
 
-POSTs `{ accountId, threadId, content }` and reads a streamed body, tolerating
+POSTs `{ accountId, threadId, content }` (plus `model` when the host passes
+`models`; see [BACKEND.md](./BACKEND.md)) and reads a streamed body, tolerating
 both shapes the platform emits:
 
 - SSE — `data: {"type":"assistant_delta","text":"…"}`

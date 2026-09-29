@@ -553,6 +553,22 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);border-radius:var(--aiw-radius-lg);width:38px;line-height:1;cursor:pointer;color:var(--aiw-text-2);transition:border-color .12s,color .12s,background .12s}
 .${PREFIX}-attach:hover{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-attach:disabled{opacity:.5;cursor:default}
+/* The model pill (sgiant-platform#465). It sits in the composer row, so it
+   wears the attach button's frame rather than the header's chrome. Its menu is
+   the More menu's surface; the rules that turn it upward live right after the
+   -menu rules below, because they must win against them. */
+.${PREFIX}-model{position:relative;flex:0 0 auto;display:flex}
+.${PREFIX}-model-btn{display:inline-flex;align-items:center;gap:4px;max-width:140px;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:0 8px 0 11px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;transition:border-color .12s,color .12s}
+.${PREFIX}-model-btn:hover,.${PREFIX}-model-btn[aria-expanded="true"]{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
+.${PREFIX}-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.${PREFIX}-model-chev{flex:0 0 auto;display:flex;opacity:.7}
+.${PREFIX}-model-heading{padding:6px 10px 4px;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted)}
+.${PREFIX}-model-group{padding:8px 10px 2px;font-size:var(--aiw-font-3xs);font-weight:600;color:var(--aiw-muted)}
+.${PREFIX}-model-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.${PREFIX}-model-hint{font-size:var(--aiw-font-3xs);font-weight:400;line-height:1.35;color:var(--aiw-muted);white-space:normal}
+.${PREFIX}-model-cost{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:700;font-variant-numeric:tabular-nums;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-pill);padding:2px 7px}
+.${PREFIX}-model-item[aria-checked="true"]{color:var(--aiw-accent-ink);background:color-mix(in srgb,var(--aiw-accent) 9%,transparent)}
+.${PREFIX}-model-item[aria-checked="true"] .${PREFIX}-model-cost{color:var(--aiw-accent-contrast);background:var(--aiw-accent)}
 /* Vertical padding is SYMMETRIC. It was 8px 10px 0, which put the chips 8px
    from the top of the bar and flush against the composer's border-top —
    reported as "the bottom gap is not equal", and it was not. The bar sits
@@ -682,6 +698,14 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-menu-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .${PREFIX}-menu-state{flex:0 0 auto;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-pill);padding:2px 7px}
 .${PREFIX}-menu-item-on .${PREFIX}-menu-state{color:var(--aiw-accent-contrast);background:var(--aiw-accent)}
+/* The model menu opens UPWARD: the pill is at the bottom of the panel. Compound
+   selectors, and placed after the -menu rules, because the base rule sets
+   'top' and the closed-state transform with the same single-class weight; a
+   bare .-model-menu rule earlier in the sheet lost to it, and the menu came
+   out pinned below the pill and 14px tall, clipped between top and bottom. */
+.${PREFIX}-menu.${PREFIX}-model-menu{top:auto;bottom:calc(100% + 8px);min-width:252px;max-height:min(60vh,420px);overflow-y:auto;transform-origin:bottom right;transform:translateY(4px) scale(.98)}
+.${PREFIX}-menu.${PREFIX}-model-menu.${PREFIX}-menu-open{transform:none}
+.${PREFIX}-menu.${PREFIX}-model-menu::before{display:none}
 /* The automation explainer. A sheet INSIDE the panel, not a page-level modal:
    the widget may be embedded in someone else's admin, and a fixed overlay there
    would dim their page to explain our setting. */
@@ -927,6 +951,7 @@ ${darkWhenHostSaysSo}
      it is open, so here — and only here — it outranks host chrome. */
   .${PREFIX}-panel{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup var(--duration-base) var(--ease-out);transition:none}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
+  .${PREFIX}-model-btn{max-width:118px;padding:0 6px 0 9px}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
   /* Give the title its own full-width row: avatar + actions share the top row,
      the name/subtitle drop to a dedicated line below so the title never gets

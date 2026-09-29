@@ -24,6 +24,7 @@ authorization: Bearer <token>        # only when `token` / `getToken` is set
   "content": "how many bookings last week?", // the user's message
   "threadId": "…",                           // absent on the first turn
   "accountId": "",                           // "" unless the host scopes turns
+  "model": "claude-sonnet-5-5",              // only when the host passes `models`
   "pageContext": { … },                      // only if the host supplies one
   "attachments": ["mediaId", …],             // only if files were attached
   "parentId": "…",                           // only when editing/branching
@@ -34,6 +35,13 @@ authorization: Bearer <token>        # only when `token` / `getToken` is set
 Anything in the host's `extraBody` is merged in at the top level, so a field
 your server needs but this widget has never heard of is a one-line host change,
 not a fork.
+
+`model` is the `id` of the option the person picked from the host's `models`,
+sent after `extraBody`, so the person's choice wins over a host default placed
+there. It is exactly what the host offered and nothing else. The widget
+never invents an id, and a remembered choice the host no longer offers is
+replaced by `defaultModel` before it is sent. Your server should still check
+it against its own list, the same way it checks anything else a browser sends.
 
 Credentials follow `withCredentials`: `include` when set, `same-origin`
 otherwise. The request carries an `AbortSignal` tied to the widget's lifetime —

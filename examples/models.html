@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sgiant-ai-widget — choosing the model</title>
+    <style>
+      :root { color-scheme: light dark; --line: rgba(127,127,127,.28); }
+      body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 54rem; margin: 0 auto; padding: 3rem 1.25rem 10rem; }
+      h1 { font-size: 1.7rem; margin-bottom: .25rem; }
+      h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+      p.sub { margin-top: 0; opacity: .7; }
+      .demo { border: 1px solid var(--line); border-radius: .6rem; padding: 1.1rem 1.2rem; margin: 1.1rem 0; }
+      .demo p { margin: .35rem 0 .8rem; opacity: .85; }
+      pre { background: rgba(127,127,127,.12); padding: .85rem; border-radius: .45rem; overflow-x: auto; margin: 0; font-size: .82em; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button.run { font: inherit; font-size: .9em; cursor: pointer; margin: 0 .5rem .7rem 0;
+        padding: .4rem .9rem; border-radius: .4rem; border: 1px solid var(--line); background: transparent; color: inherit; }
+      button.run:hover { background: rgba(127,127,127,.14); }
+      button.run[aria-pressed="true"] { background: rgba(127,127,127,.2); font-weight: 600; }
+      .note { border-left: 3px solid var(--line); padding-left: 1rem; opacity: .85; }
+      #sent { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+      nav.exnav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.6rem; font-size:.86em; }
+      nav.exnav a { text-decoration:none; color:inherit; opacity:.72;
+        border:1px solid var(--line); border-radius:.4rem; padding:.28rem .7rem; }
+      nav.exnav a:hover { opacity:1; background:rgba(127,127,127,.12); }
+      nav.exnav a[aria-current="page"] { opacity:1; font-weight:600; background:rgba(127,127,127,.16); }
+    </style>
+  </head>
+  <body>
+    <nav class="exnav" aria-label="Examples">
+      <a href="./index.html">Quick start</a>
+      <a href="./capabilities.html">Capabilities</a>
+      <a href="./charts.html">Charts</a>
+      <a href="./advanced.html">Advanced mode</a>
+      <a href="./automation.html">Automation</a>
+      <a href="./uploads.html">Attachments</a>
+      <a href="./history.html">Past chats</a>
+      <a href="./ui.html">Chrome</a>
+      <a href="./theming.html">Theming</a>
+      <a href="./flagging.html">Flagging</a>
+      <a href="./models.html" aria-current="page">Models</a>
+    </nav>
+
+    <h1>Choosing the model</h1>
+    <p class="sub">Pass <code>models</code> and a model pill appears in the
+      composer. Open the assistant in the corner and pick one.</p>
+
+    <div class="demo">
+      <h2>What the host passes</h2>
+      <p>The widget knows nothing about models: which ones exist, who serves them
+        and what they cost is the host's business, normally its server's. The
+        options are plain data, and the chosen <code>id</code> is sent as
+        <code>model</code> with every message.</p>
+      <pre><code>createAiChatWidget({
+  endpoint: "/api/chat",
+  models: [
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5",  hint: "Fastest, lightest", cost: "1×" },
+    { id: "claude-sonnet-5-5",         label: "Sonnet 5.5", hint: "Fast and capable",  cost: "2×" },
+    { id: "claude-opus-5-5",           label: "Opus 5.5",   hint: "Most capable",      cost: "4×" },
+    { id: "claude-fable-5-1",          label: "Fable 5.1",  hint: "Deepest reasoning", cost: "10×" },
+  ],
+  defaultModel: "claude-sonnet-5-5",
+  onModelChange: (id) =&gt; console.log("now answering with", id),
+});</code></pre>
+      <p>The last message this page's stub received was sent with:
+        <strong id="sent">(nothing sent yet)</strong></p>
+    </div>
+
+    <div class="demo">
+      <h2>More than one vendor</h2>
+      <p>Give options a <code>group</code> and they are listed under it. Adding
+        another company's models is a longer list, not a new widget. This button
+        swaps in an <em>illustrative</em> two-vendor list; the ids are made up.</p>
+      <button class="run" id="one" aria-pressed="true">One vendor</button>
+      <button class="run" id="two" aria-pressed="false">Two vendors (example)</button>
+      <p class="note">The choice is remembered per <code>storageNamespace</code>
+        and layout scope, and checked against the list on every mount: switch
+        lists and a model the new list does not offer falls back to
+        <code>defaultModel</code> rather than being sent.</p>
+    </div>
+
+    <script>
+      // The stub backend: streams a short reply that names the model it was
+      // asked for, so the page shows the choice travelling with the message.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("/demo-chat")) return realFetch(input, init);
+        const body = JSON.parse(init.body);
+        document.getElementById("sent").textContent = "model: " + JSON.stringify(body.model);
+        const reply = "Answered with " + (body.model || "the server default") +
+          ". You said: " + body.content;
+        const enc = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            send({ threadId: body.threadId || "demo-thread" });
+            for (const word of reply.split(" ")) {
+              send({ type: "text", d: word + " " });
+              await new Promise((r) => setTimeout(r, 30));
+            }
+            send({ type: "done", model: body.model });
+            c.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        });
+      };
+    </script>
+
+    <script src="./sgiant-ai-widget.global.js"></script>
+    <script>
+      const ONE_VENDOR = [
+        { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", hint: "Fastest, lightest", cost: "1×" },
+        { id: "claude-sonnet-5-5", label: "Sonnet 5.5", hint: "Fast and capable", cost: "2×" },
+        { id: "claude-opus-5-5", label: "Opus 5.5", hint: "Most capable", cost: "4×" },
+        { id: "claude-fable-5-1", label: "Fable 5.1", hint: "Deepest reasoning", cost: "10×" },
+      ];
+      // Illustrative only: made-up ids, to show how a second vendor is listed.
+      const TWO_VENDORS = [
+        { id: "claude-sonnet-5-5", label: "Sonnet 5.5", hint: "Fast and capable", cost: "2×", group: "Anthropic" },
+        { id: "claude-opus-5-5", label: "Opus 5.5", hint: "Most capable", cost: "4×", group: "Anthropic" },
+        { id: "example-vendor-large", label: "Example Large", hint: "A second vendor's model", cost: "3×", group: "Another vendor" },
+      ];
+
+      let chat = null;
+      function mount(models) {
+        if (chat) chat.destroy();
+        chat = SgiantAiWidget.createAiChatWidget({
+          endpoint: "/demo-chat",
+          title: "Aria",
+          subtitle: "Model picker demo",
+          accent: "#6366f1",
+          greeting: "Pick a model with the pill next to Send, then ask me anything.",
+          persistKey: "models-demo",
+          storageNamespace: "aiw-demo",
+          models,
+          defaultModel: "claude-sonnet-5-5",
+          onModelChange: (id) => console.log("now answering with", id),
+        });
+        chat.open();
+      }
+
+      function choose(which) {
+        document.getElementById("one").setAttribute("aria-pressed", String(which === "one"));
+        document.getElementById("two").setAttribute("aria-pressed", String(which === "two"));
+        mount(which === "one" ? ONE_VENDOR : TWO_VENDORS);
+      }
+      document.getElementById("one").addEventListener("click", () => choose("one"));
+      document.getElementById("two").addEventListener("click", () => choose("two"));
+      mount(ONE_VENDOR);
+    </script>
+  </body>
+</html>

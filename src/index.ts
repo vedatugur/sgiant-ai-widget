@@ -170,6 +170,8 @@ import {
 import { WIDGET_LABELS, type WidgetLabels } from "./labels";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
 export type { WidgetLabels };
+import { createModelPicker, initialModel, type ModelOption } from "./model-picker";
+export type { ModelOption };
 export { PREFIX };
 
 /**
@@ -304,6 +306,27 @@ export interface AiChatWidgetOptions {
    * the anonymous marketing endpoint. Never put secrets here; it's plain JSON.
    */
   extraBody?: Record<string, unknown>;
+  /**
+   * The models the person may choose from (sgiant-platform#465). Pass them and a
+   * small model pill appears in the composer; the chosen option's `id` is sent
+   * as `model` with every turn (after `extraBody`, so the choice wins). Omit it,
+   * or pass an empty list, and there is no pill and no `model` field.
+   *
+   * The widget treats these as plain data. Which models exist, which vendor
+   * serves each one and what they cost is the host's business, normally its
+   * server's: give options a `group` (e.g. the vendor) and they are listed
+   * under it, so a second vendor is a longer list here, not a widget change.
+   *
+   * The choice is remembered per `storageNamespace` + layout scope, and checked
+   * against this list on every mount, so a model you stop offering is never
+   * sent again.
+   */
+  models?: ModelOption[];
+  /** The option to start with when the person has not chosen one (or chose one
+   *  you no longer offer). Defaults to the first option. */
+  defaultModel?: string;
+  /** Called with the option's `id` whenever the person picks a different model. */
+  onModelChange?: (id: string) => void;
   /**
    * Dynamic per-send context (current page, recent navigation, last actions).
    * Merged into each POST body under `pageContext` so the assistant can answer
@@ -3211,6 +3234,39 @@ export function createAiChatWidget(
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
 
+  // The model pill (sgiant-platform#465), only when the host offers a choice.
+  // The choice is remembered per layout scope, like the panel's position, so
+  // the hub and the backoffice each keep their own.
+  const modelKey = layoutScope ? `${ns}:model:${layoutScope}` : null;
+  const firstModel = opts.models?.length
+    ? initialModel(opts.models, readItem(modelKey), opts.defaultModel)
+    : null;
+  const picker =
+    opts.models?.length && firstModel
+      ? createModelPicker({
+          options: opts.models,
+          selected: firstModel,
+          heading: L("modelPicker"),
+          ariaLabel: (model) => L("modelPickerAria", { model }),
+          onChange: (id) => {
+            writeItem(modelKey, id);
+            opts.onModelChange?.(id);
+          },
+        })
+      : null;
+  if (picker) {
+    picker.button.setAttribute("data-ai-target", WIDGET_TARGETS.model);
+    // Dismissed like the More menu: a click anywhere else in the panel, or
+    // Escape, closes it. Both listeners live on `panel`, so nothing leaks.
+    panel.addEventListener("click", (e) => {
+      if (picker.isOpen() && !picker.root.contains(e.target as Node))
+        picker.setOpen(false);
+    });
+    panel.addEventListener("keydown", (e) => {
+      if (picker.isOpen() && e.key === "Escape") picker.setOpen(false);
+    });
+  }
+
   // Session artifacts — media scraped or imported in THIS conversation, hidden
   // from the library until saved. A slim chip strip above the composer with a
   // per-item Save action (promotes via save_artifact_to_assets). Best-effort:
@@ -3417,9 +3473,9 @@ export function createAiChatWidget(
         void uploadFiles(files);
       }
     });
-    form.append(attachBtn, input, sendBtn, fileInput);
+    form.append(attachBtn, input, ...(picker ? [picker.root] : []), sendBtn, fileInput);
   } else {
-    form.append(input, sendBtn);
+    form.append(input, ...(picker ? [picker.root] : []), sendBtn);
   }
 
   // The chat lives in its own column so advanced view can lay a drivable app
@@ -4990,6 +5046,7 @@ export function createAiChatWidget(
         signal: alive.signal,
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
+          ...(picker ? { model: picker.value() } : {}),
           ...(ctxWithPanel ? { pageContext: ctxWithPanel } : {}),
           accountId: opts.getAccountScope?.() ?? opts.accountId ?? "",
           threadId,
