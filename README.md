@@ -240,6 +240,24 @@ against `models` on every mount: a model you stop offering is never sent again,
 the person gets `defaultModel` instead. Omit `models` and there is no pill and
 no `model` field. See `examples/models.html`.
 
+## In the page's language
+
+`labels` carries the words; `locale` carries how a figure is written.
+
+```ts
+createAiChatWidget({
+  // …
+  locale: i18n.language, // a BCP 47 tag: "tr", "en-GB"
+  labels: resolveWidgetLabels(t), // your translations of the widget's own chrome
+});
+```
+
+The numbers and times the widget writes itself follow `locale`: credits left, a
+turn's counts, "3 hours ago" in the conversation list. Omit it and they follow
+the browser, which is another language whenever someone reads a Turkish page in
+an English browser: "24,000" for 24.000, and "8/1/2026" for 1 August. A tag the
+engine refuses falls back to the browser's instead of throwing.
+
 ## Charts without React
 
 In-app hosts wire `renderDataWidget` (real `@sgiant/ui` charts). A standalone
