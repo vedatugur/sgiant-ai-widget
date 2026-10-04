@@ -161,6 +161,7 @@ import {
   parseLine,
   relBucket,
   relTime,
+  usableLocale,
 } from "./dom";
 import {
   hostDefinesPlatformTokens,
@@ -710,6 +711,14 @@ export interface AiChatWidgetOptions {
    *  its own t() via `resolveWidgetLabels(t)`. Any omitted key falls back to the
    *  English default in WIDGET_LABELS — the widget never hardcodes visible copy. */
   labels?: Partial<WidgetLabels>;
+  /** The language the page is in, as a BCP 47 tag ("tr", "en-GB"): the host's
+   *  own, e.g. `i18n.language`. The numbers and dates the widget writes itself
+   *  follow it: credits left, a turn's counts, "3 hours ago" in the
+   *  conversation list. Omit it and they follow the BROWSER, which is another
+   *  language whenever someone reads a Turkish page in an English browser:
+   *  "24,000" for 24.000 and "8/1/2026" for 1 August (sgiant-platform#573).
+   *  `labels` carries the words; this carries how a figure is written. */
+  locale?: string;
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
   signupUrl?: string;
@@ -1085,6 +1094,9 @@ export function createAiChatWidget(
   // Resolve a widget-chrome label: host-provided translation (opts.labels) →
   // English default (WIDGET_LABELS). `{token}` placeholders are filled from
   // params so runtime values (name, filename, error) interpolate in any language.
+  // How this page writes a figure (see `locale` on the options).
+  const locale = usableLocale(opts.locale);
+  const num = (n: number): string => n.toLocaleString(locale);
   const L = (
     key: keyof WidgetLabels,
     params?: Record<string, string | number>
@@ -2377,10 +2389,10 @@ export function createAiChatWidget(
   function usageBadge(inTok: number, outTok: number): HTMLElement {
     const cap = el("div", `${PREFIX}-usage`);
     cap.innerHTML =
-      `<span class="${PREFIX}-usage-pill">↑ ${inTok.toLocaleString()}</span>` +
-      `<span class="${PREFIX}-usage-pill">↓ ${outTok.toLocaleString()}</span>` +
+      `<span class="${PREFIX}-usage-pill">↑ ${num(inTok)}</span>` +
+      `<span class="${PREFIX}-usage-pill">↓ ${num(outTok)}</span>` +
       `<span class="${PREFIX}-usage-sep">·</span>` +
-      `<span>${(inTok + outTok).toLocaleString()} tokens</span>`;
+      `<span>${num(inTok + outTok)} tokens</span>`;
     return cap;
   }
 
@@ -3082,10 +3094,10 @@ export function createAiChatWidget(
         : 100;
     const remTxt =
       quotaRemaining !== null
-        ? L("meterTokensLeft", { count: quotaRemaining.toLocaleString() })
+        ? L("meterTokensLeft", { count: num(quotaRemaining) })
         : L("meterFreePreview");
     const usedTxt = L("meterUsedThisSession", {
-      count: sessionUsed.toLocaleString(),
+      count: num(sessionUsed),
     });
     meterEl.innerHTML = `<div class="${PREFIX}-meter-bar"><span style="transform:scaleX(${pct / 100})"></span></div><div class="${PREFIX}-meter-row"><span>${escapeHtml(remTxt)}</span><span>${escapeHtml(usedTxt)}</span></div>`;
   }
@@ -3117,7 +3129,7 @@ export function createAiChatWidget(
   let creditInit = false; // first value snaps; later changes animate
   let creditRaf = 0;
   function setCreditsText(n: number): void {
-    statusCreditsVal.textContent = Math.round(n).toLocaleString();
+    statusCreditsVal.textContent = num(Math.round(n));
   }
   function renderStatus(): void {
     if (!opts.getBalance) {
@@ -4289,7 +4301,7 @@ export function createAiChatWidget(
         }
         if (th.updatedAt) {
           const dt = el("span", `${PREFIX}-history-date`);
-          dt.textContent = relTime(th.updatedAt);
+          dt.textContent = relTime(th.updatedAt, locale);
           item.appendChild(dt);
         }
         // Shared star toggle — team-visible bookmark on the conversation.

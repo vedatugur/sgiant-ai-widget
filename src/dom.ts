@@ -132,20 +132,54 @@ export function relBucket(
   return "bucketOlder";
 }
 
-/** Short relative label, e.g. "3h ago", "2w ago" — falls back to a date. */
-export function relTime(iso: string): string {
+/**
+ * The language to write numbers and dates in: the host's, when it gave one
+ * the engine accepts. A tag it refuses (a typo, an empty string) must not
+ * blank the conversation list, so it falls back to the browser's instead of
+ * throwing from inside a render.
+ */
+export function usableLocale(locale: string | undefined): string | undefined {
+  if (!locale) return undefined;
+  try {
+    return Intl.NumberFormat.supportedLocalesOf(locale).length
+      ? locale
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Short relative label for the conversation list ("3h ago", "3 sa. önce"),
+ * falling back to a date past a month.
+ *
+ * IN THE PAGE'S LANGUAGE (sgiant-platform#573). This built "3h ago" by hand,
+ * so a Turkish conversation list read English, and its date fallback asked
+ * the BROWSER which language to use: a Turkish page in an English browser
+ * showed "8/1/2026", which a Turkish reader takes for 8 January.
+ */
+export function relTime(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
+  const language = usableLocale(locale);
   const diff = Date.now() - d.getTime();
   const min = 60_000;
   const hr = 3_600_000;
   const day = 86_400_000;
   const wk = 7 * day;
-  if (diff < hr) return `${Math.max(1, Math.floor(diff / min))}m ago`;
-  if (diff < day) return `${Math.floor(diff / hr)}h ago`;
-  if (diff < wk) return `${Math.floor(diff / day)}d ago`;
-  if (diff < 30 * day) return `${Math.floor(diff / wk)}w ago`;
-  return d.toLocaleDateString();
+  if (diff >= 30 * day) return d.toLocaleDateString(language);
+  const [n, unit]: [number, Intl.RelativeTimeFormatUnit] =
+    diff < hr
+      ? [Math.max(1, Math.floor(diff / min)), "minute"]
+      : diff < day
+        ? [Math.floor(diff / hr), "hour"]
+        : diff < wk
+          ? [Math.floor(diff / day), "day"]
+          : [Math.floor(diff / wk), "week"];
+  return new Intl.RelativeTimeFormat(language, {
+    numeric: "always",
+    style: "narrow",
+  }).format(-n, unit);
 }
 
 /** Hide raw markdown control marks from a streamed chunk so the user reads clean
