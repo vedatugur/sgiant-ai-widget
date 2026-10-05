@@ -11,13 +11,19 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: that label moves to a new Ubuntu on GitHub's
+    # schedule, and a publish job should change its OS when this file does.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write # provenance: npm records which workflow built the tarball
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # v6, not v7, on purpose. v7 stops exporting the placeholder
+      # NODE_AUTH_TOKEN that the .npmrc written here still refers to, which
+      # changes what npm sees at publish time — and the only way to test that is
+      # to publish. v6 runs on Node 24 and leaves the auth path as it was.
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
