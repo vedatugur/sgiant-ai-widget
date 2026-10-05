@@ -474,6 +474,12 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-quality-send{border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${PREFIX}-quality-send:disabled{opacity:.6;cursor:default}
 .${PREFIX}-quality-dismiss{border:1px solid var(--aiw-border);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
+/* The token step's "not now" (#620). Drawn like the quality prompt and for the
+   same reason: nothing has gone wrong, so it must not look like the error card. */
+.${PREFIX}-notice{align-self:stretch;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-2xl);padding:11px 12px;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-notice-text{font-size:var(--aiw-font-sm);font-weight:500;color:var(--aiw-text);line-height:1.45;overflow-wrap:anywhere}
+.${PREFIX}-notice-btn{margin-top:9px;border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-md);padding:7px 14px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
+.${PREFIX}-notice-btn:disabled{opacity:.6;cursor:default}
 /* Answered state: the card collapses to a single line of thanks. */
 .${PREFIX}-quality-done{font-size:var(--aiw-font-xs);color:var(--aiw-text-2);font-weight:500}
 .${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--aiw-surface)}

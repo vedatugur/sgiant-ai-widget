@@ -143,12 +143,14 @@ export {
 // of the published tarball — a distinction that only matters once the tarball
 // is public, which is the whole point of #306.
 export { readApplyRefusal, type ApplyRefusal } from "./apply-refusal";
+export { readTokenRefusal, type TokenRefusal } from "./token-refusal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";
 import { PREFIX } from "./prefix";
 import { createUiRenderers } from "./ui-render";
 import { createDecisionCards } from "./decision-cards";
+import { readTokenRefusal, type TokenRefusal } from "./token-refusal";
 import { createJobCards } from "./job-cards";
 // Exported so a host can fall back to it deliberately, and so the sgiant
 // phrasing in @sgiant/ai-apply can end every branch with the same floor.
@@ -388,7 +390,18 @@ export interface AiChatWidgetOptions {
   /** Bearer token (a Clerk session token). Use getToken for refresh. External
    *  sites send no token — they pass a public site key in `extraBody`. */
   token?: string;
-  /** Async token provider — called before each send (overrides `token`). */
+  /**
+   * Async token provider — called before each send (overrides `token`).
+   *
+   * REJECT WITH A SENTENCE when there is no token to give and nothing has gone
+   * wrong: anything that has a `userMessage` (see `TokenRefusal`; a plain
+   * object or an Error with that property is fine), and optionally an `action`
+   * with a `label` and an `onClick`. The window shows the sentence as it is,
+   * with the button under it, instead of an error: no "Try again", and the
+   * launcher is not marked offline. The question is not sent; when `onClick`
+   * resolves `true` it is sent then, once. Reject with anything else and it is
+   * a failure, shown as one, exactly as before.
+   */
   getToken?: () => string | Promise<string>;
   /** Send cookies (same-origin in-app embedding). Default false. */
   withCredentials?: boolean;
@@ -1136,6 +1149,9 @@ export function createAiChatWidget(
    *  threads stay free to receive a new message. Derived from
    *  `pendingThreads` by `syncBusy()` — never written directly elsewhere. */
   let busy = false;
+  // A token refusal's button has been pressed and its handler has not answered
+  // yet (#620). Nothing is sent meanwhile: the answer decides what is.
+  let tokenActionRunning = false;
   /**
    * Cross-thread stream fence. Every send() captures the view generation;
    * switching threads / starting a new chat bumps it. A stale turn keeps
@@ -1161,7 +1177,7 @@ export function createAiChatWidget(
    *  pending-set change). Function-declared so early code can reference it;
    *  it only runs after the composer exists. */
   function syncBusy(): void {
-    busy = isThreadPending(threadId);
+    busy = isThreadPending(threadId) || tokenActionRunning;
     sendBtn.disabled = busy;
     // The launcher's `working` state, from the real in-flight turn rather than
     // a separate flag that could drift from it (#305). Only while the panel is
@@ -4741,7 +4757,11 @@ export function createAiChatWidget(
 
   async function send(
     content: string,
-    fork?: { parentId?: string | null; regenerate?: boolean }
+    fork?: { parentId?: string | null; regenerate?: boolean },
+    /** The question a token refusal was holding (#620): already on screen and
+     *  in the history as the person's own, so it is sent without being drawn
+     *  again, with the attachments it had. */
+    held?: { atts: WidgetAtt[] }
   ): Promise<void> {
     // A regenerate re-answers an existing user turn — it carries no new user
     // message, so it must NOT push a user bubble to the DOM / history.
@@ -4756,14 +4776,14 @@ export function createAiChatWidget(
     syncBusy();
     if (!isRegen) lastUserContent = content;
     // Take + clear any staged attachments for THIS turn.
-    const atts = stagedAtts.splice(0);
+    const atts = held ? held.atts : stagedAtts.splice(0);
     renderStaged();
     // The conversation is starting — page shortcuts give way to the thread.
     suggestionsEl.style.display = "none";
     suggestionsEl.innerHTML = "";
     sendBtn.disabled = true;
     setRole("talk"); // each turn starts as the conversational copilot
-    if (!isRegen) {
+    if (!isRegen && !held) {
       addMsg(log, "user", content, atts.length ? atts : undefined);
       history.push({
         role: "user",
@@ -4828,6 +4848,8 @@ export function createAiChatWidget(
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
+    // The token step said "not now" (#620): nothing was sent, nothing failed.
+    let refused: TokenRefusal | null = null;
     // Stamped by the turn's `done` frame — the handle for rating the answer
     // just streamed, on surfaces where no canonical reload paints one (#299).
     let liveMessageId: string | undefined;
@@ -5009,7 +5031,17 @@ export function createAiChatWidget(
       }
     };
     try {
-      const token = opts.getToken ? await opts.getToken() : opts.token;
+      let token: string | undefined;
+      try {
+        token = opts.getToken ? await opts.getToken() : opts.token;
+      } catch (thrown) {
+        // Only the token step's own rejection is read for a sentence. Anything
+        // thrown later in the turn is a failure, whatever it carries.
+        refused = readTokenRefusal(thrown);
+        throw thrown;
+      }
+      // A token was given: whatever an earlier refusal said no longer holds.
+      clearTokenNotice();
       const baseCtx = opts.getContext ? await opts.getContext() : undefined;
       // In advanced view the controllable page is the FRAME, not the parent
       // shell — so the on-page targets (and the current path) come from the
@@ -5266,16 +5298,21 @@ export function createAiChatWidget(
         }
       }
     } catch (err) {
-      // TRANSPORT loss (QUIC/network drop, proxy hiccup) — distinct from a
-      // server-sent error frame: the api keeps running the turn server-side
-      // and persists the transcript at the end, so the reply is NOT lost,
-      // the browser just can't see the rest of the stream. Recover by
-      // polling the thread until the reply lands (see below).
-      transportLost = true;
-      // Nothing was heard back at all — the one case we can call unreachable
-      // without guessing (#346).
-      noteApiResult("unreachable");
-      failure = (err as Error).message || "Network error.";
+      // A refusal is none of what follows: no request was made, so there is
+      // no stream to have lost and nothing learned about whether the api can
+      // be reached.
+      if (!refused) {
+        // TRANSPORT loss (QUIC/network drop, proxy hiccup) — distinct from a
+        // server-sent error frame: the api keeps running the turn server-side
+        // and persists the transcript at the end, so the reply is NOT lost,
+        // the browser just can't see the rest of the stream. Recover by
+        // polling the thread until the reply lands (see below).
+        transportLost = true;
+        // Nothing was heard back at all — the one case we can call unreachable
+        // without guessing (#346).
+        noteApiResult("unreachable");
+        failure = (err as Error).message || "Network error.";
+      }
     } finally {
       pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
       syncBusy();
@@ -5291,6 +5328,14 @@ export function createAiChatWidget(
         inflight = null;
         saveState();
       }
+    }
+
+    // "Not now" from the token step (#620). The question is on screen as the
+    // person's own and was never sent; say why, and hold it for the button.
+    if (refused) {
+      typing.remove();
+      if (live()) showTokenNotice(refused, { content, fork, atts });
+      return;
     }
 
     // Stale turn finished in the background (the user switched away while it
@@ -5746,6 +5791,97 @@ export function createAiChatWidget(
       }
     });
     wrap.appendChild(btn);
+    log.appendChild(wrap);
+    scrollDown(true);
+  }
+
+  /**
+   * The token step's "not now" (#620), as the host worded it.
+   *
+   * NOT the error card, in any respect: no "hit a snag" headline over the
+   * sentence, no "Try again" (asking again is refused again), no "Report
+   * issue" (nothing broke), and the api is never recorded as unreachable for
+   * it, so the launcher keeps saying the assistant is there. Which it is.
+   *
+   * ONE at a time. A refusal can follow a refusal: the person connects, the
+   * token step is asked again and now says they have no access. The second
+   * sentence replaces the first; two stacked notices would be two answers to
+   * one question.
+   *
+   * The conversation is a polite live region, so the sentence is read out when
+   * it lands, once, without `role="alert"` and without moving focus. The
+   * button is a real button named by the host's label.
+   */
+  let tokenNotice: HTMLElement | null = null;
+  function clearTokenNotice(): void {
+    if (!tokenNotice) return;
+    // Focus on a button that is about to vanish would fall to the page.
+    const hadFocus = tokenNotice.contains(document.activeElement);
+    tokenNotice.remove();
+    tokenNotice = null;
+    if (hadFocus) input.focus();
+  }
+  function showTokenNotice(
+    refusal: TokenRefusal,
+    held: {
+      content: string;
+      fork?: { parentId?: string | null; regenerate?: boolean };
+      atts: WidgetAtt[];
+    }
+  ): void {
+    clearTokenNotice();
+    const wrap = el("div", `${PREFIX}-notice`);
+    const txt = el("div", `${PREFIX}-notice-text`);
+    txt.textContent = refusal.userMessage;
+    wrap.append(txt);
+    const action = refusal.action;
+    if (action) {
+      const btn = el("button", `${PREFIX}-notice-btn`) as HTMLButtonElement;
+      btn.type = "button";
+      btn.textContent = action.label;
+      btn.addEventListener("click", () => {
+        if (tokenActionRunning) return;
+        // FIRST, and synchronously: the host's handler opens a window on its
+        // first line, and a browser only allows that inside the click itself.
+        // Nothing may be awaited, or even rearranged, ahead of this call.
+        let answer: unknown;
+        try {
+          answer = action.onClick();
+        } catch {
+          answer = false;
+        }
+        tokenActionRunning = true;
+        btn.disabled = true;
+        btn.setAttribute("aria-busy", "true");
+        syncBusy();
+        // Only `true` is "done". A handler that resolves nothing after a
+        // blocked popup must not be read as the person having connected.
+        void Promise.resolve(answer)
+          .then(
+            (v) => v === true,
+            () => false
+          )
+          .then((done) => {
+            tokenActionRunning = false;
+            syncBusy();
+            // The person moved to another conversation meanwhile: this notice
+            // is gone with the view it was in, and so is its question.
+            if (tokenNotice !== wrap || !wrap.isConnected) return;
+            if (!done) {
+              btn.disabled = false;
+              btn.removeAttribute("aria-busy");
+              return;
+            }
+            clearTokenNotice();
+            input.focus();
+            // ONE re-ask per click. If the token step refuses again, `send`
+            // draws that refusal as a fresh notice and stops; there is no loop.
+            if (!busy) void send(held.content, held.fork, { atts: held.atts });
+          });
+      });
+      wrap.append(btn);
+    }
+    tokenNotice = wrap;
     log.appendChild(wrap);
     scrollDown(true);
   }

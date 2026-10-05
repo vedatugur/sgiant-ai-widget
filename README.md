@@ -149,6 +149,55 @@ rest of the same selection still uploads — one bad file does not lose the batc
 
 See `examples/uploads.html`.
 
+## When there is no token to give
+
+`getToken` is asked before every send. Sometimes the honest answer is that
+there is no token and nothing has gone wrong: this person has not connected
+their account yet, or has no access to this one. Say so by rejecting with
+something that has a `userMessage`, and optionally one button:
+
+```js
+createAiChatWidget({
+  endpoint: "/chat",
+  getToken: async () => {
+    const res = await fetch("/my-site/token");
+    if (res.status === 409)
+      // A plain object is enough; so is an Error with these set on it.
+      throw {
+        userMessage: t("connectToUse"),          // shown as it is
+        action: {
+          label: t("connect"),
+          // Called inside the click, so a window opened here is not blocked.
+          // Resolve true once a token can be had; false if they backed out.
+          onClick: () => openConnectWindow(),
+        },
+      };
+    if (!res.ok) throw new Error(`token ${res.status}`); // a real failure
+    return (await res.json()).token;
+  },
+});
+```
+
+The window shows the sentence plainly, with the button under it. It is not the
+error card: there is no "hit a snag" headline, no "Try again", and the launcher
+is not marked offline. The question is not sent. It stays on screen as the
+person's own, and when `onClick` resolves `true` the widget asks `getToken`
+again and sends it, once; they do not retype it. Only `true` counts: resolve
+anything else, or reject, and the notice stays with its button working again.
+While `onClick` is running the button is disabled and nothing is sent.
+
+There is one notice at a time. If the second ask is refused too (connected, but
+no access), that sentence replaces the first. Leave `action` out and only the
+sentence shows.
+
+The words are yours, in the page's language; the widget adds none. The button
+is not offered to the assistant as a control it can press.
+
+Reject with anything that has no `userMessage` and it is a failure, shown as
+one, exactly as before. A notice belongs to a send: a refused token during a
+file upload shows nothing, as a failed upload always has. A widget older than
+1.20.0 does not know this shape and shows its ordinary error card for it.
+
 ## Theming
 
 The entire stylesheet reads from `--aiw-*` CSS custom properties set on the
