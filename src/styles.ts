@@ -479,8 +479,22 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--aiw-surface)}
 .${PREFIX}-suggestion{border:1px solid color-mix(in srgb,var(--aiw-accent) 20%,transparent);background:color-mix(in srgb,var(--aiw-accent) 5%,transparent);color:var(--aiw-accent-ink);border-radius:var(--aiw-radius-pill);padding:6px 11px;font-size:var(--aiw-font-xs);font-weight:500;line-height:1.2;cursor:pointer;transition:background .15s ease,border-color .15s ease;text-align:left}
 .${PREFIX}-suggestion:hover{background:color-mix(in srgb,var(--aiw-accent) 10%,transparent);border-color:color-mix(in srgb,var(--aiw-accent) 40%,transparent)}
+/* THE COMPOSER ROW (sgiant-platform#617). Four things can sit in it — attach,
+   the text field, the model pill, Send — and exactly one order of giving way:
+   the field takes the slack and shrinks first, down to a floor; then the pill
+   shrinks and cuts its own label; attach and Send are never touched.
+
+   The field's min-width is the declaration that was missing. A flex item's
+   automatic minimum is its content size, and for an <input> that is its
+   built-in 20 characters (180px here) — so flex:1 alone made the one item
+   meant to give way the one that could not, the row overflowed, and the
+   panel's overflow:hidden cut Send off at the window's edge.
+
+   112px, border to border, is the widest floor that still shows "Sonnet 5.5"
+   whole at the default 368px with the attach button present (116.8px is what
+   is left for the field there). Raise it and that name is the first to be cut. */
 .${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
-.${PREFIX}-input{flex:1;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
+.${PREFIX}-input{flex:1;box-sizing:border-box;min-width:112px;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
 .${PREFIX}-meter{padding:7px 12px 0;background:var(--aiw-surface)}
 .${PREFIX}-meter-bar{height:4px;border-radius:var(--aiw-radius-pill);background:var(--aiw-surface-2);overflow:hidden}
 .${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:var(--aiw-radius-pill);background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}
@@ -548,7 +562,7 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-lead-ok{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-accent-ink)}
 .${PREFIX}-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
-.${PREFIX}-send{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:0 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
+.${PREFIX}-send{flex:0 0 auto;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:0 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}
 .${PREFIX}-attach{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);border-radius:var(--aiw-radius-lg);width:38px;line-height:1;cursor:pointer;color:var(--aiw-text-2);transition:border-color .12s,color .12s,background .12s}
 .${PREFIX}-attach:hover{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
@@ -556,9 +570,14 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 /* The model pill (sgiant-platform#465). It sits in the composer row, so it
    wears the attach button's frame rather than the header's chrome. Its menu is
    the More menu's surface; the rules that turn it upward live right after the
-   -menu rules below, because they must win against them. */
-.${PREFIX}-model{position:relative;flex:0 0 auto;display:flex}
-.${PREFIX}-model-btn{display:inline-flex;align-items:center;gap:4px;max-width:140px;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:0 8px 0 11px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;transition:border-color .12s,color .12s}
+   -menu rules below, because they must win against them.
+
+   It may SHRINK (#617): the name is the host's and can be any length, so when
+   the text field is down to its floor the pill gives up width and its label
+   ends in an ellipsis — the full name stays in the title and the menu. The
+   48px floor is the chevron and enough of a name to still read as a control. */
+.${PREFIX}-model{position:relative;flex:0 1 auto;min-width:48px;display:flex}
+.${PREFIX}-model-btn{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:140px;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:0 8px 0 11px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;transition:border-color .12s,color .12s}
 .${PREFIX}-model-btn:hover,.${PREFIX}-model-btn[aria-expanded="true"]{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .${PREFIX}-model-chev{flex:0 0 auto;display:flex;opacity:.7}
