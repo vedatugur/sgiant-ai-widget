@@ -3,6 +3,10 @@
 # Tag-gated rather than push-to-main: a version number is a deliberate act, and
 # npm will not let you re-publish over one. `npm ci` + a clean build means the
 # artefact comes from the tag and not from whatever was on someone's laptop.
+#
+# The tag has to be on main. The job refuses, before it installs anything, a
+# tag whose commit main does not contain; and before it publishes, a tag whose
+# name is not the version in package.json.
 name: release
 
 on:
@@ -19,6 +23,30 @@ jobs:
       id-token: write # provenance: npm records which workflow built the tarball
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All of history, not the default single commit: the next step asks
+          # whether this commit is on main, and one commit cannot answer that.
+          fetch-depth: 0
+
+      # THE TAG MUST BE ON MAIN.
+      #
+      # Everything below checks the tag's NAME against package.json and nothing
+      # about WHERE the tag is. A v* tag on a branch, or on a commit that was
+      # never merged, would build, pass and publish code that main does not
+      # have, under a number that can never be used again. Here, before
+      # anything is installed or built, so a misplaced tag costs seconds and
+      # spends nothing: delete it, tag main, push again.
+      #
+      # main is fetched explicitly rather than trusted from the checkout, so the
+      # answer is about main as it is now.
+      - name: tagged commit is on main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not on main"
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME is $(git rev-parse --short HEAD), on main"
       # v6, not v7, on purpose. v7 stops exporting the placeholder
       # NODE_AUTH_TOKEN that the .npmrc written here still refers to, which
       # changes what npm sees at publish time — and the only way to test that is
