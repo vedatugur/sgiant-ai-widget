@@ -132,6 +132,35 @@ production, and these three pieces are the fix:
 
 Skip all three and nothing changes: cards work exactly as they always have.
 
+### When an apply is refused
+
+`onApplyProposal` runs on your session, so only you know why a write did not go
+through. Say so by rejecting with something that has a `userMessage`:
+
+```ts
+onApplyProposal: async (name, args) => {
+  const res = await fetch(endpointFor(name), { method: "POST", body: JSON.stringify(args) });
+  if (res.status === 409)
+    // A sentence for the person, in the page's language. `retry: false`:
+    // pressing again cannot work until they connect the site.
+    throw Object.assign(new Error("site not connected"), {
+      userMessage: t("errors.siteNotConnected"),
+      retry: false,
+    });
+  if (!res.ok) throw new Error(`apply failed: ${res.status}`);
+  return t("applied");
+},
+```
+
+The card prints `userMessage` under its buttons and nothing else from the
+rejection: an `Error.message` is written for a log and is never shown. With
+`retry: false` the button keeps its name; otherwise it becomes "Try again".
+Reject without a `userMessage` and the card says the `applyFailed` label
+("That did not go through."), which you translate with the rest of `labels`.
+
+Before 1.19.0 a failed apply showed no reason at all: the button changed to
+"Try again", and for a refusal that could never succeed it stayed that way.
+
 Two directives have a host requirement rather than a field one, for the same
 reason a confirm gate does: `[[form:…]]` and a UI card's action buttons only
 render when the host passes `onWidgetAction` (or `onLead`). A form with nowhere

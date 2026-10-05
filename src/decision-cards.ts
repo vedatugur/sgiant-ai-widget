@@ -1,6 +1,7 @@
 import { el, escapeHtml } from "./dom";
 import { PREFIX } from "./prefix";
 import { genericProposalSummary } from "./proposal-summary";
+import { readApplyRefusal } from "./apply-refusal";
 import { isHttpUrl } from "./safe-url";
 import {
   type ProposalField,
@@ -446,6 +447,11 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     editErr.textContent = ctx.L("requiredFields");
     editErr.style.display = "none";
     if (edits.length) wrap.appendChild(editErr);
+    // Why an apply did not go through, under the buttons. Empty and hidden
+    // until one fails; see ./apply-refusal for whose words these are.
+    const failNote = el("div", `${PREFIX}-proposal-err`);
+    failNote.setAttribute("role", "status");
+    failNote.style.display = "none";
     const row = el("div", `${PREFIX}-confirm-row`);
     const apply = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     apply.type = "button";
@@ -506,6 +512,8 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
         return;
       }
       editErr.style.display = "none";
+      // A new attempt: the last one's reason is no longer the news.
+      failNote.style.display = "none";
       apply.disabled = true;
       apply.textContent = ctx.L("applying");
       try {
@@ -570,13 +578,28 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
           open.textContent = ctx.L("openReport");
           ok.appendChild(open);
         }
-      } catch {
+      } catch (thrown) {
+        // SAY WHY, in the host's words when it gave any, and in ours when it
+        // did not: a button that only renames itself reads as a dead button.
+        const refusal = readApplyRefusal(thrown);
+        failNote.textContent = refusal?.userMessage ?? ctx.L("applyFailed");
+        failNote.style.display = "";
         apply.disabled = false;
-        apply.textContent = ctx.L("tryAgain");
+        // "Try again" is a promise that trying again can work. The host may
+        // have just said it cannot, until something else changes; then the
+        // button keeps its own name and the sentence above says what to do.
+        apply.textContent =
+          refusal && !refusal.retry ? ctx.L("apply") : ctx.L("tryAgain");
+        // The sentence is new height UNDER the button that was just pressed.
+        // On the last card of a conversation that puts it below the fold, and
+        // a reason nobody sees is the old card again. "nearest" moves the log
+        // only as far as it must, and not at all when the line is in view.
+        failNote.scrollIntoView?.({ block: "nearest" });
       }
     });
     row.append(apply, cancel);
     wrap.appendChild(row);
+    wrap.appendChild(failNote);
     ctx.log.appendChild(wrap);
     ctx.scrollDown(true);
     // AUTO-APPLY — four conditions, all required, and each one is a decision.

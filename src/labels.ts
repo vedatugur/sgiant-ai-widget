@@ -165,6 +165,10 @@ export const WIDGET_LABELS = {
    *  link but no name for it (#503). */
   openResult: "Open",
   tryAgain: "Try again",
+  /** Under a card's buttons when an apply failed and the host gave no reason
+   *  of its own (sgiant-platform#581). A host that knows why says so itself:
+   *  see `ApplyRefusal`. */
+  applyFailed: "That did not go through.",
   // History panel
   close: "Close",
   loading: "Loading…",

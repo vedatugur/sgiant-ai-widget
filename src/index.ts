@@ -142,6 +142,7 @@ export {
 // `./sgiant` subpath of this package, which got it out of the CORE but not out
 // of the published tarball — a distinction that only matters once the tarball
 // is public, which is the whole point of #306.
+export { readApplyRefusal, type ApplyRefusal } from "./apply-refusal";
 import type { PageContext } from "./host-actions";
 import { renderMarkdown } from "./markdown";
 import { createMessageChrome } from "./message-chrome";
@@ -765,6 +766,18 @@ export interface AiChatWidgetOptions {
    * one would produce a link that 404s in two of them.
    */
   reportHref?: (reportId: string) => string;
+  /**
+   * Do the write the person just approved. Resolve with a sentence (or an
+   * object carrying one) and the card shows it.
+   *
+   * REJECT WITH A REASON when the write is refused: anything that has a
+   * `userMessage` (see `ApplyRefusal`; an Error with that property is fine).
+   * The card prints that sentence under its buttons, so write it for the
+   * person, in the page's language. Add `retry: false` when pressing again
+   * cannot work as things stand, and the button keeps its name instead of
+   * becoming "Try again". Reject with anything else and the card says only the
+   * `applyFailed` label: nothing else on a rejection is ever shown.
+   */
   onApplyProposal?: (
     name: string,
     args: Record<string, unknown>,
