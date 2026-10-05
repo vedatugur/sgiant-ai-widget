@@ -190,6 +190,10 @@ There is one notice at a time. If the second ask is refused too (connected, but
 no access), that sentence replaces the first. Leave `action` out and only the
 sentence shows.
 
+One question is held, the latest. If the person asks a second question while
+the notice is up, that one replaces the first as the held question; the first
+stays on screen as theirs and is not sent when they connect.
+
 The words are yours, in the page's language; the widget adds none. The button
 is not offered to the assistant as a control it can press.
 
