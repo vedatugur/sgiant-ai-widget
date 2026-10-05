@@ -1,11 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { widgetStyles } from "./aiw-source.ts";
+import { SKIP_WITHOUT_CHROME, withBrowser } from "./aiw-browser.ts";
 
 /**
  * THE COMPOSER ROW FITS THE WINDOW, WHATEVER THE HOST PUTS IN IT
@@ -88,9 +84,6 @@ test("the model menu hangs from the row, so it cannot start before the window", 
 
 // ── Measured ───────────────────────────────────────────────────────────────
 
-const CHROME = process.env.AIW_CHROME;
-const BUNDLE = join(import.meta.dirname, "..", "dist", "sgiant-ai-widget.global.js");
-
 /** What the button says: the widget's own English, and the hub's Turkish,
  *  which is 15px wider and is what a real host sends. */
 const SENDS = ["Send", "Gönder"];
@@ -137,7 +130,6 @@ const MEASURE = async (o: {
   expanded: boolean;
   send?: string;
 }): Promise<Measured> => {
-  localStorage.clear();
   const w = (globalThis as any).SgiantAiWidget.createAiChatWidget({
     endpoint: "/nowhere",
     title: "Aria",
@@ -183,104 +175,22 @@ const MEASURE = async (o: {
   };
 };
 
-/** A Chrome, driven over its own debugging socket: no dependency to install. */
-async function withPage(
-  chrome: string,
-  fn: (page: {
-    measure(viewport: readonly [number, number], o: Parameters<typeof MEASURE>[0]): Promise<Measured>;
-  }) => Promise<void>
-): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "aiw-composer-"));
-  const harness = join(dir, "harness.html");
-  writeFileSync(
-    harness,
-    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body><script src="${pathToFileURL(BUNDLE)}"></script>`
-  );
-  const proc = spawn(
-    chrome,
-    ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
-    { stdio: ["ignore", "ignore", "pipe"] }
-  );
-  try {
-    const wsUrl = await new Promise<string>((resolve, reject) => {
-      let err = "";
-      proc.stderr.on("data", (d) => {
-        err += d;
-        const m = err.match(/DevTools listening on (ws:\/\/\S+)/);
-        if (m) resolve(m[1]!);
-      });
-      proc.on("exit", () => reject(new Error(`Chrome exited early: ${err}`)));
-      setTimeout(() => reject(new Error(`Chrome never listened: ${err}`)), 20_000);
-    });
-    const ws = new WebSocket(wsUrl);
-    await new Promise((resolve, reject) => {
-      ws.onopen = resolve;
-      ws.onerror = () => reject(new Error("could not reach Chrome"));
-    });
-    let seq = 0;
-    const waiting = new Map<number, (m: any) => void>();
-    ws.onmessage = (e) => {
-      const m = JSON.parse(String(e.data));
-      if (m.id && waiting.has(m.id)) {
-        waiting.get(m.id)!(m);
-        waiting.delete(m.id);
-      }
-    };
-    const send = (method: string, params: object = {}, sessionId?: string) =>
-      new Promise<any>((resolve, reject) => {
-        const id = ++seq;
-        waiting.set(id, (m) =>
-          m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result)
-        );
-        ws.send(JSON.stringify({ id, method, params, sessionId }));
-      });
-    const { targetId } = await send("Target.createTarget", { url: "about:blank" });
-    const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
-    const evaluate = async (expression: string): Promise<any> => {
-      const r = await send(
-        "Runtime.evaluate",
-        { expression, awaitPromise: true, returnByValue: true },
-        sessionId
-      );
-      if (r.exceptionDetails)
-        throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
-      return r.result.value;
-    };
-    await fn({
-      async measure(viewport, o) {
-        await send(
-          "Emulation.setDeviceMetricsOverride",
-          { width: viewport[0], height: viewport[1], deviceScaleFactor: 1, mobile: false },
-          sessionId
-        );
-        // A fresh document per case, so no case inherits another's widget.
-        await send("Page.navigate", { url: `${pathToFileURL(harness)}?${++seq}` }, sessionId);
-        for (let i = 0; ; i++) {
-          const ready = await evaluate(
-            "document.readyState === 'complete' && typeof SgiantAiWidget"
-          ).catch(() => false);
-          if (ready === "object") break;
-          assert.ok(i < 100, "the bundle never loaded in the page");
-          await new Promise((r) => setTimeout(r, 50));
-        }
-        return evaluate(`(${MEASURE})(${JSON.stringify(o)})`);
-      },
-    });
-    ws.close();
-  } finally {
-    proc.kill();
-    await new Promise((r) => (proc.exitCode === null ? proc.once("exit", r) : r(null)));
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
-  }
-}
-
 test(
   "measured: nothing in the composer row is past the window's edge",
-  { skip: CHROME ? false : "set AIW_CHROME=<path to Chrome> to measure in a browser" },
+  { skip: SKIP_WITHOUT_CHROME },
   async () => {
     const failures: string[] = [];
     const lines: string[] = [];
-    await withPage(CHROME!, async (page) => {
+    await withBrowser(async (browser) => {
+      const page = {
+        async measure(
+          viewport: readonly [number, number],
+          o: Parameters<typeof MEASURE>[0]
+        ): Promise<Measured> {
+          await browser.open(viewport);
+          return browser.evaluate<Measured>(`(${MEASURE})(${JSON.stringify(o)})`);
+        },
+      };
       for (const win of WINDOWS) {
         for (const attach of [false, true]) {
           for (const send of SENDS) {
