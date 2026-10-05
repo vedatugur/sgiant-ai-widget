@@ -7,6 +7,11 @@
 # The tag has to be on main. The job refuses, before it installs anything, a
 # tag whose commit main does not contain; and before it publishes, a tag whose
 # name is not the version in package.json.
+#
+# "On main" here means in main's history. A commit that reached main through a
+# real merge commit passes, because it is in that history. This repository
+# squashes, so it does not arise; if it ever takes real merges, tighten the
+# step to main's first-parent line.
 name: release
 
 on:
