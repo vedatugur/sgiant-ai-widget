@@ -42,7 +42,7 @@ function rule(selector: string): string {
 
 /** The text field never gets narrower than this, border to border; the pill
  *  gives way first. */
-const INPUT_FLOOR = 112;
+const INPUT_FLOOR = 96;
 
 test("the text field is allowed to shrink, down to a floor it keeps", () => {
   const input = rule("input");
@@ -75,22 +75,41 @@ test("the pill gives way before the text field does", () => {
   assert.match(rule("send"), /(^|;)flex:0 0 auto(;|$)/);
 });
 
+test("the model menu hangs from the row, so it cannot start before the window", () => {
+  // Found by QA on the first version of this fix: hung from the pill, a 266px
+  // menu began 30 to 46px left of a 320px window once the pill had moved left.
+  // The row spans the panel; the pill does not.
+  assert.match(rule("form"), /(^|;)position:relative(;|$)/);
+  assert.doesNotMatch(rule("model"), /position:relative/, "the menu is hung from the pill again");
+  const menu = widgetStyles.match(/\n\.\$\{PREFIX\}-menu\.\$\{PREFIX\}-model-menu\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(menu, /(^|;)max-width:calc\(100% - 20px\)(;|$)/, "the menu is not capped at the row's width");
+  assert.match(menu, /(^|;)right:10px(;|$)/);
+});
+
 // ── Measured ───────────────────────────────────────────────────────────────
 
 const CHROME = process.env.AIW_CHROME;
 const BUNDLE = join(import.meta.dirname, "..", "dist", "sgiant-ai-widget.global.js");
 
+/** What the button says: the widget's own English, and the hub's Turkish,
+ *  which is 15px wider and is what a real host sends. */
+const SENDS = ["Send", "Gönder"];
+
 /** The names the api offers today, and one longer than any of them. */
 const REAL = ["Haiku 4.5", "Sonnet 5.5", "Opus 5.5", "Fable 5.1"];
 const LONG = "Example Vendor Extra Large Preview 2026";
 
-/** The three widths the panel can be: its default, the narrowest it is ever
- *  allowed (a 320px phone, and the advanced chat column's own clamp), and
- *  expanded. Viewport in, panel width out. */
+/** The widths the panel can be: its default, an ordinary phone, the two
+ *  narrower ones where the menu used to leave the window, the narrowest it is
+ *  ever allowed (a 320px phone, and the advanced chat column's own clamp), and
+ *  expanded. Viewport in, panel width out. `whole`: a name the api really
+ *  offers is shown uncut there; below 360px it may end in an ellipsis. */
 const WINDOWS = [
-  { name: "default", viewport: [1280, 800], expanded: false, panel: 368 },
-  { name: "narrowest", viewport: [320, 640], expanded: false, panel: 320 },
-  { name: "expanded", viewport: [1280, 800], expanded: true, panel: 760 },
+  { name: "default", viewport: [1280, 800], expanded: false, panel: 368, whole: true },
+  { name: "phone", viewport: [360, 740], expanded: false, panel: 360, whole: true },
+  { name: "phone", viewport: [340, 700], expanded: false, panel: 340, whole: false },
+  { name: "narrowest", viewport: [320, 640], expanded: false, panel: 320, whole: false },
+  { name: "expanded", viewport: [1280, 800], expanded: true, panel: 760, whole: true },
 ] as const;
 
 interface Box {
@@ -106,6 +125,9 @@ interface Measured {
   pill: Box;
   attach: Box | null;
   labelCut: boolean;
+  /** The open menu, and whether the chosen name is shown whole inside it. */
+  menu: Box;
+  menuNameCut: boolean;
 }
 
 /** Runs in the page. Mounts the widget and measures the composer row. */
@@ -138,16 +160,26 @@ const MEASURE = async (o: {
   const pill = q("widget-model")!;
   const name = pill.firstElementChild as HTMLElement;
   const attach = q("widget-attach");
+  const row = {
+    input: box(input),
+    send: box(form.querySelector('button[type="submit"]')!),
+    pill: box(pill),
+    labelCut: name.scrollWidth > name.clientWidth,
+  };
+  // Then open the menu, the way a person would, and measure that too.
+  pill.click();
+  await new Promise((r) => setTimeout(r, 250));
+  const menu = form.querySelector('[role="menu"]')!;
+  const chosen = menu.querySelector('[aria-checked="true"] span span') as HTMLElement;
   return {
+    ...row,
+    menu: box(menu),
+    menuNameCut: chosen.scrollWidth > chosen.clientWidth,
     panel: box(form.parentElement!.closest('[class*="-panel"]')!),
     rowRight:
       form.getBoundingClientRect().right -
       parseFloat(getComputedStyle(form).paddingRight),
-    input: box(input),
-    send: box(form.querySelector('button[type="submit"]')!),
-    pill: box(pill),
     attach: attach ? box(attach) : null,
-    labelCut: name.scrollWidth > name.clientWidth,
   };
 };
 
@@ -251,44 +283,55 @@ test(
     await withPage(CHROME!, async (page) => {
       for (const win of WINDOWS) {
         for (const attach of [false, true]) {
-          for (const label of [...REAL, LONG]) {
-            const m = await page.measure(win.viewport, {
-              label,
-              attach,
-              expanded: win.expanded,
-            });
-            const where = `${win.name} ${m.panel.width}px, ${attach ? "with" : "no"} attach, "${label}"`;
-            lines.push(
-              `${where}: field ${m.input.width.toFixed(1)}, pill ${m.pill.width.toFixed(1)}${m.labelCut ? " (cut)" : ""}, send ends ${(m.panel.right - m.send.right).toFixed(1)} inside`
-            );
-            const check = (ok: boolean, what: string) => {
-              if (!ok) failures.push(`${where}: ${what}`);
-            };
-            check(Math.abs(m.panel.width - win.panel) < 0.5, `the window is ${m.panel.width}px, not ${win.panel}px`);
-            // The row's own content edge, which is stricter than the window's.
-            check(m.send.right <= m.rowRight + 0.5, `Send ends ${(m.send.right - m.rowRight).toFixed(1)}px past the row (${(m.send.right - m.panel.right).toFixed(1)}px past the window)`);
-            check(m.pill.right <= m.send.left + 0.5, "the pill runs under Send");
-            check(m.input.width >= INPUT_FLOOR - 0.5, `the text field is ${m.input.width.toFixed(1)}px wide`);
-            check(m.send.width >= 40, `Send is ${m.send.width.toFixed(1)}px wide`);
-            if (m.attach) check(Math.abs(m.attach.width - 38) < 0.5, `the attach button is ${m.attach.width.toFixed(1)}px wide`);
-            // A name the api really offers is shown whole wherever the window
-            // is at least its default width; only a longer one may be cut.
-            if (label !== LONG && win.name !== "narrowest")
-              check(!m.labelCut, "the model's name is cut short");
-            if (label === LONG) check(m.labelCut, "a long name pushed the row instead of being cut");
+          for (const send of SENDS) {
+            for (const label of [...REAL, LONG]) {
+              const m = await page.measure(win.viewport, {
+                label,
+                attach,
+                expanded: win.expanded,
+                send,
+              });
+              const where = `${win.name} ${m.panel.width}px, ${attach ? "with" : "no"} attach, "${send}", "${label}"`;
+              lines.push(
+                `${where}: field ${m.input.width.toFixed(1)}, pill ${m.pill.width.toFixed(1)}${m.labelCut ? " (cut)" : ""}, send ends ${(m.panel.right - m.send.right).toFixed(1)} inside, menu ${(m.menu.left - m.panel.left).toFixed(1)} to ${(m.panel.right - m.menu.right).toFixed(1)} inside`
+              );
+              const check = (ok: boolean, what: string) => {
+                if (!ok) failures.push(`${where}: ${what}`);
+              };
+              check(Math.abs(m.panel.width - win.panel) < 0.5, `the window is ${m.panel.width}px, not ${win.panel}px`);
+              // The row's own content edge, which is stricter than the window's.
+              check(m.send.right <= m.rowRight + 0.5, `Send ends ${(m.send.right - m.rowRight).toFixed(1)}px past the row (${(m.send.right - m.panel.right).toFixed(1)}px past the window)`);
+              check(m.pill.right <= m.send.left + 0.5, "the pill runs under Send");
+              check(m.input.width >= INPUT_FLOOR - 0.5, `the text field is ${m.input.width.toFixed(1)}px wide`);
+              check(m.send.width >= 40, `Send is ${m.send.width.toFixed(1)}px wide`);
+              if (m.attach) check(Math.abs(m.attach.width - 38) < 0.5, `the attach button is ${m.attach.width.toFixed(1)}px wide`);
+              if (label !== LONG && win.whole) check(!m.labelCut, "the model's name is cut short");
+              if (label === LONG) check(m.labelCut, "a long name pushed the row instead of being cut");
+              // The menu is where a cut name is read in full, so it is held to
+              // more than the pill: wholly inside the window, name uncut.
+              check(m.menu.left >= m.panel.left - 0.5, `the menu starts ${(m.panel.left - m.menu.left).toFixed(1)}px before the window`);
+              check(m.menu.right <= m.panel.right + 0.5, `the menu ends ${(m.menu.right - m.panel.right).toFixed(1)}px past the window`);
+              check(!m.menuNameCut, "the name is cut in the menu too, so it is nowhere in full");
+            }
           }
         }
       }
-      // A longer word on the button than English "Send".
-      const tr = await page.measure([1280, 800], {
+      // THE RULE AT THE VERY BOTTOM. At 320px with attach, the fixed ends and
+      // the two floors leave Send 94px. A label wider than that is the one
+      // thing this row does not absorb, and this is what it does then: Send
+      // runs past the row's padding. Recorded rather than asserted away, so a
+      // change to it is a decision and not a surprise.
+      const wide = await page.measure([320, 640], {
         label: "Sonnet 5.5",
         attach: true,
         expanded: false,
         send: "Gönderiliyor",
       });
-      lines.push(`default, with attach, "Sonnet 5.5", Send reads "Gönderiliyor": field ${tr.input.width.toFixed(1)}, pill ${tr.pill.width.toFixed(1)}`);
-      if (tr.send.right > tr.rowRight + 0.5) failures.push("a longer Send label is past the row");
-      if (tr.input.width < INPUT_FLOOR - 0.5) failures.push(`a longer Send label starves the field (${tr.input.width.toFixed(1)}px)`);
+      lines.push(
+        `narrowest 320px, with attach, a ${wide.send.width.toFixed(1)}px Send ("Gönderiliyor"): field ${wide.input.width.toFixed(1)}, pill ${wide.pill.width.toFixed(1)}, send ends ${(wide.panel.right - wide.send.right).toFixed(1)} inside the window`
+      );
+      if (wide.send.width <= 94) failures.push("the wide label is not wider than 94px: pick a wider one");
+      if (wide.input.width < INPUT_FLOOR - 0.5) failures.push("a wide Send label took the field below its floor");
     });
     console.log(lines.join("\n"));
     assert.deepEqual(failures, []);

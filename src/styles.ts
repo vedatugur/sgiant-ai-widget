@@ -490,11 +490,17 @@ export function injectStyles(side: "left" | "right"): void {
    meant to give way the one that could not, the row overflowed, and the
    panel's overflow:hidden cut Send off at the window's edge.
 
-   112px, border to border, is the widest floor that still shows "Sonnet 5.5"
-   whole at the default 368px with the attach button present (116.8px is what
-   is left for the field there). Raise it and that name is the first to be cut. */
-.${PREFIX}-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
-.${PREFIX}-input{flex:1;box-sizing:border-box;min-width:112px;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
+   96px, border to border, is set by the tightest row a real host has today:
+   attach, "Sonnet 5.5" and a Turkish "Gönder" at the default 368px leave the
+   field 101px, and 97px on a 360px phone. A higher floor cuts that name there
+   first (112px did). The row is position:relative because the model menu hangs
+   from it, not from the pill — see the menu's rule.
+
+   What the row does NOT promise: at 320px with attach, the fixed ends plus the
+   two floors leave Send 94px. "Send" is 67 and "Gönder" 82; a host label wider
+   than 94px will run past the row there. */
+.${PREFIX}-form{position:relative;display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
+.${PREFIX}-input{flex:1;box-sizing:border-box;min-width:96px;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
 .${PREFIX}-meter{padding:7px 12px 0;background:var(--aiw-surface)}
 .${PREFIX}-meter-bar{height:4px;border-radius:var(--aiw-radius-pill);background:var(--aiw-surface-2);overflow:hidden}
 .${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:var(--aiw-radius-pill);background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}
@@ -574,9 +580,10 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 
    It may SHRINK (#617): the name is the host's and can be any length, so when
    the text field is down to its floor the pill gives up width and its label
-   ends in an ellipsis — the full name stays in the title and the menu. The
-   48px floor is the chevron and enough of a name to still read as a control. */
-.${PREFIX}-model{position:relative;flex:0 1 auto;min-width:48px;display:flex}
+   ends in an ellipsis — the full name is in the menu, which is why the menu
+   may never be cut itself. The 48px floor is the chevron and enough of a name
+   to still read as a control. */
+.${PREFIX}-model{flex:0 1 auto;min-width:48px;display:flex}
 .${PREFIX}-model-btn{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:140px;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:0 8px 0 11px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;transition:border-color .12s,color .12s}
 .${PREFIX}-model-btn:hover,.${PREFIX}-model-btn[aria-expanded="true"]{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -721,10 +728,20 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
    selectors, and placed after the -menu rules, because the base rule sets
    'top' and the closed-state transform with the same single-class weight; a
    bare .-model-menu rule earlier in the sheet lost to it, and the menu came
-   out pinned below the pill and 14px tall, clipped between top and bottom. */
-.${PREFIX}-menu.${PREFIX}-model-menu{top:auto;bottom:calc(100% + 8px);min-width:252px;max-height:min(60vh,420px);overflow-y:auto;transform-origin:bottom right;transform:translateY(4px) scale(.98)}
+   out pinned below the pill and 14px tall, clipped between top and bottom.
+
+   It hangs from the ROW's right edge, not the pill's (#617). Hung from the pill
+   it started wherever the pill ended, and once the row stopped overflowing the
+   pill sat far enough left that a 266px menu began before a 320px window did:
+   "ODEL", "onnet 5.5". The row is as wide as the panel, so right:10px with a
+   width capped at the row's own content can never leave it, at any width, with
+   any Send label. -2px lands it where it was: 8px above the pill, which sits
+   10px below the row's top. A name too long for one line wraps here rather
+   than being cut, because this is the one place the full name must be. */
+.${PREFIX}-menu.${PREFIX}-model-menu{top:auto;bottom:calc(100% - 2px);right:10px;box-sizing:border-box;min-width:min(252px,calc(100% - 20px));max-width:calc(100% - 20px);max-height:min(60vh,420px);overflow-y:auto;transform-origin:bottom right;transform:translateY(4px) scale(.98)}
 .${PREFIX}-menu.${PREFIX}-model-menu.${PREFIX}-menu-open{transform:none}
 .${PREFIX}-menu.${PREFIX}-model-menu::before{display:none}
+.${PREFIX}-model-item .${PREFIX}-menu-label{white-space:normal;overflow-wrap:anywhere}
 /* The automation explainer. A sheet INSIDE the panel, not a page-level modal:
    the widget may be embedded in someone else's admin, and a fixed overlay there
    would dim their page to explain our setting. */
