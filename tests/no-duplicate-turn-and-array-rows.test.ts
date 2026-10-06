@@ -82,7 +82,14 @@ test("'Try again' never sends while a turn is in flight", () => {
 test("the no-retry card leads with its own message, not 'please try again'", () => {
   // Found in the browser, not by reading: the button was gone and the headline
   // still said "couldn't answer. Please try again." above "still working".
-  const at = SRC.indexOf("function showError(raw: string, show");
-  const body = SRC.slice(at, at + 1200);
-  assert.match(body, /show\.retry === false \? raw : L\("errorSnag"/);
+  const at = SRC.indexOf("function showError(");
+  assert.ok(at > 0, "showError is not where this test looks");
+  const body = SRC.slice(at, at + 2400);
+  // `alone` is a card with no retry, or a sentence the server wrote for the
+  // reader (a-servers-sentence-stands-alone.test.ts).
+  assert.match(
+    body,
+    /const alone = show\.alone === true \|\| show\.retry === false;/
+  );
+  assert.match(body, /alone \? raw : L\("errorSnag"/);
 });

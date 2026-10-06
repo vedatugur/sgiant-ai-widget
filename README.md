@@ -110,6 +110,7 @@ One POST endpoint that streams newline-delimited JSON. Four frame types matter:
 | `{"threadId":"…"}` | name the conversation |
 | `{"type":"done"}` | the turn is over |
 | `{"type":"error","message":"…"}` | the turn failed |
+| `{"type":"error","code":"…","message":"…"}` | the turn failed, and `message` is a sentence you wrote for the reader: it is shown by itself. Add `"retry":false` to offer no "Try again" |
 
 The full contract, including a dependency-free reference server short enough to
 read in one go, is in **[BACKEND.md](./BACKEND.md)**.

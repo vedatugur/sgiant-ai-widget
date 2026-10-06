@@ -70,6 +70,38 @@ failing the turn — a stray log line in your stream will not break the chat.
 | `{"threadId":"…"}`               | name this conversation, so the next turn continues it |
 | `{"type":"done"}`                | the turn is over                                      |
 | `{"type":"error","message":"…"}` | the turn failed, and this is what the user is told    |
+| `{"type":"error","code":"…","message":"…"}` | the turn failed, and `message` is your own sentence for the reader |
+
+### An error you worded yourself
+
+A plain error frame is drawn as a card with the widget's own headline ("… hit a
+snag and couldn't answer. Please try again."), your `message` under it as a
+detail, and a "Try again" button. That suits a message you did not write: a
+vendor's text, an exception's first line.
+
+When the message IS a sentence for the person reading, in their language, say
+so by giving the frame a `code`:
+
+```json
+{"type":"error","code":"assistant_unavailable","message":"The assistant cannot answer right now.\nPlease try again in a few minutes."}
+```
+
+- The `message` is then the card's whole text. The widget adds no headline of
+  its own, so nothing is said twice. Line breaks in it are kept.
+- `"retry": false` removes "Try again", for a refusal that asking again will
+  not change (a rate limit, a feature that is switched off, an answer that
+  stopped part-way). Leave it out and the button stays.
+- The `code` is yours: a short name for the refusal, for your logs. The widget
+  never shows it and never acts on its value. Any non-empty text will do.
+- **Only put a `code` on a sentence meant to be read.** If you relay frames
+  from something else (a model worker, a vendor), remove any `code` you did
+  not set yourself, or its message will be shown to your users as written.
+- Send it on a normal `200` stream. An HTTP error status is shown as "Server
+  error (429)." and, for a 429 or a 5xx, marks the launcher offline; the body
+  of such a response is not read.
+
+A widget older than 1.21.0 ignores `code` and `retry` and draws the ordinary
+card, so a server can send them before every host has moved.
 
 Send `threadId` on the first turn of a new conversation and the widget will send
 it back on every subsequent turn. Nothing else is required.

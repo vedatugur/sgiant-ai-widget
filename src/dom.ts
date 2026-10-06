@@ -23,6 +23,14 @@ export interface StreamFrame {
   d?: string;
   threadId?: string;
   message?: string;
+  /**
+   * error frame — the server's own name for a refusal. Its presence says the
+   * `message` is a sentence written for the person reading, to be drawn by
+   * itself; the value is never shown and never branched on.
+   */
+  code?: string;
+  /** error frame — `false`: asking again will not help, offer no "Try again". */
+  retry?: boolean;
   /** render_chart widget frame (analytics lane): spec = model args, rows = data. */
   spec?: { title?: string; chartType?: string };
   rows?: unknown;
