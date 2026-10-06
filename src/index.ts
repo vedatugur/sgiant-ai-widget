@@ -4848,6 +4848,10 @@ export function createAiChatWidget(
     let turnIn = 0;
     let turnOut = 0;
     let failure: string | null = null;
+    // How the failure is to be drawn. A server's frame WITH A CODE is a
+    // sentence it wrote for the reader, and is the card's whole text; see
+    // `showError`. Anything else is the ordinary card.
+    let failureIs: { alone?: boolean; retry?: boolean } = {};
     // The token step said "not now" (#620): nothing was sent, nothing failed.
     let refused: TokenRefusal | null = null;
     // Stamped by the turn's `done` frame — the handle for rating the answer
@@ -5119,6 +5123,7 @@ export function createAiChatWidget(
       noteApiResult(res.ok ? "ok" : res.status);
       if (!res.ok || !res.body) {
         failure = `Server error (${res.status}).`;
+        failureIs = {};
       } else {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -5292,8 +5297,19 @@ export function createAiChatWidget(
               if (frame.messageId) liveMessageId = frame.messageId;
               if (frame.model) liveModel = frame.model;
             }
-            if (frame.type === "error" && frame.message)
+            if (frame.type === "error" && frame.message) {
               failure = frame.message;
+              // A CODE MEANS "THIS SENTENCE IS FOR THE PERSON READING". The
+              // code itself is not shown and not branched on: it is the
+              // server's own name for the refusal, for its logs. Without one
+              // the message may be anything (a vendor's text, a stack's
+              // first line) and keeps the card's own headline above it.
+              const coded =
+                typeof frame.code === "string" && frame.code.trim() !== "";
+              failureIs = coded
+                ? { alone: true, retry: frame.retry !== false }
+                : {};
+            }
           }
         }
       }
@@ -5311,6 +5327,8 @@ export function createAiChatWidget(
         // Nothing was heard back at all — the one case we can call unreachable
         // without guessing (#346).
         noteApiResult("unreachable");
+        // Whatever a frame said before the stream broke, this is not it.
+        failureIs = {};
         failure = (err as Error).message || "Network error.";
       }
     } finally {
@@ -5396,14 +5414,14 @@ export function createAiChatWidget(
     drawDeferred();
     if (deferredProposals.length) scrollDown();
     if (!producedAny) {
-      if (failure) showError(failure);
+      if (failure) showError(failure, failureIs);
       else {
         addMsg(log, "assistant", "(no response)");
         scrollDown(true);
       }
     } else {
       // A reply did stream; surface a late error inline (partial + error).
-      if (failure) showError(failure);
+      if (failure) showError(failure, failureIs);
       // Per-message token badge under the reply (UI-friendly tokens caption).
       if (turnIn + turnOut > 0) {
         const cap = usageBadge(turnIn, turnOut);
@@ -5897,7 +5915,10 @@ export function createAiChatWidget(
    * running; the second forked a sibling branch and its model, holding the
    * first in its session, answered "we already made the table".
    */
-  function showError(raw: string, show: { retry?: boolean } = {}): void {
+  function showError(
+    raw: string,
+    show: { retry?: boolean; alone?: boolean } = {}
+  ): void {
     const wrap = el("div", `${PREFIX}-error`);
     const txt = el("div", `${PREFIX}-error-text`);
     // A card with no retry reports a turn STILL RUNNING, so it must not lead
@@ -5905,10 +5926,20 @@ export function createAiChatWidget(
     // dropped stream: the button was gone and the headline still invited the
     // person to send it again, which is the second way a duplicate turn starts.
     // There the message IS the headline.
-    txt.textContent =
-      show.retry === false ? raw : L("errorSnag", { name });
+    //
+    // AND SO IT IS FOR A SENTENCE THE SERVER WROTE FOR THE READER (`alone`,
+    // a frame with a code). Under the card's own headline such a sentence was
+    // said twice, in two voices: "AYCA hit a snag and couldn't answer. Please
+    // try again." and then "The assistant cannot answer right now. … Please
+    // try again in a few minutes.", with a button that tries again now. The
+    // server's sentence is the one somebody chose; it is drawn by itself.
+    // Whether "Try again" is offered is the server's to say (`retry:false`).
+    const alone = show.alone === true || show.retry === false;
+    txt.textContent = alone ? raw : L("errorSnag", { name });
     const detail = el("div", `${PREFIX}-error-detail`);
-    detail.textContent = show.retry === false ? "" : raw;
+    detail.textContent = alone ? "" : raw;
+    // No empty line under a sentence that stands alone.
+    if (alone) detail.hidden = true;
     const actions = el("div", `${PREFIX}-error-actions`);
 
     if (show.retry !== false) {
