@@ -347,8 +347,8 @@ ${i}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
 .${e}-typing span:nth-child(2){animation-delay:.2s}
 .${e}-typing span:nth-child(3){animation-delay:.4s}
 .${e}-error{align-self:stretch;border:1px solid var(--aiw-danger-border);background:var(--aiw-danger-bg);border-radius:var(--aiw-radius-2xl);padding:11px 12px;animation:${e}-rise var(--duration-fast) var(--ease-out)}
-.${e}-error-text{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-danger-text)}
-.${e}-error-detail{font-size:var(--aiw-font-2xs);color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word}
+.${e}-error-text{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-danger-text);white-space:pre-line}
+.${e}-error-detail{font-size:var(--aiw-font-2xs);color:var(--aiw-danger-text-2);margin-top:3px;word-break:break-word;white-space:pre-line}
 .${e}-error-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
 .${e}-error-btn{border:1px solid var(--aiw-danger-border);background:var(--aiw-surface);color:var(--aiw-danger-text);border-radius:var(--aiw-radius-md);padding:6px 12px;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${e}-error-retry{background:var(--aiw-accent);border-color:var(--aiw-accent);color:var(--aiw-accent-contrast)}
@@ -368,7 +368,7 @@ ${i}.${e}-advanced.${e}-pane-collapsed .${e}-chatcol{border-right:0}
 /* The token step's "not now" (#620). Drawn like the quality prompt and for the
    same reason: nothing has gone wrong, so it must not look like the error card. */
 .${e}-notice{align-self:stretch;border:1px solid var(--aiw-border);background:var(--aiw-surface-2);border-radius:var(--aiw-radius-2xl);padding:11px 12px;animation:${e}-rise var(--duration-fast) var(--ease-out)}
-.${e}-notice-text{font-size:var(--aiw-font-sm);font-weight:500;color:var(--aiw-text);line-height:1.45;overflow-wrap:anywhere}
+.${e}-notice-text{font-size:var(--aiw-font-sm);font-weight:500;color:var(--aiw-text);line-height:1.45;overflow-wrap:anywhere;white-space:pre-line}
 .${e}-notice-btn{margin-top:9px;border:1px solid var(--aiw-accent);background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-md);padding:7px 14px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
 .${e}-notice-btn:disabled{opacity:.6;cursor:default}
 /* Answered state: the card collapses to a single line of thanks. */
