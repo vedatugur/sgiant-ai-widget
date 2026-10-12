@@ -328,6 +328,12 @@ Turkish page and an English one everywhere else. For any other language, pass
 A label that says `{name}` is given the window's own name (`title`), so a
 sentence about what the assistant does names your assistant.
 
+Six words are options of their own, older than the label list: `voteUpLabel`,
+`voteDownLabel`, `editLabel`, `regenerateLabel`, `cancelLabel`, `saveLabel`.
+They are chosen the same way: yours, else the window's own for the page's
+language. `subtitle`, the small line under the name, has no default: pass one
+or nothing is drawn there.
+
 ## Charts without React
 
 In-app hosts wire `renderDataWidget` (real `@sgiant/ui` charts). A standalone

@@ -184,9 +184,60 @@ export function builtInLabels(
   said: string | undefined | null,
   page?: string | undefined | null
 ): WidgetLabels {
+  return isTurkish(said, page) ? WIDGET_LABELS_TR : WIDGET_LABELS;
+}
+
+function isTurkish(
+  said: string | undefined | null,
+  page?: string | undefined | null
+): boolean {
   const tag = (typeof said === "string" && said.trim() ? said : page) ?? "";
-  const language =
-    typeof tag === "string" ? tag.trim().toLowerCase().split(/[-_]/)[0] : "";
-  return language === "tr" ? WIDGET_LABELS_TR : WIDGET_LABELS;
+  return (
+    typeof tag === "string" &&
+    tag.trim().toLowerCase().split(/[-_]/)[0] === "tr"
+  );
+}
+
+/**
+ * SIX WORDS THAT ARE OPTIONS, NOT LABELS.
+ *
+ * The two votes, Edit, Regenerate, and the edit box's two buttons are given
+ * by a host as options of their own (`voteUpLabel`, `editLabel` …), older
+ * than the label list, each with an English default written where it is
+ * drawn. So a host that passed no words showed these six in English on a
+ * Turkish page while everything around them was Turkish.
+ *
+ * They are chosen like the labels: the host's own word first, else the
+ * window's for the page's language.
+ */
+export interface WidgetOptionWords {
+  voteUp: string;
+  voteDown: string;
+  edit: string;
+  regenerate: string;
+  cancel: string;
+  save: string;
+}
+export const WIDGET_OPTION_WORDS: WidgetOptionWords = {
+  voteUp: "Helpful",
+  voteDown: "Not helpful",
+  edit: "Edit",
+  regenerate: "Regenerate",
+  cancel: "Cancel",
+  save: "Save & send",
+};
+export const WIDGET_OPTION_WORDS_TR: WidgetOptionWords = {
+  voteUp: "Faydalı",
+  voteDown: "Faydasız",
+  edit: "Düzenle",
+  regenerate: "Yeniden oluştur",
+  cancel: "İptal",
+  save: "Kaydet ve gönder",
+};
+export function builtInOptionWords(
+  said: string | undefined | null,
+  page?: string | undefined | null
+): WidgetOptionWords {
+  return isTurkish(said, page) ? WIDGET_OPTION_WORDS_TR : WIDGET_OPTION_WORDS;
 }
 

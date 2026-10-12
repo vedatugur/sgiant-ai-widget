@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { WIDGET_LABELS } from "../dist/labels.js";
-import { WIDGET_LABELS_TR, builtInLabels } from "../dist/labels-tr.js";
+import {
+  WIDGET_LABELS_TR,
+  WIDGET_OPTION_WORDS,
+  WIDGET_OPTION_WORDS_TR,
+  builtInLabels,
+  builtInOptionWords,
+} from "../dist/labels-tr.js";
+import { readFileSync } from "node:fs";
 import { SKIP_WITHOUT_CHROME, withBrowser } from "./aiw-browser.ts";
 
 /**
@@ -79,13 +86,41 @@ test("the language: what the host says, else what the page says, else English", 
     assert.equal(builtInLabels(odd as string), WIDGET_LABELS);
 });
 
+test("the six words that are options follow the page too", () => {
+  // The votes, Edit, Regenerate and the edit box's buttons each had an
+  // English default written where it is drawn.
+  assert.deepEqual(WIDGET_OPTION_WORDS_TR, {
+    voteUp: "Faydalı",
+    voteDown: "Faydasız",
+    edit: "Düzenle",
+    regenerate: "Yeniden oluştur",
+    cancel: "İptal",
+    save: "Kaydet ve gönder",
+  });
+  assert.equal(builtInOptionWords("tr"), WIDGET_OPTION_WORDS_TR);
+  assert.equal(builtInOptionWords(undefined, "tr-TR"), WIDGET_OPTION_WORDS_TR);
+  assert.equal(builtInOptionWords("en", "tr"), WIDGET_OPTION_WORDS);
+  assert.equal(builtInOptionWords(undefined), WIDGET_OPTION_WORDS);
+  // And no English word is left written where one of them is drawn.
+  const code = readFileSync("src/index.ts", "utf8");
+  for (const option of [
+    "voteUpLabel",
+    "voteDownLabel",
+    "editLabel",
+    "regenerateLabel",
+    "cancelLabel",
+    "saveLabel",
+  ])
+    assert.doesNotMatch(code, new RegExp(`opts\\.${option} \\?\\? "`), option);
+});
+
 /* ---------------------------------------------------------- in a browser */
 
 /** Runs in the page: a window on a page of this language, and what it says. */
 const SAYS = (
   pageLang: string,
   options: Record<string, unknown>
-): { send: string; ask: string; close: string } => {
+): { send: string; ask: string; close: string; sub: string | null } => {
   document.documentElement.lang = pageLang;
   const w = (globalThis as any).SgiantAiWidget.createAiChatWidget({
     endpoint: "/demo-chat",
@@ -104,6 +139,13 @@ const SAYS = (
       [...panel.querySelectorAll("button")]
         .map((b) => b.getAttribute("aria-label") ?? "")
         .find((a) => a === "Close chat" || a === "Sohbeti kapat") ?? "",
+    // The line under the name: its words, or null when nothing is drawn.
+    sub: (() => {
+      const sub = panel.querySelector(`.${P}-sub`) as HTMLElement | null;
+      return sub && sub.getBoundingClientRect().height > 0
+        ? sub.textContent
+        : null;
+    })(),
   };
   w.destroy();
   return said;
@@ -131,6 +173,7 @@ test(
           send: WIDGET_LABELS_TR.send,
           ask: tr("askAnything", "Resepsiyon"),
           close: WIDGET_LABELS_TR.closeChat,
+          sub: null,
         });
         assert.notEqual(s.send, WIDGET_LABELS.send);
       });
@@ -141,12 +184,24 @@ test(
           send: WIDGET_LABELS.send,
           ask: en("askAnything", "AYCA"),
           close: WIDGET_LABELS.closeChat,
+          sub: null,
         });
       });
 
       await t.test("the host's `locale` is believed over the page", async () => {
         assert.equal((await says("tr", { locale: "en" })).send, WIDGET_LABELS.send);
         assert.equal((await says("en", { locale: "tr" })).send, WIDGET_LABELS_TR.send);
+      });
+
+      await t.test("the line under the name is the host's, or is not there", async () => {
+        // It defaulted to "Growth assistant": one product's description of
+        // itself, in English, on every host that gave none.
+        assert.equal((await says("en", {})).sub, null);
+        assert.equal((await says("tr", { subtitle: "  " })).sub, null);
+        assert.equal(
+          (await says("tr", { subtitle: "Site ağı asistanı" })).sub,
+          "Site ağı asistanı"
+        );
       });
 
       await t.test("a host's own label still wins, and the rest is Turkish", async () => {
