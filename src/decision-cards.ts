@@ -32,6 +32,9 @@ export interface DecisionCardContext {
     key: keyof WidgetLabels,
     params?: Record<string, string | number>
   ) => string;
+  /** What a card's picture is called when the assistant gave it no
+   *  description, in the page's language. */
+  imageAlt: string;
   /** The transcript these cards append to. */
   log: HTMLElement;
   panel: HTMLElement;
@@ -392,7 +395,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
         img.alt =
           typeof args.alt === "string" && args.alt
             ? String(args.alt)
-            : "Web image preview";
+            : ctx.imageAlt;
         wrap.appendChild(img);
       }
     }

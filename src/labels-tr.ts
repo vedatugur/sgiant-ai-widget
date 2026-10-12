@@ -199,13 +199,15 @@ function isTurkish(
 }
 
 /**
- * SIX WORDS THAT ARE OPTIONS, NOT LABELS.
+ * WORDS THAT ARE NOT IN THE LABEL LIST.
  *
- * The two votes, Edit, Regenerate, and the edit box's two buttons are given
- * by a host as options of their own (`voteUpLabel`, `editLabel` …), older
- * than the label list, each with an English default written where it is
- * drawn. So a host that passed no words showed these six in English on a
- * Turkish page while everything around them was Turkish.
+ * The two votes, Edit, Regenerate, the edit box's two buttons and the resize
+ * handle are given by a host as options of their own (`voteUpLabel`,
+ * `editLabel`, `resizeLabel` …), older than the label list, each with an
+ * English default written where it is drawn. Three more had no option at
+ * all: the two arrows between versions of a turn, and the description of a
+ * card's picture. So a host that passed no words showed all of these in
+ * English on a Turkish page while everything around them was Turkish.
  *
  * They are chosen like the labels: the host's own word first, else the
  * window's for the page's language.
@@ -217,6 +219,24 @@ export interface WidgetOptionWords {
   regenerate: string;
   cancel: string;
   save: string;
+  /** The handle between the chat and the page beside it (`resizeLabel`). */
+  resize: string;
+  /** The view that puts the app beside the chat, and its page panel. */
+  advanced: string;
+  exitAdvanced: string;
+  hidePane: string;
+  showPane: string;
+  /** The arrows between two versions of one turn; read out, never drawn. */
+  prevVersion: string;
+  nextVersion: string;
+  /** A proposal card's picture, when the assistant gave it no description. */
+  imageAlt: string;
+  /** An action the assistant offered without naming it: a button that opens
+   *  a page, the page in "Opening {label}…", and a button that runs
+   *  something. */
+  openPage: string;
+  thePage: string;
+  run: string;
 }
 export const WIDGET_OPTION_WORDS: WidgetOptionWords = {
   voteUp: "Helpful",
@@ -225,6 +245,17 @@ export const WIDGET_OPTION_WORDS: WidgetOptionWords = {
   regenerate: "Regenerate",
   cancel: "Cancel",
   save: "Save & send",
+  resize: "Drag to resize · double-click to reset",
+  advanced: "Advanced view",
+  exitAdvanced: "Exit advanced view",
+  hidePane: "Hide page",
+  showPane: "Show page",
+  prevVersion: "Previous version",
+  nextVersion: "Next version",
+  imageAlt: "Web image preview",
+  openPage: "Open page",
+  thePage: "the page",
+  run: "Run",
 };
 export const WIDGET_OPTION_WORDS_TR: WidgetOptionWords = {
   voteUp: "Faydalı",
@@ -233,6 +264,17 @@ export const WIDGET_OPTION_WORDS_TR: WidgetOptionWords = {
   regenerate: "Yeniden oluştur",
   cancel: "İptal",
   save: "Kaydet ve gönder",
+  resize: "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın",
+  advanced: "Gelişmiş görünüm",
+  exitAdvanced: "Gelişmiş görünümden çık",
+  hidePane: "Sayfayı gizle",
+  showPane: "Sayfayı göster",
+  prevVersion: "Önceki sürüm",
+  nextVersion: "Sonraki sürüm",
+  imageAlt: "Web görseli önizlemesi",
+  openPage: "Sayfayı aç",
+  thePage: "Sayfa",
+  run: "Çalıştır",
 };
 export function builtInOptionWords(
   said: string | undefined | null,

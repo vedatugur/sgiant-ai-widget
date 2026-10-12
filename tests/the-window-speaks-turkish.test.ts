@@ -86,9 +86,10 @@ test("the language: what the host says, else what the page says, else English", 
     assert.equal(builtInLabels(odd as string), WIDGET_LABELS);
 });
 
-test("the six words that are options follow the page too", () => {
-  // The votes, Edit, Regenerate and the edit box's buttons each had an
-  // English default written where it is drawn.
+test("the words that are not labels follow the page too", () => {
+  // The votes, Edit, Regenerate, the edit box's buttons, the advanced view's
+  // controls, the arrows between versions, a picture's name, an unnamed
+  // action: each had an English word written where it is drawn.
   assert.deepEqual(WIDGET_OPTION_WORDS_TR, {
     voteUp: "Faydalı",
     voteDown: "Faydasız",
@@ -96,22 +97,52 @@ test("the six words that are options follow the page too", () => {
     regenerate: "Yeniden oluştur",
     cancel: "İptal",
     save: "Kaydet ve gönder",
+    resize: "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın",
+    advanced: "Gelişmiş görünüm",
+    exitAdvanced: "Gelişmiş görünümden çık",
+    hidePane: "Sayfayı gizle",
+    showPane: "Sayfayı göster",
+    prevVersion: "Önceki sürüm",
+    nextVersion: "Sonraki sürüm",
+    imageAlt: "Web görseli önizlemesi",
+    openPage: "Sayfayı aç",
+    thePage: "Sayfa",
+    run: "Çalıştır",
   });
+  assert.deepEqual(
+    Object.keys(WIDGET_OPTION_WORDS).sort(),
+    Object.keys(WIDGET_OPTION_WORDS_TR).sort()
+  );
+  for (const word of Object.values(WIDGET_OPTION_WORDS_TR))
+    assert.notEqual(word.trim(), "");
   assert.equal(builtInOptionWords("tr"), WIDGET_OPTION_WORDS_TR);
   assert.equal(builtInOptionWords(undefined, "tr-TR"), WIDGET_OPTION_WORDS_TR);
   assert.equal(builtInOptionWords("en", "tr"), WIDGET_OPTION_WORDS);
   assert.equal(builtInOptionWords(undefined), WIDGET_OPTION_WORDS);
-  // And no English word is left written where one of them is drawn.
-  const code = readFileSync("src/index.ts", "utf8");
-  for (const option of [
-    "voteUpLabel",
-    "voteDownLabel",
-    "editLabel",
-    "regenerateLabel",
-    "cancelLabel",
-    "saveLabel",
-  ])
-    assert.doesNotMatch(code, new RegExp(`opts\\.${option} \\?\\? "`), option);
+});
+
+test("no English word is left written where something is drawn", () => {
+  // Found by a look at a Turkish page whose host passes no words: the votes'
+  // spoken names, the version arrows, the resize handle, a picture's name.
+  // What is drawn there now comes from a table that has both languages.
+  for (const file of [
+    "src/index.ts",
+    "src/message-chrome.ts",
+    "src/decision-cards.ts",
+  ]) {
+    const code = readFileSync(file, "utf8")
+      // Comments may say anything.
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // `x || "Word"`, `x ?? "Word"`, and an attribute or text set to a literal.
+    const written = [
+      ...code.matchAll(/(?:\|\||\?\?)\s*"([A-Z][A-Za-z …&·-]*[a-z…])"/g),
+      ...code.matchAll(
+        /(?:setAttribute\("(?:aria-label|title|alt|placeholder)",\s*|\.(?:title|alt|placeholder|textContent)\s*=\s*)"([A-Z][a-z][^"]*)"/g
+      ),
+    ].map((m) => m[1]);
+    assert.deepEqual(written, [], file);
+  }
 });
 
 /* ---------------------------------------------------------- in a browser */
@@ -191,6 +222,41 @@ test(
       await t.test("the host's `locale` is believed over the page", async () => {
         assert.equal((await says("tr", { locale: "en" })).send, WIDGET_LABELS.send);
         assert.equal((await says("en", { locale: "tr" })).send, WIDGET_LABELS_TR.send);
+      });
+
+      await t.test("figures follow the same choice as the words", async () => {
+        // A Turkish page with a silent host read Turkish words around "1,200".
+        const figure = (pageLang: string, options: object) =>
+          page.open([1280, 800]).then(() =>
+            page.evaluate<string>(
+              `(async () => {
+                document.documentElement.lang = ${JSON.stringify(pageLang)};
+                const w = SgiantAiWidget.createAiChatWidget({
+                  endpoint: "/demo-chat", persistKey: "figures",
+                  listThreads: async () => [{ id: "t", title: "T" }],
+                  loadThread: async () => [
+                    { role: "user", content: "S", id: "q" },
+                    { role: "assistant", content: "C", id: "a", parentId: "q", inputTokens: 1200, outputTokens: 3 },
+                  ],
+                  ...${JSON.stringify(options)},
+                });
+                w.open();
+                await new Promise((r) => setTimeout(r, 200));
+                const P = "sgiant-aiw";
+                [...document.querySelectorAll("." + P + "-panel button")].find((b) => /History|Geçmiş/.test((b.getAttribute("aria-label") || "") + b.title))?.click();
+                await new Promise((r) => setTimeout(r, 300));
+                [...document.querySelectorAll("." + P + "-panel *")].find((n) => n.children.length === 0 && n.textContent === "T")?.click();
+                await new Promise((r) => setTimeout(r, 600));
+                const text = document.querySelector("." + P + "-panel").textContent;
+                w.destroy();
+                return (text.match(/1[.,]200/) || ["none"])[0];
+              })()`
+            )
+          );
+        assert.equal(await figure("tr", {}), "1.200");
+        assert.equal(await figure("en", {}), "1,200");
+        assert.equal(await figure("tr", { locale: "en" }), "1,200");
+        assert.equal(await figure("en", { locale: "tr" }), "1.200");
       });
 
       await t.test("the line under the name is the host's, or is not there", async () => {

@@ -1156,7 +1156,16 @@ export function createAiChatWidget(
   // the window's own words for the page's language. `{token}` placeholders are filled from
   // params so runtime values (name, filename, error) interpolate in any language.
   // How this page writes a figure (see `locale` on the options).
-  const locale = usableLocale(opts.locale);
+  // Said by the host; else the page's own language, the same choice the
+  // words follow, so a Turkish page with a silent host does not read Turkish
+  // words around "1,200"; else the browser's.
+  const locale =
+    usableLocale(opts.locale) ??
+    usableLocale(
+      typeof document !== "undefined"
+        ? document.documentElement?.lang || undefined
+        : undefined
+    );
   const num = (n: number): string => n.toLocaleString(locale);
   // The window's own words, in the page's language (#617): what the host
   // says it is, else what the page says of itself.
@@ -2190,9 +2199,9 @@ export function createAiChatWidget(
     advancedBtn = el("button", `${PREFIX}-icon ${PREFIX}-advbtn`);
     advancedBtn.setAttribute(
       "aria-label",
-      opts.advancedLabel || "Advanced view"
+      opts.advancedLabel || ownWords.advanced
     );
-    advancedBtn.title = opts.advancedLabel || "Advanced view";
+    advancedBtn.title = opts.advancedLabel || ownWords.advanced;
     advancedBtn.innerHTML = ICON_ADVANCED;
     hActions.appendChild(advancedBtn);
   }
@@ -2631,8 +2640,10 @@ export function createAiChatWidget(
     switchBranch: (leaf) => switchBranch(leaf),
     getThreadId: () => threadId,
     ...(opts.vote ? { vote: opts.vote } : {}),
-    ...(opts.voteUpLabel ? { voteUpLabel: opts.voteUpLabel } : {}),
-    ...(opts.voteDownLabel ? { voteDownLabel: opts.voteDownLabel } : {}),
+    voteUpLabel: opts.voteUpLabel || ownWords.voteUp,
+    voteDownLabel: opts.voteDownLabel || ownWords.voteDown,
+    prevVersionLabel: ownWords.prevVersion,
+    nextVersionLabel: ownWords.nextVersion,
   });
 
   /** Remove `anchor` and every DOM node after it from the log — the "rewrite from
@@ -3946,8 +3957,8 @@ export function createAiChatWidget(
     panel.classList.toggle(`${PREFIX}-pane-collapsed`, v);
     if (collapseBtnEl) {
       const label = v
-        ? opts.expandPaneLabel || "Show page"
-        : opts.collapsePaneLabel || "Hide page";
+        ? opts.expandPaneLabel || ownWords.showPane
+        : opts.collapsePaneLabel || ownWords.hidePane;
       collapseBtnEl.setAttribute("aria-label", label);
       collapseBtnEl.title = label;
     }
@@ -3963,9 +3974,9 @@ export function createAiChatWidget(
     collapseBtn.type = "button";
     collapseBtn.setAttribute(
       "aria-label",
-      opts.collapsePaneLabel || "Hide page"
+      opts.collapsePaneLabel || ownWords.hidePane
     );
-    collapseBtn.title = opts.collapsePaneLabel || "Hide page";
+    collapseBtn.title = opts.collapsePaneLabel || ownWords.hidePane;
     collapseBtn.innerHTML = ICON_CHEVRON_R;
     collapseBtn.addEventListener("click", () =>
       setPaneCollapsed(!paneCollapsed)
@@ -3974,7 +3985,7 @@ export function createAiChatWidget(
     frameUrlLabel = el("div", `${PREFIX}-pane-url`);
     bar.append(collapseBtn, frameUrlLabel);
     const frame = el("iframe", `${PREFIX}-pane-frame`) as HTMLIFrameElement;
-    frame.setAttribute("title", opts.advancedLabel || "App preview");
+    frame.setAttribute("title", opts.advancedLabel || ownWords.advanced);
     // No sandbox: the framed page is our OWN app and needs full capability
     // (same-origin session cookies, storage, popups). For untrusted third-party
     // targets an embedder would add a sandbox with explicit allows.
@@ -4103,8 +4114,8 @@ export function createAiChatWidget(
     if (!advancedBtn) return;
     advancedBtn.classList.toggle(`${PREFIX}-advbtn-on`, advanced);
     const label = advanced
-      ? opts.exitAdvancedLabel || "Exit advanced view"
-      : opts.advancedLabel || "Advanced view";
+      ? opts.exitAdvancedLabel || ownWords.exitAdvanced
+      : opts.advancedLabel || ownWords.advanced;
     advancedBtn.setAttribute("aria-label", label);
     advancedBtn.title = label;
   };
@@ -4124,7 +4135,7 @@ export function createAiChatWidget(
   const resizer = el("div", `${PREFIX}-resizer`);
   resizer.setAttribute("role", "separator");
   resizer.setAttribute("aria-orientation", "vertical");
-  const resizeLabel = opts.resizeLabel || "Resize panels";
+  const resizeLabel = opts.resizeLabel || ownWords.resize;
   resizer.setAttribute("aria-label", resizeLabel);
   resizer.title = resizeLabel;
   panel.insertBefore(resizer, pane);
@@ -4709,6 +4720,7 @@ export function createAiChatWidget(
   const { renderQuestion, renderProposal, renderAppliedProposal } =
     createDecisionCards({
       L,
+      imageAlt: ownWords.imageAlt,
       log,
       panel,
       side,
@@ -5760,7 +5772,7 @@ export function createAiChatWidget(
    *  keeps governing normal widget mode, where navigation moves the real app. */
   function renderNavigate(spec: NavigateSpec, replay = false): void {
     const wrap = el("div", `${PREFIX}-nav`);
-    const label = spec.label || "Open page";
+    const label = spec.label || ownWords.openPage;
     // On replay (history / post-turn thread restore) always render the button,
     // never auto-follow — re-opening a conversation must not navigate the app.
     if ((autoNav || advanced) && !replay) {
@@ -5839,7 +5851,7 @@ export function createAiChatWidget(
       isNavigationAction(spec.name) &&
       !spec.confirm
     ) {
-      const label = spec.label || "Opening…";
+      const label = spec.label || ownWords.thePage;
       const chip = el("div", `${PREFIX}-autonav`);
       chip.innerHTML = `${ICON_COMPASS}<span>${escapeHtml(L("actionOpening", { label }))}</span>`;
       wrap.appendChild(chip);
@@ -5860,7 +5872,7 @@ export function createAiChatWidget(
     }
     const btn = el("button", `${PREFIX}-nav-btn`) as HTMLButtonElement;
     btn.type = "button";
-    const label = spec.label || "Run";
+    const label = spec.label || ownWords.run;
     btn.innerHTML = `<span>${escapeHtml(label)}</span>`;
     const run = async (): Promise<void> => {
       btn.disabled = true;
