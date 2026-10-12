@@ -172,9 +172,15 @@ import {
   USER_BUBBLE_INK,
 } from "./styles";
 import type { WidgetLabels } from "./labels";
-import { builtInLabels } from "./labels-tr";
+import { builtInLabels, builtInOptionWords } from "./labels-tr";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
-export { WIDGET_LABELS_TR, builtInLabels } from "./labels-tr";
+export {
+  WIDGET_LABELS_TR,
+  WIDGET_OPTION_WORDS,
+  WIDGET_OPTION_WORDS_TR,
+  builtInLabels,
+  builtInOptionWords,
+} from "./labels-tr";
 export type { WidgetLabels };
 import { createModelPicker, initialModel, type ModelOption } from "./model-picker";
 export type { ModelOption };
@@ -415,7 +421,9 @@ export interface AiChatWidgetOptions {
   getBalance?: () => Promise<number | null> | number | null;
   /** Assistant name shown in the header + bubble aria-label. Default "AYCA". */
   title?: string;
-  /** Small line under the name. Default "Growth assistant". */
+  /** Small line under the name. No default: without one, nothing is drawn
+   *  there. (It defaulted to one product's description of itself, in English,
+   *  on every host that gave none.) */
   subtitle?: string;
   /** Avatar image URL (the brand logo mark). Falls back to a crescent glyph. */
   avatarUrl?: string;
@@ -697,9 +705,10 @@ export interface AiChatWidgetOptions {
    *  via `loadThread`. Omit on hosts without branching → the edit/regenerate/
    *  switcher controls stay hidden. */
   setActiveLeaf?: (threadId: string, messageId: string) => Promise<void>;
-  /** UI labels for the branching controls. The host feeds translated strings
-   *  (per the repo i18n rule); the widget uses the English fallbacks below only
-   *  when an override is absent — it never hardcodes a user-visible string. */
+  /** UI labels for the branching controls. A host may give its own; without
+   *  one the window uses its own word for the page's language (Turkish on a
+   *  Turkish page, English otherwise; see `locale`). The two vote labels
+   *  below are chosen the same way. */
   editLabel?: string;
   regenerateLabel?: string;
   saveLabel?: string;
@@ -1134,10 +1143,12 @@ export function createAiChatWidget(
   const num = (n: number): string => n.toLocaleString(locale);
   // The window's own words, in the page's language (#617): what the host
   // says it is, else what the page says of itself.
-  const own = builtInLabels(
-    opts.locale,
-    typeof document !== "undefined" ? document.documentElement?.lang : null
-  );
+  const pageLang =
+    typeof document !== "undefined" ? document.documentElement?.lang : null;
+  const own = builtInLabels(opts.locale, pageLang);
+  // The six words a host gives as options of their own (the votes, Edit,
+  // Regenerate, the edit box's buttons), chosen the same way.
+  const ownWords = builtInOptionWords(opts.locale, pageLang);
   const L = (
     key: keyof WidgetLabels,
     params?: Record<string, string | number>
@@ -1784,7 +1795,11 @@ export function createAiChatWidget(
   const titleEl = el("span", `${PREFIX}-title`);
   titleEl.textContent = name;
   const subEl = el("span", `${PREFIX}-sub`);
-  subEl.textContent = opts.subtitle ?? "Growth assistant";
+  // The host's own line, or none: an empty line is not drawn at all, so the
+  // name is not pushed up by a gap.
+  const subtitle = typeof opts.subtitle === "string" ? opts.subtitle.trim() : "";
+  subEl.textContent = subtitle;
+  subEl.hidden = !subtitle;
   // Staff-only "model" chip — set from the server `meta` frame (which model/agent
   // runs the turn). Hidden until a staff turn reports it, so customers never see
   // a model id (isStaff is server-authoritative).
@@ -2631,10 +2646,10 @@ export function createAiChatWidget(
     const row = el("div", `${PREFIX}-edit-actions`);
     const cancel = el("button", `${PREFIX}-edit-cancel`) as HTMLButtonElement;
     cancel.type = "button";
-    cancel.textContent = opts.cancelLabel ?? "Cancel";
+    cancel.textContent = opts.cancelLabel ?? ownWords.cancel;
     const save = el("button", `${PREFIX}-edit-save`) as HTMLButtonElement;
     save.type = "button";
-    save.textContent = opts.saveLabel ?? "Save & send";
+    save.textContent = opts.saveLabel ?? ownWords.save;
     row.appendChild(cancel);
     row.appendChild(save);
     editor.appendChild(ta);
@@ -2727,9 +2742,9 @@ export function createAiChatWidget(
         });
         return b;
       };
-      row.appendChild(mk(1, opts.voteUpLabel ?? "Helpful", ICON_THUMB_UP));
+      row.appendChild(mk(1, opts.voteUpLabel ?? ownWords.voteUp, ICON_THUMB_UP));
       row.appendChild(
-        mk(-1, opts.voteDownLabel ?? "Not helpful", ICON_THUMB_DOWN)
+        mk(-1, opts.voteDownLabel ?? ownWords.voteDown, ICON_THUMB_DOWN)
       );
     }
     const reason = el("input", `${PREFIX}-quality-reason`) as HTMLInputElement;
@@ -2817,7 +2832,7 @@ export function createAiChatWidget(
         `${PREFIX}-msgact ${PREFIX}-msgact-icon`
       ) as HTMLButtonElement;
       btn.type = "button";
-      const label = opts.editLabel ?? "Edit";
+      const label = opts.editLabel ?? ownWords.edit;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       btn.innerHTML = ICON_EDIT;
@@ -2835,7 +2850,7 @@ export function createAiChatWidget(
         const parentId = item.parentId;
         const btn = el("button", `${PREFIX}-msgact`) as HTMLButtonElement;
         btn.type = "button";
-        const label = opts.regenerateLabel ?? "Regenerate";
+        const label = opts.regenerateLabel ?? ownWords.regenerate;
         btn.setAttribute("aria-label", label);
         btn.innerHTML = `${ICON_REGEN}<span>${escapeHtml(label)}</span>`;
         btn.addEventListener("click", () => {
