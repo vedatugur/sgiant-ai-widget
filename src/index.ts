@@ -190,6 +190,7 @@ export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 // host context — the shape #306 needs more of.
 import {
   buildThreadReplay,
+  endsWithQuestion,
   type LoadedThreadItem,
   type ReplayMessageItem,
   type ReplayProposalItem,
@@ -2949,7 +2950,10 @@ export function createAiChatWidget(
       f.content === null ||
       f.threadId !== threadId ||
       Date.now() - f.at >= INFLIGHT_MAX_AGE_MS ||
-      turnLanded(items, f.content)
+      turnLanded(items, f.content) ||
+      // The server has the question already (it saves it when the turn
+      // starts): drawing the remembered copy too showed it twice (#639).
+      endsWithQuestion(items, f.content)
     )
       return items;
     let lastMsg = -1;

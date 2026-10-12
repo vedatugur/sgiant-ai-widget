@@ -290,14 +290,70 @@ export function buildThreadReplay(payload: {
    * another branch, so is the artifact. With no reply yet (the turn is still
    * running) it goes by its own time, which is after every earlier reply.
    */
+  // Every message by its id, to walk from a reply up to the question that
+  // asked for it.
+  const byId = new Map<
+    string,
+    { role: string; parentId?: string | null; createdAt?: string }
+  >();
+  for (const m of payload.messages ?? []) if (m.id) byId.set(m.id, m);
+  /** The question a reply answers: the first user message among its parents.
+   *  Undefined when the chain is broken, loops, or was never sent. */
+  const questionOf = (reply: { parentId?: string | null }) => {
+    let up = reply.parentId;
+    for (let guard = 0; up && guard < 1000; guard++) {
+      const m = byId.get(up);
+      if (!m) return undefined;
+      if (m.role === "user") return up;
+      up = m.parentId;
+    }
+    return undefined;
+  };
+  /**
+   * A STEP OR A DECISION THAT SAYS WHICH QUESTION IT BELONGS TO
+   * (sgiant-platform#639).
+   *
+   * The rule above rests on "the first reply saved after it is its own
+   * turn's". A turn that was CUT has no reply, so its steps took the reply of
+   * the NEXT turn and were drawn inside it, under a question that never asked
+   * for them. A server that saves the question when the turn starts can say
+   * whose they are: the artifact's `messageId` is then the id of that
+   * question (a message with role "user"). Steps and decisions carried null
+   * there before, so a value that names a question is always this.
+   *
+   * - Its reply is the first reply saved after it THAT ANSWERS ITS QUESTION.
+   *   The question's id alone is not enough: a regenerated answer has the
+   *   same question as the one it replaced, and the steps of the replaced
+   *   answer must go where that answer went (off the branch, undrawn).
+   * - With no such reply (the turn was cut, or is still running) it sits
+   *   after its question, by its own time.
+   * - Without a question's id, the rule above, unchanged.
+   */
+  const question = (a: { messageId?: string | null }) => {
+    const id = a.messageId;
+    const m = id ? byId.get(id) : undefined;
+    return m && m.role === "user" ? { id: id as string, m } : null;
+  };
   const byTurn = (
-    a: { createdAt?: string },
+    a: { createdAt?: string; messageId?: string | null },
     rank: number,
     item: LoadedThreadItem
   ) => {
     const own = a.createdAt ?? "";
-    const reply = replies.find((m) => (m.createdAt ?? "") >= own);
+    const asked = question(a);
+    const reply = replies.find(
+      (m) =>
+        (m.createdAt ?? "") >= own && (!asked || questionOf(m) === asked.id)
+    );
     if (reply && activeSet && reply.id && !activeSet.has(reply.id)) return;
+    if (!reply && asked) {
+      // After its question, never above it: the two can share a timestamp,
+      // and a clock that put the step first must not lift it into the turn
+      // before.
+      const at = asked.m.createdAt ?? "";
+      items.push({ t: at > own ? at : own, rank, t2: own, item });
+      return;
+    }
     items.push({ t: reply?.createdAt ?? own, rank, t2: own, item });
   };
   for (const a of payload.artifacts ?? []) {
@@ -407,4 +463,29 @@ function proposalItem(a: {
     status: a.status,
     ...(result && Object.keys(result).length ? { result } : {}),
   };
+}
+
+/**
+ * Does the saved transcript already END with this question?
+ * (sgiant-platform#639)
+ *
+ * The window remembers a question it sent until the turn's exchange has
+ * landed, and draws it after a reload, because a server that saves the
+ * question when the turn ENDS does not have it yet. A server that saves it
+ * when the turn STARTS does: the saved list then ends with the person's own
+ * message and no reply, and adding the remembered copy drew the question
+ * twice, for as long as the window kept looking for the reply.
+ *
+ * True when the last saved message is the person's own, with the same text.
+ */
+export function endsWithQuestion(
+  items: LoadedThreadItem[],
+  content: string
+): boolean {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it && "role" in it)
+      return it.role === "user" && it.content.trim() === content.trim();
+  }
+  return false;
 }
