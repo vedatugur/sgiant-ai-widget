@@ -17,7 +17,10 @@ import { SKIP_WITHOUT_CHROME, withBrowser } from "./aiw-browser.ts";
  * screen said something that was not so. A question that is replaced before
  * it could be sent is now taken back.
  */
-const RUN = async (questions: string[], connect: boolean): Promise<{
+const RUN = async (
+  questions: string[],
+  connect: boolean | "elsewhere"
+): Promise<{
   before: { log: string[]; buttons: number };
   after: { log: string[]; buttons: number };
   sent: string[];
@@ -78,9 +81,13 @@ const RUN = async (questions: string[], connect: boolean): Promise<{
     input.value = q;
     input.closest("form")!.requestSubmit();
     await sleep(300);
+    // Connected somewhere else after the first question: the token step
+    // says yes from now on, and the notice's button was never pressed.
+    if (connect === "elsewhere") T.connected = true;
   }
+  if (connect === "elsewhere") await sleep(600);
   const before = look();
-  if (connect) {
+  if (connect === true) {
     (
       document.querySelector(
         `.${P}-panel .${P}-notice button`
@@ -112,10 +119,13 @@ test(
   { skip: SKIP_WITHOUT_CHROME },
   async (t) => {
     await withBrowser(async (page) => {
-      const run = async (questions: string[], connect: boolean) => {
+      const run = async (
+        questions: string[],
+        connect: boolean | "elsewhere"
+      ) => {
         await page.open([1280, 800]);
         return page.evaluate<Awaited<ReturnType<typeof RUN>>>(
-          `(${RUN})(${JSON.stringify(questions)}, ${connect})`
+          `(${RUN})(${JSON.stringify(questions)}, ${JSON.stringify(connect)})`
         );
       };
 
@@ -139,6 +149,14 @@ test(
         assert.deepEqual(s.stored, ["dün kaç vardı?"]);
       });
 
+      await t.test("connected somewhere else, then a new question without the button: the one that waited is taken back", async () => {
+        const s = await run(["bugün kaç rezervasyon var?", "dün kaç vardı?"], "elsewhere");
+        assert.deepEqual(s.sent, ["dün kaç vardı?"]);
+        assert.deepEqual(s.after.log, ["Q: dün kaç vardı?", "A: Merhaba!"]);
+        assert.equal(s.after.buttons, 0);
+        assert.deepEqual(s.stored, ["dün kaç vardı?"]);
+      });
+
       await t.test("one question, as before: it waits, is sent once, and is drawn once", async () => {
         const s = await run(["merhaba"], true);
         assert.deepEqual(s.before.log, ["Q: merhaba", NOTICE]);
@@ -151,6 +169,9 @@ test(
         assert.deepEqual(s.sent, []);
         assert.deepEqual(s.after.log, ["Q: merhaba", NOTICE]);
         assert.equal(s.after.buttons, 1);
+        // A reload restores what was sent. This was not: kept, it came back
+        // as a plain bubble with no notice and no button.
+        assert.deepEqual(s.stored, []);
       });
     });
   }

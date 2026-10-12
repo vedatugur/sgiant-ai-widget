@@ -1393,10 +1393,31 @@ export function createAiChatWidget(
       inflight = { threadId: f.threadId, content: f.content, at: f.at };
     }
   }
+  /**
+   * The person's question that is on screen and has NOT been sent, because
+   * the token step said "not now": what the notice's button is holding.
+   * There is at most one. `unsay` takes back a question that will never be
+   * sent, so that nothing on screen looks sent that was not.
+   *
+   * Declared here, above `saveState`, because that reads it.
+   */
+  interface Waiting {
+    nodes: Element[];
+    entry: StoredMsg;
+  }
+  let waiting: Waiting | null = null;
   function saveState(): void {
+    // A QUESTION IS KEPT FOR A RELOAD ONCE IT HAS BEEN SENT, NOT BEFORE. One
+    // that is waiting lives on the screen only, with its notice. Kept, it
+    // came back after a reload as a plain bubble with no notice and no
+    // button: a question that looked sent and had never been.
+    const unsent = waiting?.entry;
     writeJson(storeKey, {
       threadId,
-      messages: history.slice(-40),
+      messages: (unsent
+        ? history.filter((m) => m !== unsent)
+        : history
+      ).slice(-40),
       savedAt: Date.now(),
       ...(inflight ? { inflight } : {}),
     });
@@ -5210,10 +5231,19 @@ export function createAiChatWidget(
         refused = readTokenRefusal(thrown);
         throw thrown;
       }
-      // A token was given: whatever an earlier refusal said no longer holds,
-      // and the question that was waiting is being sent now.
+      // A token was given: whatever an earlier refusal said no longer holds.
       clearTokenNotice();
+      // The question that was waiting is being sent now, if this send is the
+      // notice's button sending it. If it is ANOTHER question (the person
+      // connected somewhere else, in another tab or on the host's own page,
+      // and then asked something new without pressing the button), the one
+      // that waited will never be sent: it is taken back like any other
+      // question that was replaced, not left on screen looking sent (found
+      // by SG QA Executive).
+      if (waiting && !held) unsay(waiting);
       waiting = null;
+      // The held question is on its way: it is kept for a reload from here.
+      saveState();
       const baseCtx = opts.getContext ? await opts.getContext() : undefined;
       // In advanced view the controllable page is the FRAME, not the parent
       // shell — so the on-page targets (and the current path) come from the
@@ -5532,6 +5562,8 @@ export function createAiChatWidget(
         if (drew) {
           if (waiting) unsay(waiting);
           waiting = drew;
+          // Out of what a reload restores, now that it is known to wait.
+          saveState();
         }
         showTokenNotice(refused, { content, fork, atts });
       } else if (drew) unsay(drew);
@@ -6014,17 +6046,7 @@ export function createAiChatWidget(
    * button is a real button named by the host's label.
    */
   let tokenNotice: HTMLElement | null = null;
-  /**
-   * The person's question that is on screen and has NOT been sent, because
-   * the token step said "not now": what the notice's button is holding.
-   * There is at most one. `unsay` takes back a question that will never be
-   * sent, so that nothing on screen looks sent that was not.
-   */
-  interface Waiting {
-    nodes: Element[];
-    entry: StoredMsg;
-  }
-  let waiting: Waiting | null = null;
+  // `waiting` itself is declared above `saveState`, which reads it.
   function unsay(q: Waiting): void {
     for (const n of q.nodes) n.remove();
     const at = history.indexOf(q.entry);
