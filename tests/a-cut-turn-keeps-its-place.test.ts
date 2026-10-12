@@ -270,6 +270,29 @@ test("a chart is placed by its own time, whatever its messageId says", () => {
   ]);
 });
 
+test("a row whose content is not a text is not drawn, and nothing throws", () => {
+  for (const content of [null, undefined, 42, { text: "x" }, ["x"], true]) {
+    const t = cutThenAsked(true);
+    (t.messages[1] as { content: unknown }).content = content;
+    (t.messages[4] as { content: unknown }).content = content;
+    assert.deepEqual(
+      shape(buildThreadReplay(t)),
+      [
+        "u1",
+        "step:one",
+        "u2",
+        "step:two-a",
+        "step:two-b",
+        "proposal:p2",
+        "u3",
+        "step:three",
+        "proposal:p3",
+      ],
+      JSON.stringify(content)
+    );
+  }
+});
+
 test("the saved list ends with the question: it is not drawn a second time", () => {
   const saved = buildThreadReplay({
     messages: [

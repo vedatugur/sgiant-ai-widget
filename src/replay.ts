@@ -181,6 +181,10 @@ export function computeBranchNav(
   return nav;
 }
 
+/** A message's words, when it has any: a text with something in it. */
+const said = (content: unknown): content is string =>
+  typeof content === "string" && content.trim() !== "";
+
 /**
  * Where a replayed row sits among those sharing its anchor time: a turn's
  * question, the steps it took, its reply, then its decisions. See
@@ -251,7 +255,10 @@ export function buildThreadReplay(payload: {
   for (const m of payload.messages ?? []) {
     // Off-branch messages don't appear in the active transcript.
     if (activeSet && m.id && !activeSet.has(m.id)) continue;
-    if ((m.role === "user" || m.role === "assistant") && m.content.trim()) {
+    // A row whose content is not a text (a plain-JS host can hand over
+    // anything) is not a message to draw; it threw here and took the whole
+    // conversation with it.
+    if ((m.role === "user" || m.role === "assistant") && said(m.content)) {
       const item: ReplayMessageItem = {
         role: m.role,
         content: m.content,
@@ -348,7 +355,7 @@ export function buildThreadReplay(payload: {
     const reply = replies.find(
       (m) =>
         (m.createdAt ?? "") >= own &&
-        (!asked || (questionOf(m) === asked.id && m.content.trim() !== ""))
+        (!asked || (questionOf(m) === asked.id && said(m.content)))
     );
     if (reply && activeSet && reply.id && !activeSet.has(reply.id)) return;
     if (!reply && asked) {
