@@ -341,9 +341,14 @@ export function buildThreadReplay(payload: {
   ) => {
     const own = a.createdAt ?? "";
     const asked = question(a);
+    // With a question: a reply that is DRAWN. One turn can save several
+    // assistant rows (a row per round of tool calls, often with no text,
+    // then the reply); a decision goes after the words that explain it, not
+    // after a row nobody sees.
     const reply = replies.find(
       (m) =>
-        (m.createdAt ?? "") >= own && (!asked || questionOf(m) === asked.id)
+        (m.createdAt ?? "") >= own &&
+        (!asked || (questionOf(m) === asked.id && m.content.trim() !== ""))
     );
     if (reply && activeSet && reply.id && !activeSet.has(reply.id)) return;
     if (!reply && asked) {

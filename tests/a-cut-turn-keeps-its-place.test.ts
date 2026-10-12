@@ -184,6 +184,39 @@ test("rows between a reply and its question are walked past", () => {
   assert.deepEqual(shape(buildThreadReplay(t)), ["u1", "step:one", "a1"]);
 });
 
+test("a turn saved as several rows: a card waits for the reply that has words", () => {
+  // One worker saves a row per round of tool calls (an assistant row with no
+  // text, then a tool row per call), each under the one before, and the reply
+  // last. The card was proposed during the first round.
+  const empty = (id: string, at: string, parentId: string) => ({
+    ...msg(id, "assistant", at, parentId),
+    content: "",
+  });
+  const t = {
+    messages: [
+      msg("u1", "user", "10:00:00.000", null),
+      empty("r1", "10:00:10.000", "u1"),
+      msg("t1", "tool", "10:00:11.000", "r1"),
+      empty("r2", "10:00:20.000", "t1"),
+      msg("t2", "tool", "10:00:21.000", "r2"),
+      msg("a1", "assistant", "10:00:30.000", "t2"),
+    ],
+    artifacts: [
+      step("reading", "10:00:05.000", "u1"),
+      card("p1", "10:00:08.000", "u1"),
+      step("writing", "10:00:15.000", "u1"),
+    ],
+    activePath: ["u1", "r1", "t1", "r2", "t2", "a1"],
+  };
+  assert.deepEqual(shape(buildThreadReplay(t)), [
+    "u1",
+    "step:reading",
+    "step:writing",
+    "a1",
+    "proposal:p1",
+  ]);
+});
+
 test("a step stamped before its own question still sits after it", () => {
   const t = cutThenAsked(true);
   t.artifacts[1] = step("two-a", "10:00:59.990", "u2");
