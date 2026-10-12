@@ -1301,6 +1301,9 @@ export function createAiChatWidget(
     at: number;
   } | null = null;
   const INFLIGHT_MAX_AGE_MS = 15 * 60 * 1000;
+  /** How often a conversation is asked for while its lost answer is looked
+   *  for. Ninety times: the fifteen minutes above. */
+  const LOST_TURN_POLL_MS = 10_000;
   /** Proposal cards dismissed this session — so a transcript reload that
    *  outruns the server's record of it does not draw the card again. */
   const dismissedProposals = new Set<string>();
@@ -4673,26 +4676,47 @@ export function createAiChatWidget(
    * 15 minutes; on timeout the thread simply unlocks and the reply — if any —
    * shows on its next open.
    */
+  /**
+   * LOOK FOR A LOST ANSWER WITHOUT HOLDING THE PERSON (#639).
+   *
+   * The stream broke, or a page load cut the turn. The answer may still land
+   * on the server, so the conversation is asked for every ten seconds, for
+   * fifteen minutes, and a reply that lands is drawn.
+   *
+   * It used to lock Send for those fifteen minutes and say the reply "will
+   * appear here". After a release it never does: a turn cut by one leaves
+   * nothing on the server, not even the question. The person was told to wait
+   * for something that was not coming, in a conversation they could not write
+   * in. So the looking is silent now: no lock, no "answering…" in the
+   * history, and a sentence that promises nothing.
+   *
+   * A NEW MESSAGE IN THAT CONVERSATION ENDS THE LOOKING. From then on the
+   * conversation is the person's again: a reply found later must not be drawn
+   * over the turn they are in, and the marker it clears would be the new
+   * turn's. `lostSearch` holds one token for each conversation being looked
+   * in; `send` drops it.
+   */
+  const lostSearch = new Map<string, symbol>();
   async function recoverLostTurn(
     turnThread: string,
     sentContent: string | null
   ): Promise<void> {
     if (!opts.loadThread) return;
-    pendingThreads.add(turnThread);
-    syncBusy();
+    const mine = Symbol("lost-turn");
+    lostSearch.set(turnThread, mine);
+    const stillMine = (): boolean => lostSearch.get(turnThread) === mine;
     try {
       for (let i = 0; i < 90 && !alive.signal.aborted; i++) {
-        await new Promise((r) => setTimeout(r, 10_000));
-        if (alive.signal.aborted) return;
+        await new Promise((r) => setTimeout(r, LOST_TURN_POLL_MS));
+        if (alive.signal.aborted || !stillMine()) return;
         let items: LoadedThreadItem[];
         try {
           items = await loadThreadItems(turnThread);
         } catch {
           continue; // transient — the same outage that killed the stream
         }
+        if (!stillMine()) return;
         if (!turnLanded(items, sentContent)) continue;
-        pendingThreads.delete(turnThread);
-        syncBusy();
         if (threadId === turnThread) {
           renderThreadItems(items, turnThread);
           maybeDing();
@@ -4702,12 +4726,14 @@ export function createAiChatWidget(
         return;
       }
     } finally {
-      pendingThreads.delete(turnThread);
-      syncBusy();
-      // Landed or given up on: either way there is nothing left to resume.
-      if (inflight?.threadId === turnThread) {
-        inflight = null;
-        saveState();
+      // Landed or given up on: there is nothing left to resume. Ended by a
+      // new message: the marker is that message's now, and is left alone.
+      if (stillMine()) {
+        lostSearch.delete(turnThread);
+        if (inflight?.threadId === turnThread) {
+          inflight = null;
+          saveState();
+        }
       }
     }
   }
@@ -4731,7 +4757,7 @@ export function createAiChatWidget(
 
   /**
    * Wait for a turn a PAGE LOAD cut off (#503), exactly as for a dropped
-   * connection: the note, the "answering…" lock, the poll. Skipped when the
+   * connection: the note and the looking, with no lock (#639). Skipped when the
    * transcript this page just loaded already has the reply.
    */
   function resumeInflight(restored?: LoadedThreadItem[]): void {
@@ -4774,6 +4800,9 @@ export function createAiChatWidget(
     const live = (): boolean => viewGen === myGen && !alive.signal.aborted;
     pendingThreads.add(turnThread ?? NEW_TURN_KEY);
     syncBusy();
+    // The person has written again in a conversation whose last answer was
+    // being looked for: stop looking (#639, see `recoverLostTurn`).
+    if (turnThread) lostSearch.delete(turnThread);
     if (!isRegen) lastUserContent = content;
     // Take + clear any staged attachments for THIS turn.
     const atts = held ? held.atts : stagedAtts.splice(0);
@@ -5363,10 +5392,11 @@ export function createAiChatWidget(
     // proposal cards the transcript did not already draw. Otherwise leave
     // everything for the thread to show on next open; the History spinner has
     // just cleared.
-    // Transport died mid-stream but the api runs the turn to completion and
-    // persists the transcript at the end — recover instead of giving up: keep
-    // the thread marked "answering…" and poll until the reply lands (seen live
-    // with QUIC drops through the edge; the reply arrived minutes later).
+    // Transport died mid-stream. The api may still run the turn to completion
+    // and save the transcript at the end (seen live with QUIC drops through
+    // the edge; the reply arrived minutes later), so look for it. It may also
+    // never come (a release cuts the turn and nothing is saved), so say so
+    // and leave Send free (#639).
     if (transportLost && turnThread && opts.loadThread) {
       typing.remove();
       if (live()) {
