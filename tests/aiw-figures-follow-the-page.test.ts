@@ -81,7 +81,12 @@ test("a language tag the engine refuses falls back instead of throwing", () => {
 test("the widget takes the page's language and sends every figure through it", () => {
   const index = sources.find((s) => s.file === "index.ts")!.text;
   assert.match(index, /\n  locale\?: string;/);
-  assert.match(index, /const locale = usableLocale\(opts\.locale\);/);
+  // The host's word first; a silent host on a page that names its language
+  // gets that language's figures, as it gets its words (sgiant-platform#617).
+  assert.match(
+    index,
+    /const locale =\s*usableLocale\(opts\.locale\) \?\?\s*usableLocale\(\s*typeof document !== "undefined"\s*\? document\.documentElement\?\.lang \|\| undefined\s*: undefined\s*\);/
+  );
   assert.match(index, /const num = \(n: number\): string => n\.toLocaleString\(locale\);/);
   assert.match(index, /relTime\(th\.updatedAt, locale\)/);
 });

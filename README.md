@@ -312,6 +312,22 @@ the browser, which is another language whenever someone reads a Turkish page in
 an English browser: "24,000" for 24.000, and "8/1/2026" for 1 August. A tag the
 engine refuses falls back to the browser's instead of throwing.
 
+The widget carries its own words in English and Turkish. For every label you
+do not pass in `labels`, it uses its own for the page's language: Turkish when
+`locale` is a Turkish tag, or, when you pass no `locale`, when the page's own
+`<html lang>` is. So a host that passes neither gets a Turkish window on a
+Turkish page and an English one everywhere else. For any other language, pass
+`labels`; a label you leave out is shown in English.
+
+A label that says `{name}` is given the window's own name (`title`), so a
+sentence about what the assistant does names your assistant.
+
+Six words are options of their own, older than the label list: `voteUpLabel`,
+`voteDownLabel`, `editLabel`, `regenerateLabel`, `cancelLabel`, `saveLabel`.
+They are chosen the same way: yours, else the window's own for the page's
+language. `subtitle`, the small line under the name, has no default: pass one
+or nothing is drawn there.
+
 ## Charts without React
 
 In-app hosts wire `renderDataWidget` (real `@sgiant/ui` charts). A standalone
