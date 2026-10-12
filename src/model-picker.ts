@@ -227,3 +227,61 @@ export function createModelPicker(input: {
     setOpen,
   };
 }
+
+/**
+ * THE PILL WHEN THE LIST COULD NOT BE LOADED (sgiant-platform#617).
+ *
+ * A host whose list of models failed to arrive had two choices: hold the
+ * whole chat back for it, or mount without a pill, and then the person who
+ * chose a model yesterday finds the control gone and nothing saying why. This
+ * is the third: the pill stays where it was, cannot choose anything, and says
+ * the reason.
+ *
+ * `aria-disabled`, not `disabled`: a disabled button takes no focus, no hover
+ * and no tap, so the reason could be read by nobody. This one can be focused
+ * and pressed; pressing shows the sentence where the menu would open, which
+ * is the only way to read it on a phone. The sentence is also the button's
+ * description for a screen reader and its tooltip.
+ */
+export function createUnavailablePicker(input: {
+  /** Resolved strings, from the widget's own `L()`: the pill's word, and why
+   *  there is nothing to choose. */
+  label: string;
+  reason: string;
+}): Pick<ModelPicker, "root" | "button" | "isOpen" | "setOpen"> {
+  let open = false;
+  const root = el("div", `${PREFIX}-model`);
+  const button = el(
+    "button",
+    `${PREFIX}-model-btn ${PREFIX}-model-off`
+  ) as HTMLButtonElement;
+  button.type = "button";
+  button.setAttribute("aria-disabled", "true");
+  button.setAttribute("aria-expanded", "false");
+  button.title = input.reason;
+  const name = el("span", `${PREFIX}-model-name`);
+  name.textContent = input.label;
+  button.append(name);
+
+  const note = el(
+    "div",
+    `${PREFIX}-menu ${PREFIX}-model-menu ${PREFIX}-model-note`
+  );
+  note.id = `${PREFIX}-model-note-${Math.random().toString(36).slice(2, 8)}`;
+  note.setAttribute("role", "note");
+  note.textContent = input.reason;
+  button.setAttribute("aria-describedby", note.id);
+  root.append(button, note);
+
+  const setOpen = (next: boolean): void => {
+    open = next;
+    note.classList.toggle(`${PREFIX}-menu-open`, next);
+    button.setAttribute("aria-expanded", next ? "true" : "false");
+  };
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(!open);
+  });
+  return { root, button, isOpen: () => open, setOpen };
+}
+

@@ -294,6 +294,12 @@ against `models` on every mount: a model you stop offering is never sent again,
 the person gets `defaultModel` instead. Omit `models` and there is no pill and
 no `model` field. See `examples/models.html`.
 
+If your list of models failed to load and you would rather open the chat than
+hold it back, pass `modelsUnavailable: true` instead of `models`. The pill is
+drawn where it would be, chooses nothing, and says why to a mouse, a keyboard,
+a screen reader and a tap (the `modelPickerUnavailable` label). No `model`
+field is sent, so the turn runs on your server's default.
+
 ## In the page's language
 
 `labels` carries the words; `locale` carries how a figure is written.
