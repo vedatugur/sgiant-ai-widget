@@ -28,9 +28,19 @@ test("the sentence, letter for letter, in both languages", () => {
 const LOOK = async (
   pageLang: string,
   options: Record<string, unknown>,
-  press: "no" | "pill" | "pill-then-elsewhere" | "pill-then-escape" | "send"
+  press:
+    | "no"
+    | "pill"
+    | "pill-twice"
+    | "elsewhere"
+    | "escape"
+    | "type"
+    | "elsewhere-then-open-again"
+    | "send"
 ) => {
   document.documentElement.lang = pageLang;
+  // Each look starts as a tab that has not seen the note.
+  sessionStorage.clear();
   const g = globalThis as any;
   const sent: unknown[] = [];
   g.fetch = async (_input: unknown, init?: { body?: string }) => {
@@ -56,19 +66,34 @@ const LOOK = async (
     '[data-ai-target="widget-composer"]'
   ) as HTMLInputElement;
   const pill = form.querySelector(`.${P}-model-btn`) as HTMLButtonElement | null;
-  if (pill && press.startsWith("pill")) {
-    pill.focus();
-    pill.click();
-    // The sentence fades in; wait for frames, not for a guess at the clock.
+  // The sentence fades; wait for frames, not for a guess at the clock.
+  const frames = async () => {
     for (let i = 0; i < 40; i++)
       await new Promise((r) => requestAnimationFrame(() => r(null)));
-    if (press === "pill-then-elsewhere") input.click();
-    if (press === "pill-then-escape")
-      pill.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
-      );
-    if (press !== "pill") await new Promise((r) => setTimeout(r, 250));
+  };
+  await frames();
+  if (pill && (press === "pill" || press === "pill-twice")) {
+    pill.focus();
+    pill.click();
+    if (press === "pill-twice") pill.click();
   }
+  if (press === "elsewhere" || press === "elsewhere-then-open-again")
+    input.click();
+  if (pill && press === "escape")
+    pill.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+    );
+  if (press === "type") {
+    input.value = "M";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (press === "elsewhere-then-open-again") {
+    // The window is closed and opened again, as on the next page of a host
+    // that loads a whole page on every click.
+    w.close();
+    w.open();
+  }
+  await frames();
   if (press === "send") {
     input.value = "Merhaba";
     form.requestSubmit();
@@ -168,15 +193,18 @@ test(
             assert.equal(s.pill.target, null, "the assistant is offered it as a control");
             assert.deepEqual(
               { text: s.note?.text, role: s.note?.role, shown: s.note?.shown },
-              { text: sentence, role: "note", shown: false }
+              // Shown without being asked for: the window has just opened.
+              { text: sentence, role: "note", shown: true }
             );
             assert.equal(s.rowFits, true, "the composer row overflows");
             assert.ok(s.inputWidth >= 120, `the box is ${s.inputWidth}px wide`);
           });
 
-          await t.test(`${at}: pressed, it shows the sentence, inside the window`, async () => {
-            const s = await look(viewport, lang, { modelsUnavailable: true }, "pill");
-            assert.equal(s.pill!.focused, true, "it cannot be focused");
+          await t.test(`${at}: the sentence is shown when the window opens, inside it, without a press`, async () => {
+            // It was a tooltip, a screen reader's description and a box
+            // behind a press: three ways that each need the person to go
+            // looking, on a pill that looks disabled.
+            const s = await look(viewport, lang, { modelsUnavailable: true });
             assert.equal(s.pill!.expanded, "true");
             assert.equal(s.note!.shown, true);
             assert.equal(s.note!.opacity, "1");
@@ -185,12 +213,39 @@ test(
           });
         }
 
-      await t.test("a press elsewhere, or Escape, puts the sentence away", async () => {
-        for (const press of ["pill-then-elsewhere", "pill-then-escape"] as const) {
+      await t.test("a press elsewhere, Escape, or starting to type puts the sentence away", async () => {
+        for (const press of ["elsewhere", "escape", "type"] as const) {
           const s = await look([1280, 800], "en", { modelsUnavailable: true }, press);
           assert.equal(s.note!.shown, false, press);
           assert.equal(s.pill!.expanded, "false", press);
         }
+      });
+
+      await t.test("the pill puts it away and brings it back, and can be focused", async () => {
+        const once = await look([1280, 800], "en", { modelsUnavailable: true }, "pill");
+        assert.equal(once.pill!.focused, true, "it cannot be focused");
+        assert.equal(once.note!.shown, false);
+        const twice = await look([1280, 800], "en", { modelsUnavailable: true }, "pill-twice");
+        assert.equal(twice.note!.shown, true);
+        assert.equal(twice.note!.opacity, "1");
+      });
+
+      await t.test("once put away by the person, it does not open by itself again in this tab", async () => {
+        // A host that loads a whole page on every click would otherwise show
+        // it on every page for as long as the list is missing.
+        const s = await look([1280, 800], "en", { modelsUnavailable: true }, "elsewhere-then-open-again");
+        assert.equal(s.note!.shown, false);
+        assert.equal(s.pill!.expanded, "false");
+      });
+
+      await t.test("with a list there is nothing to say, and nothing opens by itself", async () => {
+        const s = await look([1280, 800], "en", {
+          models: [
+            { id: "m-1", label: "One" },
+            { id: "m-2", label: "Two" },
+          ],
+        });
+        assert.equal(s.pill!.expanded, "false");
       });
 
       await t.test("no model is sent: the turn runs on the server's default", async () => {

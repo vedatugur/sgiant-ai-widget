@@ -300,6 +300,11 @@ drawn where it would be, chooses nothing, and says why to a mouse, a keyboard,
 a screen reader and a tap (the `modelPickerUnavailable` label). No `model`
 field is sent, so the turn runs on your server's default.
 
+The reason is also shown without being asked for: its box opens by itself when
+the window opens in that state, and stays until the person presses elsewhere,
+presses Escape or starts typing. After that it does not open by itself again
+in that tab; pressing the pill brings it back.
+
 ## In the page's language
 
 `labels` carries the words; `locale` carries how a figure is written.
