@@ -1393,10 +1393,31 @@ export function createAiChatWidget(
       inflight = { threadId: f.threadId, content: f.content, at: f.at };
     }
   }
+  /**
+   * The person's question that is on screen and has NOT been sent, because
+   * the token step said "not now": what the notice's button is holding.
+   * There is at most one. `unsay` takes back a question that will never be
+   * sent, so that nothing on screen looks sent that was not.
+   *
+   * Declared here, above `saveState`, because that reads it.
+   */
+  interface Waiting {
+    nodes: Element[];
+    entry: StoredMsg;
+  }
+  let waiting: Waiting | null = null;
   function saveState(): void {
+    // A QUESTION IS KEPT FOR A RELOAD ONCE IT HAS BEEN SENT, NOT BEFORE. One
+    // that is waiting lives on the screen only, with its notice. Kept, it
+    // came back after a reload as a plain bubble with no notice and no
+    // button: a question that looked sent and had never been.
+    const unsent = waiting?.entry;
     writeJson(storeKey, {
       threadId,
-      messages: history.slice(-40),
+      messages: (unsent
+        ? history.filter((m) => m !== unsent)
+        : history
+      ).slice(-40),
       savedAt: Date.now(),
       ...(inflight ? { inflight } : {}),
     });
@@ -3377,16 +3398,58 @@ export function createAiChatWidget(
       : null);
   if (picker)
     picker.button.setAttribute("data-ai-target", WIDGET_TARGETS.model);
+  /**
+   * THE REASON IS SHOWN WITHOUT BEING ASKED FOR (sgiant-platform#617).
+   *
+   * The pill of a list that could not be loaded carried its sentence as a
+   * tooltip, as a screen reader's description, and in a box shown when it
+   * was pressed. All three need the person to do something first, and a
+   * pill that looks disabled does not invite a press: someone whose turn ran
+   * on another model than the one they chose yesterday was told so only if
+   * they went looking. The decision was "the picker stays, with one line".
+   *
+   * So the box opens BY ITSELF when the window opens in that state, and
+   * stays until the person presses elsewhere or starts typing. After that
+   * they have read it: it is not opened by itself again in this tab (a host
+   * that loads a whole page on every click would otherwise show it on every
+   * page), and the pill still brings it back when pressed.
+   */
+  const noList = !picker && pill ? pill : null;
+  const NO_LIST_READ = `${ns}:model-list-note-read`;
+  const noListRead = (): boolean => {
+    try {
+      return sessionStorage.getItem(NO_LIST_READ) === "1";
+    } catch {
+      return false;
+    }
+  };
+  /** The person put the note away themselves: they have read it. */
+  const putNoListAway = (): void => {
+    if (!noList || !noList.isOpen()) return;
+    noList.setOpen(false);
+    try {
+      sessionStorage.setItem(NO_LIST_READ, "1");
+    } catch {
+      /* storage blocked: it is shown again next time, which is harmless */
+    }
+  };
   if (pill) {
     // Dismissed like the More menu: a click anywhere else in the panel, or
     // Escape, closes it. Both listeners live on `panel`, so nothing leaks.
     panel.addEventListener("click", (e) => {
-      if (pill.isOpen() && !pill.root.contains(e.target as Node))
-        pill.setOpen(false);
+      if (pill.isOpen() && !pill.root.contains(e.target as Node)) {
+        if (noList) putNoListAway();
+        else pill.setOpen(false);
+      }
     });
     panel.addEventListener("keydown", (e) => {
-      if (pill.isOpen() && e.key === "Escape") pill.setOpen(false);
+      if (pill.isOpen() && e.key === "Escape") {
+        if (noList) putNoListAway();
+        else pill.setOpen(false);
+      }
     });
+    // Starting to type is moving on.
+    if (noList) input.addEventListener("input", putNoListAway);
   }
 
   // Session artifacts — media scraped or imported in THIS conversation, hidden
@@ -3670,6 +3733,8 @@ export function createAiChatWidget(
       applyPos(null);
     }
     bubble.style.display = "none";
+    // No list of models: say so now, without being asked (see `noList`).
+    if (noList && !noListRead()) noList.setOpen(true);
     // Show the latest message + focus the composer (always-ready assistant feel).
     pinned = true;
     // A caller (e.g. "Regenerate showcase") can demand a FRESH chat so the
@@ -4891,13 +4956,27 @@ export function createAiChatWidget(
     suggestionsEl.innerHTML = "";
     sendBtn.disabled = true;
     setRole("talk"); // each turn starts as the conversational copilot
+    // What this send drew of the person's own, in case the token step says
+    // "not now" and the question has to wait: see `waiting` below.
+    let drew: Waiting | null = null;
     if (!isRegen && !held) {
-      addMsg(log, "user", content, atts.length ? atts : undefined);
-      history.push({
+      const before = log.lastElementChild;
+      const bubble = addMsg(log, "user", content, atts.length ? atts : undefined);
+      const entry: StoredMsg = {
         role: "user",
         content,
         ...(atts.length ? { attachments: atts } : {}),
-      });
+      };
+      history.push(entry);
+      // The bubble, and the row of attachment chips drawn just above it.
+      const nodes: Element[] = [];
+      for (
+        let n: Element | null = bubble;
+        n && n !== before;
+        n = n.previousElementSibling
+      )
+        nodes.push(n);
+      drew = { nodes, entry };
     }
     // Remembered so a page load mid-turn can wait for the reply — see
     // `inflight`. A new conversation has no thread yet; its `threadId` frame
@@ -5154,6 +5233,17 @@ export function createAiChatWidget(
       }
       // A token was given: whatever an earlier refusal said no longer holds.
       clearTokenNotice();
+      // The question that was waiting is being sent now, if this send is the
+      // notice's button sending it. If it is ANOTHER question (the person
+      // connected somewhere else, in another tab or on the host's own page,
+      // and then asked something new without pressing the button), the one
+      // that waited will never be sent: it is taken back like any other
+      // question that was replaced, not left on screen looking sent (found
+      // by SG QA Executive).
+      if (waiting && !held) unsay(waiting);
+      waiting = null;
+      // The held question is on its way: it is kept for a reload from here.
+      saveState();
       const baseCtx = opts.getContext ? await opts.getContext() : undefined;
       // In advanced view the controllable page is the FRAME, not the parent
       // shell — so the on-page targets (and the current path) come from the
@@ -5460,7 +5550,23 @@ export function createAiChatWidget(
     // person's own and was never sent; say why, and hold it for the button.
     if (refused) {
       typing.remove();
-      if (live()) showTokenNotice(refused, { content, fork, atts });
+      if (live()) {
+        // ONE QUESTION WAITS, AND IT IS THE ONE ON SCREEN. A person who is
+        // not connected and presses Send three times was shown three
+        // bubbles under one "Connect" button, which holds only the last.
+        // Connecting sent that one; the other two stayed on screen looking
+        // like sent messages and were never sent (seen on a customer's
+        // wp-admin, sgiant-platform#639). A question that is replaced before
+        // it could be sent is taken back: its bubble goes, and it leaves the
+        // history it was never part of.
+        if (drew) {
+          if (waiting) unsay(waiting);
+          waiting = drew;
+          // Out of what a reload restores, now that it is known to wait.
+          saveState();
+        }
+        showTokenNotice(refused, { content, fork, atts });
+      } else if (drew) unsay(drew);
       return;
     }
 
@@ -5940,6 +6046,14 @@ export function createAiChatWidget(
    * button is a real button named by the host's label.
    */
   let tokenNotice: HTMLElement | null = null;
+  // `waiting` itself is declared above `saveState`, which reads it.
+  function unsay(q: Waiting): void {
+    for (const n of q.nodes) n.remove();
+    const at = history.indexOf(q.entry);
+    if (at !== -1) history.splice(at, 1);
+    if (waiting === q) waiting = null;
+    saveState();
+  }
   function clearTokenNotice(): void {
     if (!tokenNotice) return;
     // Focus on a button that is about to vanish would fall to the page.
