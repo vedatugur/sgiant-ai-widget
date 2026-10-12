@@ -45,8 +45,13 @@ export function createMessageChrome(deps: {
     model?: string;
     reason?: string;
   }) => Promise<void>;
-  voteUpLabel?: string;
-  voteDownLabel?: string;
+  /** The words of this chrome, resolved by the caller: the host's own, else
+   *  the window's for the page's language. None has a default here, so an
+   *  English word cannot be left behind on a Turkish page. */
+  voteUpLabel: string;
+  voteDownLabel: string;
+  prevVersionLabel: string;
+  nextVersionLabel: string;
 }) {
   const { switchBranch, getThreadId, vote, voteUpLabel, voteDownLabel } = deps;
 
@@ -54,7 +59,7 @@ export function createMessageChrome(deps: {
     const nav = el("div", `${PREFIX}-branchnav`);
     const prev = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
     prev.type = "button";
-    prev.setAttribute("aria-label", "Previous version");
+    prev.setAttribute("aria-label", deps.prevVersionLabel);
     prev.innerHTML = ICON_CHEV_L;
     prev.disabled = !branch.prevLeaf;
     if (branch.prevLeaf) {
@@ -65,7 +70,7 @@ export function createMessageChrome(deps: {
     count.textContent = `${branch.index}/${branch.count}`;
     const next = el("button", `${PREFIX}-branch-btn`) as HTMLButtonElement;
     next.type = "button";
-    next.setAttribute("aria-label", "Next version");
+    next.setAttribute("aria-label", deps.nextVersionLabel);
     next.innerHTML = ICON_CHEV_R;
     next.disabled = !branch.nextLeaf;
     if (branch.nextLeaf) {
@@ -91,10 +96,10 @@ export function createMessageChrome(deps: {
     ) as HTMLButtonElement;
     up.type = "button";
     down.type = "button";
-    up.setAttribute("aria-label", voteUpLabel ?? "Helpful");
-    down.setAttribute("aria-label", voteDownLabel ?? "Not helpful");
-    up.title = voteUpLabel ?? "Helpful";
-    down.title = voteDownLabel ?? "Not helpful";
+    up.setAttribute("aria-label", voteUpLabel);
+    down.setAttribute("aria-label", voteDownLabel);
+    up.title = voteUpLabel;
+    down.title = voteDownLabel;
     up.innerHTML = ICON_THUMB_UP;
     down.innerHTML = ICON_THUMB_DOWN;
     const paint = (): void => {
