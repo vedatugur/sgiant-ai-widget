@@ -10,9 +10,10 @@
  */
 /**
  * SINGLE SOURCE for every user-facing string baked into the vanilla-DOM widget,
- * with its English default. The widget can't call i18next, so the host passes a
- * translated `labels` bag (built by `resolveWidgetLabels`); the widget falls back
- * to these English defaults for any missing key. A `{token}` in a value is filled
+ * with its English default. The widget can't call i18next, so a host may pass a
+ * translated `labels` bag (built by `resolveWidgetLabels`); for any key it does
+ * not pass, the widget uses its own words for the page's language: the Turkish
+ * in `labels-tr.ts` on a Turkish page, these English ones otherwise. A `{token}` in a value is filled
  * at runtime by the widget (single-brace so a host's i18next leaves it intact).
  */
 export const WIDGET_LABELS = {
@@ -70,23 +71,23 @@ export const WIDGET_LABELS = {
   soundOnHint: "Chime when a reply arrives — click to mute",
   soundOffHint: "Muted — click to enable the reply chime",
   autoNavigate: "Auto-navigate",
-  autoNavOnHint: "AYCA opens pages for you — click to turn off",
-  autoNavOffHint: "AYCA asks before opening pages — click to turn on",
+  autoNavOnHint: "{name} opens pages for you — click to turn off",
+  autoNavOffHint: "{name} asks before opening pages — click to turn on",
   autoNavPinnedHint:
     "Advanced view always opens pages itself — this cannot be turned off here",
   autoApply: "Auto-apply",
   autoApplyOnHint:
-    "AYCA applies safe changes for you — click to turn off",
+    "{name} applies safe changes for you — click to turn off",
   autoApplyOffHint:
-    "AYCA asks before applying any change — click to turn on",
+    "{name} asks before applying any change — click to turn on",
   automationHelp: "How automation works",
-  automationHelpTitle: "What AYCA may do on its own",
+  automationHelpTitle: "What {name} may do on its own",
   automationHelpNav:
-    "Auto-navigate — AYCA opens pages by itself. Only pages: anything that changes something still asks.",
+    "Auto-navigate — {name} opens pages by itself. Only pages: anything that changes something still asks.",
   automationHelpNavPinned:
-    "In Advanced view AYCA always opens pages itself. That is what Advanced view is, so it cannot be switched off here.",
+    "In Advanced view {name} always opens pages itself. That is what Advanced view is, so it cannot be switched off here.",
   automationHelpApply:
-    "Auto-apply — AYCA applies changes this site has marked as safe to undo, such as saving a draft, without asking each time.",
+    "Auto-apply — {name} applies changes this site has marked as safe to undo, such as saving a draft, without asking each time.",
   automationHelpNever:
     "Never done automatically, whatever these are set to: publishing, deleting, anything that costs credits, and anything that types or clicks on your behalf. Those always ask you first.",
   automationHelpLocal:
@@ -219,7 +220,7 @@ export const WIDGET_LABELS = {
   // anonymous surfaces — the marketing visitor chat and the public demo — both
   // of which serve Turkish. These three were hardcoded English, so a Turkish
   // visitor read "60,000 free tokens left" under a Turkish conversation.
-  meterTokensLeft: "{count} free tokens left",
+  meterTokensLeft: "{count} left in the free preview",
   meterFreePreview: "Free preview",
   meterUsedThisSession: "{count} used this session",
   // Signup CTA (anonymous surfaces)

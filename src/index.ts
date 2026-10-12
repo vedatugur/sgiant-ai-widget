@@ -171,8 +171,10 @@ import {
   injectStyles,
   USER_BUBBLE_INK,
 } from "./styles";
-import { WIDGET_LABELS, type WidgetLabels } from "./labels";
+import type { WidgetLabels } from "./labels";
+import { builtInLabels } from "./labels-tr";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
+export { WIDGET_LABELS_TR, builtInLabels } from "./labels-tr";
 export type { WidgetLabels };
 import { createModelPicker, initialModel, type ModelOption } from "./model-picker";
 export type { ModelOption };
@@ -723,7 +725,9 @@ export interface AiChatWidgetOptions {
    *  status bar, activity chips, proposal cards, history panel, error state. The
    *  widget is vanilla DOM and can't call i18next, so the host builds this from
    *  its own t() via `resolveWidgetLabels(t)`. Any omitted key falls back to the
-   *  English default in WIDGET_LABELS — the widget never hardcodes visible copy. */
+   *  window's own words for the page's language: Turkish on a Turkish page
+   *  (see `locale`), English otherwise. The widget never hardcodes visible
+   *  copy. */
   labels?: Partial<WidgetLabels>;
   /** The language the page is in, as a BCP 47 tag ("tr", "en-GB"): the host's
    *  own, e.g. `i18n.language`. The numbers and dates the widget writes itself
@@ -731,7 +735,12 @@ export interface AiChatWidgetOptions {
    *  conversation list. Omit it and they follow the BROWSER, which is another
    *  language whenever someone reads a Turkish page in an English browser:
    *  "24,000" for 24.000 and "8/1/2026" for 1 August (sgiant-platform#573).
-   *  `labels` carries the words; this carries how a figure is written. */
+   *  `labels` carries the words; this carries how a figure is written.
+   *
+   *  It also chooses the window's OWN words, for every label `labels` does
+   *  not give: Turkish for a Turkish tag, English for anything else. Omit it
+   *  and the page's own `<html lang>` chooses. So a host that passes no
+   *  `labels` at all gets a Turkish window on a Turkish page. */
   locale?: string;
   /** Where "Sign up" sends the visitor when the free token allowance runs out
    *  (and from the meter's CTA). When set, the widget shows the token meter. */
@@ -1118,19 +1127,27 @@ export function createAiChatWidget(
   const root = opts.container ?? document.body;
   const name = opts.title ?? "AYCA";
   // Resolve a widget-chrome label: host-provided translation (opts.labels) →
-  // English default (WIDGET_LABELS). `{token}` placeholders are filled from
+  // the window's own words for the page's language. `{token}` placeholders are filled from
   // params so runtime values (name, filename, error) interpolate in any language.
   // How this page writes a figure (see `locale` on the options).
   const locale = usableLocale(opts.locale);
   const num = (n: number): string => n.toLocaleString(locale);
+  // The window's own words, in the page's language (#617): what the host
+  // says it is, else what the page says of itself.
+  const own = builtInLabels(
+    opts.locale,
+    typeof document !== "undefined" ? document.documentElement?.lang : null
+  );
   const L = (
     key: keyof WidgetLabels,
     params?: Record<string, string | number>
   ): string => {
-    let s: string = opts.labels?.[key] ?? WIDGET_LABELS[key];
-    if (params)
-      for (const p of Object.keys(params))
-        s = s.split(`{${p}}`).join(String(params[p]));
+    let s: string = opts.labels?.[key] ?? own[key];
+    // `{name}` is the window's own name wherever a label says it, so a
+    // sentence about what the assistant does names THIS assistant.
+    const filled = { name, ...params };
+    for (const p of Object.keys(filled))
+      s = s.split(`{${p}}`).join(String(filled[p as keyof typeof filled]));
     return s;
   };
   // Avatar markup: an inline SVG mark, else a bitmap, else the crescent glyph.
