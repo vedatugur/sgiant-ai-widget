@@ -37,10 +37,13 @@ export const WIDGET_LABELS = {
   pastConversations: "Past conversations",
   /** History-row spinner tooltip: this conversation has a reply in flight. */
   threadAnswering: "Answering…",
-  /** Shown when the live stream drops mid-reply: the server finishes the turn
-   *  and the widget polls the thread until the reply lands. */
+  /** Shown when the live stream drops mid-reply. It PROMISES NOTHING (#639):
+   *  the widget looks for the reply and draws it if it lands, but a turn cut
+   *  by a release leaves nothing on the server, so "it will appear here" was
+   *  false exactly when people read it. Send is not locked meanwhile, which
+   *  is what makes "send it again" something the person can do. */
   streamLostRecovering:
-    "Connection lost — still working on the reply; it will appear here when ready.",
+    "The connection was lost. If the answer does not appear here, send your message again.",
   history: "History",
   moreOptions: "More options",
   more: "More",
