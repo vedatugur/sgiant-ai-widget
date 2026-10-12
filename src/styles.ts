@@ -593,6 +593,10 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-model-btn{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:140px;border:1px solid var(--aiw-border-strong);background:var(--aiw-surface);color:var(--aiw-text-2);border-radius:var(--aiw-radius-lg);padding:0 8px 0 11px;font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;transition:border-color .12s,color .12s}
 .${PREFIX}-model-btn:hover,.${PREFIX}-model-btn[aria-expanded="true"]{border-color:var(--aiw-accent);color:var(--aiw-accent-ink)}
 .${PREFIX}-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The list could not be loaded (#617): the pill is there and chooses nothing.
+   Dashed and muted so it does not read as a control that is merely slow;
+   the cursor says "ask me why", because pressing it shows the reason. */
+.${PREFIX}-model-off,.${PREFIX}-model-off:hover,.${PREFIX}-model-off[aria-expanded="true"]{border-style:dashed;border-color:var(--aiw-border-strong);color:var(--aiw-muted);cursor:help;padding-right:11px}
 .${PREFIX}-model-chev{flex:0 0 auto;display:flex;opacity:.7}
 .${PREFIX}-model-heading{padding:6px 10px 4px;font-size:var(--aiw-font-3xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--aiw-muted)}
 .${PREFIX}-model-group{padding:8px 10px 2px;font-size:var(--aiw-font-3xs);font-weight:600;color:var(--aiw-muted)}
@@ -747,6 +751,8 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 .${PREFIX}-menu.${PREFIX}-model-menu{top:auto;bottom:calc(100% - 2px);right:10px;box-sizing:border-box;min-width:min(252px,calc(100% - 20px));max-width:calc(100% - 20px);max-height:min(60vh,420px);overflow-y:auto;transform-origin:bottom right;transform:translateY(4px) scale(.98)}
 .${PREFIX}-menu.${PREFIX}-model-menu.${PREFIX}-menu-open{transform:none}
 .${PREFIX}-menu.${PREFIX}-model-menu::before{display:none}
+/* The reason a pill chooses nothing (#617): a sentence where the menu opens. */
+.${PREFIX}-menu.${PREFIX}-model-note{padding:10px 12px;font-size:var(--aiw-font-xs);font-weight:400;line-height:1.45;color:var(--aiw-text-2);white-space:normal;overflow-wrap:anywhere}
 .${PREFIX}-model-item .${PREFIX}-menu-label{white-space:normal;overflow-wrap:anywhere}
 /* The automation explainer. A sheet INSIDE the panel, not a page-level modal:
    the widget may be embedded in someone else's admin, and a fixed overlay there

@@ -176,7 +176,12 @@ import { builtInLabels } from "./labels-tr";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
 export { WIDGET_LABELS_TR, builtInLabels } from "./labels-tr";
 export type { WidgetLabels };
-import { createModelPicker, initialModel, type ModelOption } from "./model-picker";
+import {
+  createModelPicker,
+  createUnavailablePicker,
+  initialModel,
+  type ModelOption,
+} from "./model-picker";
 export type { ModelOption };
 export { PREFIX };
 
@@ -328,6 +333,18 @@ export interface AiChatWidgetOptions {
    * sent again.
    */
   models?: ModelOption[];
+  /**
+   * Say that the list of models could not be loaded (sgiant-platform#617).
+   * With no `models`, the pill is then drawn anyway: it chooses nothing, and
+   * says why (the `modelPickerUnavailable` label). No `model` field is sent,
+   * so the turn runs on your server's default. Ignored when `models` has
+   * options: a list that arrived is a list.
+   *
+   * For a host that would rather open the chat without the list than hold it
+   * back: a person who chose a model yesterday finds the control where it
+   * was, with the reason, instead of gone.
+   */
+  modelsUnavailable?: boolean;
   /** The option to start with when the person has not chosen one (or chose one
    *  you no longer offer). Defaults to the first option. */
   defaultModel?: string;
@@ -3315,16 +3332,28 @@ export function createAiChatWidget(
           },
         })
       : null;
-  if (picker) {
+  // The list could not be loaded, the host says: the pill stays, chooses
+  // nothing and says why (#617). It is not named to the assistant as a
+  // control (`data-ai-target`): there is nothing there to operate.
+  const pill =
+    picker ??
+    (opts.modelsUnavailable
+      ? createUnavailablePicker({
+          label: L("modelPicker"),
+          reason: L("modelPickerUnavailable"),
+        })
+      : null);
+  if (picker)
     picker.button.setAttribute("data-ai-target", WIDGET_TARGETS.model);
+  if (pill) {
     // Dismissed like the More menu: a click anywhere else in the panel, or
     // Escape, closes it. Both listeners live on `panel`, so nothing leaks.
     panel.addEventListener("click", (e) => {
-      if (picker.isOpen() && !picker.root.contains(e.target as Node))
-        picker.setOpen(false);
+      if (pill.isOpen() && !pill.root.contains(e.target as Node))
+        pill.setOpen(false);
     });
     panel.addEventListener("keydown", (e) => {
-      if (picker.isOpen() && e.key === "Escape") picker.setOpen(false);
+      if (pill.isOpen() && e.key === "Escape") pill.setOpen(false);
     });
   }
 
@@ -3534,9 +3563,9 @@ export function createAiChatWidget(
         void uploadFiles(files);
       }
     });
-    form.append(attachBtn, input, ...(picker ? [picker.root] : []), sendBtn, fileInput);
+    form.append(attachBtn, input, ...(pill ? [pill.root] : []), sendBtn, fileInput);
   } else {
-    form.append(input, ...(picker ? [picker.root] : []), sendBtn);
+    form.append(input, ...(pill ? [pill.root] : []), sendBtn);
   }
 
   // The chat lives in its own column so advanced view can lay a drivable app

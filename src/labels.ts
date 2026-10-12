@@ -30,6 +30,11 @@ export const WIDGET_LABELS = {
   // `models`. The model names themselves come from the host, not from here.
   modelPicker: "Model",
   modelPickerAria: "Model: {model}. Choose another model",
+  /** The pill's reason when the host says its list could not be loaded
+   *  (`modelsUnavailable`): nothing can be chosen, and the turn runs on the
+   *  server's own default. */
+  modelPickerUnavailable:
+    "The model list could not be loaded. The default model is used.",
   // Header / bubble
   openBubble: "Open {name}",
   openBubbleUnread: "Open {name} — {count} unread",
