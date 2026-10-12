@@ -3352,7 +3352,9 @@ export function createAiChatWidget(
   // control (`data-ai-target`): there is nothing there to operate.
   const pill =
     picker ??
-    (opts.modelsUnavailable
+    // Only a real `true`: a plain-JS host that hands over the text "false"
+    // did not say the list failed.
+    (opts.modelsUnavailable === true
       ? createUnavailablePicker({
           label: L("modelPicker"),
           reason: L("modelPickerUnavailable"),

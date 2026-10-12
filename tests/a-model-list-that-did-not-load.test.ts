@@ -214,7 +214,15 @@ test(
       });
 
       await t.test("a host that says nothing gets no pill, as before", async () => {
-        for (const options of [{}, { modelsUnavailable: false }, { models: [] }])
+        for (const options of [
+          {},
+          { modelsUnavailable: false },
+          { models: [] },
+          // Only a real true says the list failed.
+          { modelsUnavailable: "false" },
+          { modelsUnavailable: "true" },
+          { modelsUnavailable: 1 },
+        ])
           assert.equal((await look([1280, 800], "en", options)).pill, null);
       });
     });
