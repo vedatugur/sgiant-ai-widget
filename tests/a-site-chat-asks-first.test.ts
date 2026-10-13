@@ -603,6 +603,92 @@ test(
         }
       });
 
+      await t.test("a key with spaces around it is the same site: one window, and the key is sent and kept without them", async () => {
+        await page.open([1280, 800]);
+        const seen = await page.evaluate<{
+          same: boolean;
+          launchers: number;
+          reads: string[];
+          sentKey: unknown;
+          tab: string[];
+          capitals: boolean;
+        }>(`(${async (yes: unknown) => {
+          const g = globalThis as any;
+          const P = "sgiant-aiw";
+          const reads: string[] = [];
+          let sentKey: unknown = null;
+          g.fetch = (input: any, init?: any) => {
+            const url = String(typeof input === "string" ? input : input.url);
+            if (url.includes("/site-settings")) {
+              reads.push(url.split("?")[1] ?? "");
+              return Promise.resolve(new Response(JSON.stringify(yes), { status: 200 }));
+            }
+            sentKey = JSON.parse(init?.body ?? "{}").siteKey;
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ type: "text", d: "ok" }) + "\n" + JSON.stringify({ type: "done" }) + "\n",
+                { status: 200 }
+              )
+            );
+          };
+          const call = (siteKey: string) =>
+            g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey,
+            });
+          const [a, b, c] = await Promise.all([call(" pk_1 "), call("pk_1"), call("pk_1\n")]);
+          const launchers = document.querySelectorAll(`.${P}-bubble`).length;
+          const readsOne = [...reads];
+          a.open();
+          await new Promise((r) => setTimeout(r, 200));
+          const input = document.querySelector(
+            '[data-ai-target="widget-composer"]'
+          ) as HTMLTextAreaElement;
+          input.value = "hello";
+          input.closest("form")!.requestSubmit();
+          await new Promise((r) => setTimeout(r, 400));
+          const tab = Object.keys(sessionStorage).sort();
+          // Capitals are another key to a server, and another window here.
+          const other = await call("PK_1");
+          const capitals = other !== a;
+          other.destroy();
+          a.destroy();
+          return { same: a === b && b === c, launchers, reads: readsOne, sentKey, tab, capitals };
+        }})(${JSON.stringify(YES)})`);
+        assert.equal(seen.same, true);
+        assert.equal(seen.launchers, 1);
+        assert.deepEqual(seen.reads, ["siteKey=pk_1"]);
+        assert.equal(seen.sentKey, "pk_1");
+        assert.ok(seen.tab.length > 0);
+        for (const name of seen.tab)
+          assert.ok(name.endsWith(":site:pk_1"), `kept under another name: "${name}"`);
+        assert.equal(seen.capitals, true);
+      });
+
+      await t.test("a key that is only spaces is no key: nothing is asked and nothing is drawn", async () => {
+        await page.open([1280, 800]);
+        const seen = await page.evaluate<{ reads: number; got: boolean; drawn: number }>(`(${async () => {
+          const g = globalThis as any;
+          let reads = 0;
+          g.fetch = () => {
+            reads++;
+            return Promise.resolve(new Response('{"answersVisitors":true}', { status: 200 }));
+          };
+          const w = await g.SgiantAiWidget.createSiteChat({
+            endpoint: "https://api.example/public/ai/chat",
+            settingsUrl: "https://api.example/public/ai/site-settings",
+            siteKey: "   ",
+          });
+          return {
+            reads,
+            got: !!w,
+            drawn: document.querySelectorAll('[class*="sgiant-aiw"]').length,
+          };
+        }})()`);
+        assert.deepEqual(seen, { reads: 0, got: false, drawn: 0 });
+      });
+
       await t.test("a no is one answer for the page too: asked once however often it is called", async () => {
         await page.open([1280, 800]);
         const seen = await page.evaluate<{ reads: number; all: boolean; drawn: number }>(`(${async () => {
@@ -640,6 +726,7 @@ test(
             ellipsis: string;
             inside: boolean;
             text: string;
+            tooltip: string | null;
           }>(`(${async (yes: unknown, name: string) => {
             const g = globalThis as any;
             const P = "sgiant-aiw";
@@ -658,7 +745,9 @@ test(
             const header = document.querySelector(`.${P}-header`)!.getBoundingClientRect();
             const box = title.getBoundingClientRect();
             const cs = getComputedStyle(title);
+            title.dispatchEvent(new MouseEvent("mouseenter"));
             const out = {
+              tooltip: title.getAttribute("title"),
               lines: Math.round(box.height / parseFloat(cs.lineHeight) || 1),
               cut: title.scrollWidth > title.clientWidth,
               ellipsis: cs.textOverflow,
@@ -670,6 +759,8 @@ test(
           }})(${JSON.stringify(YES)}, ${JSON.stringify(name)})`);
           // The whole name is still the title's text, for a screen reader.
           assert.equal(seen.text, name);
+          // And for a mouse: the whole name is the tooltip while it is cut.
+          assert.equal(seen.tooltip, name);
           assert.equal(seen.cut, true, "the name fits, so this proves nothing");
           assert.equal(seen.ellipsis, "ellipsis");
           assert.equal(seen.lines, 1);
@@ -768,6 +859,30 @@ test(
           const named = said.filter((s) => /ayca/i.test(s));
           assert.deepEqual(named, [], `${lang}: a guest reads the package's own name`);
         }
+      });
+
+      await t.test("a name that fits has no tooltip: it is all there to read", async () => {
+        await page.open([1280, 800]);
+        const tooltip = await page.evaluate<string | null>(`(${async () => {
+          const g = globalThis as any;
+          g.fetch = () =>
+            Promise.resolve(
+              new Response('{"answersVisitors":true,"name":"Reception"}', { status: 200 })
+            );
+          const w = await g.SgiantAiWidget.createSiteChat({
+            endpoint: "https://api.example/public/ai/chat",
+            settingsUrl: "https://api.example/public/ai/site-settings",
+            siteKey: "pk_short",
+          });
+          w.open();
+          await new Promise((r) => setTimeout(r, 200));
+          const title = document.querySelector(".sgiant-aiw-title") as HTMLElement;
+          title.dispatchEvent(new MouseEvent("mouseenter"));
+          const got = title.getAttribute("title");
+          w.destroy();
+          return got;
+        }})()`);
+        assert.equal(tooltip, null);
       });
 
       await t.test("a site that gave a name gets that name in the same places, and the other way in keeps its own", async () => {
