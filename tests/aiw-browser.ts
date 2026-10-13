@@ -32,6 +32,8 @@ export interface Page {
   evaluate<T = unknown>(expression: string): Promise<T>;
   /** A real mouse click at a point, the kind that carries user activation. */
   click(x: number, y: number): Promise<void>;
+  /** What the page is told the reader's device prefers, from here on. */
+  scheme(prefers: "light" | "dark"): Promise<void>;
 }
 
 export async function withBrowser(fn: (page: Page) => Promise<void>): Promise<void> {
@@ -109,6 +111,13 @@ export async function withBrowser(fn: (page: Page) => Promise<void>): Promise<vo
           await new Promise((r) => setTimeout(r, 50));
         }
         await evaluate("localStorage.clear()");
+      },
+      async scheme(prefers) {
+        await send(
+          "Emulation.setEmulatedMedia",
+          { features: [{ name: "prefers-color-scheme", value: prefers }] },
+          sessionId
+        );
       },
       async click(x, y) {
         for (const type of ["mousePressed", "mouseReleased"])
