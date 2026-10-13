@@ -30,6 +30,13 @@ export const WIDGET_LABELS = {
   // `models`. The model names themselves come from the host, not from here.
   modelPicker: "Model",
   modelPickerAria: "Model: {model}. Choose another model",
+  /**
+   * On a visitor's page (`createSiteChat`), when the server no longer takes
+   * this site's questions: the site was removed or its key changed while the
+   * visitor's browser still believed it was there. Drawn alone, with no
+   * "Try again": asking again gets the same answer.
+   */
+  siteUnavailable: "The assistant is not available on this site right now.",
   /** The pill's reason when the host says its list could not be loaded
    *  (`modelsUnavailable`): nothing can be chosen, and the turn runs on the
    *  server's own default. */

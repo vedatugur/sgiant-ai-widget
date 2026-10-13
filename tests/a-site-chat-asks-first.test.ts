@@ -374,6 +374,175 @@ test(
         }
       });
 
+      await t.test("the site went away while this browser still believed yes: one sentence, no way to try again, and nothing of the refusal's body", async () => {
+        const GONE = {
+          en: "The assistant is not available on this site right now.",
+          tr: "Asistan şu anda bu sitede kullanılamıyor.",
+        };
+        for (const [lang, status] of [
+          ["en", 403],
+          ["tr", 403],
+          ["en", 404],
+          // A page in a language the window has no words for: the English.
+          ["de", 403],
+        ] as const) {
+          await page.open([320, 640]);
+          const seen = await page.evaluate<{
+            cards: number;
+            text: string;
+            retry: boolean;
+            questions: string[];
+            panel: string;
+            asked: number;
+            inside: boolean;
+          }>(`(${async (yes: unknown, lang: string, status: number) => {
+            const g = globalThis as any;
+            const P = "sgiant-aiw";
+            document.documentElement.lang = lang;
+            let asked = 0;
+            g.fetch = (input: any) => {
+              const url = typeof input === "string" ? input : input.url;
+              if (String(url).includes("/site-settings"))
+                return Promise.resolve(new Response(JSON.stringify(yes), { status: 200 }));
+              asked++;
+              // Everything a body could carry to be mistaken for a sentence.
+              return Promise.resolve(
+                new Response(
+                  JSON.stringify({
+                    error: "unknown or inactive siteKey",
+                    code: "site_unavailable",
+                    message: "STRANGERS WORDS",
+                    retry: true,
+                  }),
+                  { status, headers: { "content-type": "application/json" } }
+                )
+              );
+            };
+            const w = await g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_site_1",
+            });
+            w.open();
+            await new Promise((r) => setTimeout(r, 200));
+            const ask = async (q: string) => {
+              const input = document.querySelector(
+                '[data-ai-target="widget-composer"]'
+              ) as HTMLTextAreaElement;
+              input.value = q;
+              input.closest("form")!.requestSubmit();
+              await new Promise((r) => setTimeout(r, 400));
+            };
+            await ask("Is breakfast included?");
+            const panel = document.querySelector(`.${P}-panel`)!;
+            const cards = [...panel.querySelectorAll(`.${P}-error`)];
+            const card = cards[cards.length - 1];
+            const box = panel.getBoundingClientRect();
+            const r = card?.getBoundingClientRect();
+            const out = {
+              cards: cards.length,
+              text: card?.querySelector(`.${P}-error-text`)?.textContent ?? "",
+              retry: !!card?.querySelector(`.${P}-error-retry`),
+              questions: [...panel.querySelectorAll(`.${P}-msg.${P}-user`)].map(
+                (m) => m.textContent ?? ""
+              ),
+              panel: panel.textContent ?? "",
+              asked,
+              inside: !!r && r.left >= box.left - 0.5 && r.right <= box.right + 0.5,
+            };
+            w.destroy();
+            return out;
+          }})(${JSON.stringify(YES)}, ${JSON.stringify(lang)}, ${status})`);
+          const why = `${lang}, ${status}`;
+          assert.equal(seen.cards, 1, why);
+          assert.equal(seen.text, lang === "tr" ? GONE.tr : GONE.en, why);
+          assert.equal(seen.retry, false, `${why}: Try again is offered`);
+          // The visitor's own question stays where they wrote it.
+          assert.deepEqual(seen.questions, ["Is breakfast included?"], why);
+          assert.equal(seen.inside, true, why);
+          // Nothing the refusal carried, and none of the window's own
+          // failure card.
+          for (const leak of [
+            "STRANGERS",
+            "unknown or inactive",
+            "siteKey",
+            "site_unavailable",
+            "Server error",
+            "403",
+            "404",
+            "hit a snag",
+          ])
+            assert.ok(!seen.panel.includes(leak), `${why}: "${leak}" is on the screen`);
+          assert.equal(seen.asked, 1, why);
+        }
+      });
+
+      await t.test("a refusal that asking again can cure keeps the window's ordinary card, and still nothing of its body", async () => {
+        for (const status of [429, 500, 503]) {
+          await page.open([1280, 800]);
+          const panel = await page.evaluate<string>(`(${async (yes: unknown, status: number) => {
+            const g = globalThis as any;
+            g.fetch = (input: any) => {
+              const url = typeof input === "string" ? input : input.url;
+              return Promise.resolve(
+                String(url).includes("/site-settings")
+                  ? new Response(JSON.stringify(yes), { status: 200 })
+                  : new Response(
+                      JSON.stringify({ error: "STRANGERS WORDS", code: "x", message: "STRANGERS WORDS" }),
+                      { status }
+                    )
+              );
+            };
+            const w = await g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_site_1",
+            });
+            w.open();
+            await new Promise((r) => setTimeout(r, 200));
+            const input = document.querySelector(
+              '[data-ai-target="widget-composer"]'
+            ) as HTMLTextAreaElement;
+            input.value = "Is breakfast included?";
+            input.closest("form")!.requestSubmit();
+            await new Promise((r) => setTimeout(r, 400));
+            const text = document.querySelector(".sgiant-aiw-panel")!.textContent ?? "";
+            w.destroy();
+            return text;
+          }})(${JSON.stringify(YES)}, ${status})`);
+          assert.match(panel, new RegExp(`Server error \\(${status}\\)`));
+          assert.ok(!panel.includes("STRANGERS"), `${status}: the body is on the screen`);
+          assert.ok(!panel.includes("not available on this site"));
+        }
+      });
+
+      await t.test("the old way in is as it was: a 403 there is the ordinary card", async () => {
+        await page.open([1280, 800]);
+        const panel = await page.evaluate<string>(`(${async () => {
+          const g = globalThis as any;
+          g.fetch = () =>
+            Promise.resolve(new Response('{"error":"unknown or inactive siteKey"}', { status: 403 }));
+          const w = g.SgiantAiWidget.createAiChatWidget({
+            endpoint: "https://api.example/public/ai/chat",
+            extraBody: { siteKey: "pk_site_1" },
+          });
+          w.open();
+          await new Promise((r) => setTimeout(r, 200));
+          const input = document.querySelector(
+            '[data-ai-target="widget-composer"]'
+          ) as HTMLTextAreaElement;
+          input.value = "Is breakfast included?";
+          input.closest("form")!.requestSubmit();
+          await new Promise((r) => setTimeout(r, 400));
+          const text = document.querySelector(".sgiant-aiw-panel")!.textContent ?? "";
+          w.destroy();
+          return text;
+        }})()`);
+        assert.match(panel, /Server error \(403\)/);
+        assert.ok(!panel.includes("not available on this site"));
+        assert.ok(!panel.includes("unknown or inactive"));
+      });
+
       await t.test("yes with nothing set: the window's own defaults", async () => {
         const s = await run(page, { answersVisitors: true });
         assert.equal(s.handle, true);

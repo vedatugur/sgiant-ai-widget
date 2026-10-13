@@ -448,6 +448,14 @@ the site's `language` when it has one, else `locale`, else the page's
 `<html lang>`, else English. A page in another language gets the English
 words; what language the assistant answers in is the server's business.
 
+**When the site goes away under an open window.** A browser may still
+believe an earlier yes for as long as the server lets it keep the answer. If
+the server then refuses a visitor's question with a `403` or a `404`, the
+window says one sentence of its own (the `siteUnavailable` label), with no
+"Try again", and the visitor's question stays where they wrote it. Nothing
+from a refused request's body is ever shown. The window is gone at the next
+page view, when the read says no.
+
 **What stays in the browser.** Nothing, when the answer is no, and nothing
 already there is touched. When there is a window, only how it was left
 (that it was opened before, where it sits, the sound setting): a visitor's
