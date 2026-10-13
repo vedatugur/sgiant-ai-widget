@@ -198,6 +198,45 @@ export { PREFIX };
  */
 export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 
+import { fetchSiteSettings, type SiteChatOptions } from "./site-chat";
+export {
+  readSiteSettings,
+  SITE_SETTINGS_TIMEOUT_MS,
+  type SiteChatOptions,
+  type SiteSettings,
+} from "./site-chat";
+
+/**
+ * The assistant on a visitor's page: see `./site-chat`.
+ *
+ * Resolves to the window's handle when the site's assistant answers
+ * visitors now, and to null when it does not, having put nothing in the
+ * page. It never rejects.
+ *
+ * What the site's owner set is applied over the window's defaults: the name
+ * as the title, the greeting, the colour, the suggested questions. The
+ * window's own words follow the site's language when it has one, else
+ * `locale`, else the page's `<html lang>`, else English.
+ */
+export async function createSiteChat(
+  opts: SiteChatOptions
+): Promise<AiChatWidgetHandle | null> {
+  const site = await fetchSiteSettings(opts);
+  if (!site) return null;
+  const suggestions = site.suggestions;
+  return createAiChatWidget({
+    endpoint: opts.endpoint,
+    extraBody: { siteKey: opts.siteKey },
+    ...(site.name ? { title: site.name } : {}),
+    ...(site.greeting ? { greeting: site.greeting } : {}),
+    ...(site.color ? { accent: site.color } : {}),
+    ...(site.language ?? opts.locale
+      ? { locale: (site.language ?? opts.locale) as string }
+      : {}),
+    ...(suggestions.length ? { getSuggestions: () => suggestions } : {}),
+  });
+}
+
 // Thread replay + branch navigation moved to `./replay.ts` (#320): a pure
 // transform, server payload in and render items out, with no DOM and no
 // host context — the shape #306 needs more of.
