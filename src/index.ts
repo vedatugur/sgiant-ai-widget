@@ -64,6 +64,7 @@ import {
   writeFlag,
   writeItem,
   writeJson,
+  tabKey,
 } from "./storage";
 import {
   CHAT_ATTACHMENT_MAX_AV_BYTES,
@@ -198,9 +199,15 @@ export { PREFIX };
  */
 export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 
-import { fetchSiteSettings, type SiteChatOptions } from "./site-chat";
+import {
+  askSite,
+  forgetSiteChats,
+  siteChatKey,
+  type SiteChatOptions,
+} from "./site-chat";
 export {
   readSiteSettings,
+  forgetSiteChats,
   SITE_SETTINGS_TIMEOUT_MS,
   type SiteChatOptions,
   type SiteSettings,
@@ -221,13 +228,23 @@ export {
 export async function createSiteChat(
   opts: SiteChatOptions
 ): Promise<AiChatWidgetHandle | null> {
-  const site = await fetchSiteSettings(opts);
-  if (!site) return null;
+  const said = await askSite(opts);
+  // The server said no: what this tab kept of the site's conversation goes.
+  // Nobody answered (a failed request, no answer in time): nothing is drawn
+  // and what is kept is left for the next page view.
+  if (said.answer === "no") forgetSiteChats();
+  if (said.answer !== "yes") return null;
+  const site = said.settings;
+  // Anything kept under another key is from before this site's key changed.
+  forgetSiteChats(opts.siteKey);
   const suggestions = site.suggestions;
   return createAiChatWidget({
     endpoint: opts.endpoint,
     extraBody: { siteKey: opts.siteKey },
     siteChat: true,
+    // The visitor's conversation follows them from page to page, in the tab
+    // only: see `scoped` in createAiChatWidget.
+    persistKey: siteChatKey(opts.siteKey),
     ...(site.name ? { title: site.name } : {}),
     ...(site.greeting ? { greeting: site.greeting } : {}),
     ...(site.color ? { accent: site.color } : {}),
@@ -1356,15 +1373,28 @@ export function createAiChatWidget(
   // Every persisted key hangs off this one prefix (#306). Neutral by default:
   // a published widget must not write a product name into a stranger's browser.
   const ns = opts.storageNamespace || "aiw";
-  const storeKey = opts.persistKey ? `${ns}:v1:${opts.persistKey}` : null;
+  // ON A VISITOR'S PAGE, EVERYTHING TIED TO THE HOST'S KEY LIVES IN THE TAB.
+  // The conversation, the text typed and not yet sent, whether the window was
+  // left open and where it was put: all of it follows a guest from page to
+  // page and is gone when the tab closes. Nothing of it goes into the storage
+  // a browser keeps. (What is NOT tied to the key stays where it was: that
+  // the window was opened before, and the sound setting.)
+  const scoped = (key: string): string => (opts.siteChat ? tabKey(key) : key);
+  const storeKey = opts.persistKey
+    ? scoped(`${ns}:v1:${opts.persistKey}`)
+    : null;
   // Remember whether the panel was left open, so a page refresh restores it
   // (in-app surfaces only — external embeds shouldn't auto-pop for visitors).
   // Layout prefs (open state + position) use layoutKey so they follow the user
   // across accounts, not persistKey which re-scopes per account (see layoutKey).
   const layoutScope = opts.layoutKey ?? opts.persistKey;
-  const openStateKey = layoutScope ? `${ns}:open:${layoutScope}` : null;
+  const openStateKey = layoutScope
+    ? scoped(`${ns}:open:${layoutScope}`)
+    : null;
   // Keep the UNSENT composer draft across refreshes so typing isn't lost.
-  const draftKey = opts.persistKey ? `${ns}:draft:${opts.persistKey}` : null;
+  const draftKey = opts.persistKey
+    ? scoped(`${ns}:draft:${opts.persistKey}`)
+    : null;
   function saveDraft(v: string): void {
     writeItem(draftKey, v);
   }
@@ -1386,6 +1416,8 @@ export function createAiChatWidget(
    * recent one comes back on its own.
    */
   const RESTORE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  /** The most of a visitor's conversation kept in their tab, in characters. */
+  const SITE_CHAT_KEPT_MAX_CHARS = 200_000;
   /**
    * A TURN STILL RUNNING WHEN THE PAGE WENT AWAY (sgiant-platform#503).
    *
@@ -1420,16 +1452,38 @@ export function createAiChatWidget(
       savedAt?: number;
       inflight?: { threadId?: unknown; content?: unknown; at?: unknown };
     };
-    const s = readJson<Saved>(
-      storeKey,
-      (v): v is Saved => Boolean(v) && typeof v === "object"
-    );
-    if (!s) return;
+    // A GUEST'S KEPT CONVERSATION IS SHOWN ONLY IF IT IS EXACTLY WHAT THIS
+    // WINDOW WRITES, and is removed when it is not. In an app an odd record
+    // is skipped and left; on a visitor's page what cannot be shown must not
+    // stay behind either: a record from another version of the window, one
+    // something else wrote under the name, or one older than the limit.
+    const wellFormed = (v: unknown): v is Saved =>
+      Boolean(v) &&
+      typeof v === "object" &&
+      !Array.isArray(v) &&
+      (!opts.siteChat ||
+        (typeof (v as Saved).savedAt === "number" &&
+          Array.isArray((v as Saved).messages) &&
+          (v as Saved).messages!.every(
+            (m) =>
+              Boolean(m) &&
+              typeof m === "object" &&
+              (m.role === "user" || m.role === "assistant") &&
+              typeof m.content === "string"
+          ) &&
+          ((v as Saved).threadId === undefined ||
+            typeof (v as Saved).threadId === "string")));
+    const s = readJson<Saved>(storeKey, wellFormed);
+    if (!s) {
+      if (opts.siteChat) writeJson(storeKey, null);
+      return;
+    }
     // No stamp (a pre-cutoff save) counts as stale — the greeting wins.
     if (
       typeof s.savedAt !== "number" ||
       Date.now() - s.savedAt > RESTORE_MAX_AGE_MS
     ) {
+      if (opts.siteChat) writeJson(storeKey, null);
       return;
     }
     threadId = s.threadId;
@@ -1463,12 +1517,20 @@ export function createAiChatWidget(
     // came back after a reload as a plain bubble with no notice and no
     // button: a question that looked sent and had never been.
     const unsent = waiting?.entry;
+    let messages = (
+      unsent ? history.filter((m) => m !== unsent) : history
+    ).slice(-40);
+    // A guest's browser is not ours to fill: the oldest go first until what
+    // is kept is under the limit.
+    if (opts.siteChat)
+      while (
+        messages.length &&
+        JSON.stringify(messages).length > SITE_CHAT_KEPT_MAX_CHARS
+      )
+        messages = messages.slice(1);
     writeJson(storeKey, {
       threadId,
-      messages: (unsent
-        ? history.filter((m) => m !== unsent)
-        : history
-      ).slice(-40),
+      messages,
       savedAt: Date.now(),
       ...(inflight ? { inflight } : {}),
     });
@@ -1748,7 +1810,7 @@ export function createAiChatWidget(
   // Pointer Events (not mouse events) so it works with touch and pen as well as
   // a mouse; the header sets `touch-action:none` so a drag doesn't scroll the
   // page underneath on a touchscreen.
-  const posKey = layoutScope ? `${ns}:pos:${layoutScope}` : null;
+  const posKey = layoutScope ? scoped(`${ns}:pos:${layoutScope}`) : null;
 
   /**
    * Below this width the panel is a FULL-SCREEN bottom sheet (see the
@@ -1908,9 +1970,11 @@ export function createAiChatWidget(
   const hActions = el("div", `${PREFIX}-hactions`);
   // New chat — start a fresh conversation (keeps the prior one in history).
   const newChatBtn = el("button", `${PREFIX}-icon`);
-  newChatBtn.setAttribute("aria-label", L("newChat"));
+  // On a visitor's page the button is named for what it does there.
+  const newChatLabel = L(opts.siteChat ? "clearChat" : "newChat");
+  newChatBtn.setAttribute("aria-label", newChatLabel);
   newChatBtn.setAttribute("data-ai-target", WIDGET_TARGETS.newChat);
-  newChatBtn.title = L("newChat");
+  newChatBtn.title = newChatLabel;
   newChatBtn.innerHTML =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   hActions.appendChild(newChatBtn);
@@ -3417,7 +3481,7 @@ export function createAiChatWidget(
   // The model pill (sgiant-platform#465), only when the host offers a choice.
   // The choice is remembered per layout scope, like the panel's position, so
   // the hub and the backoffice each keep their own.
-  const modelKey = layoutScope ? `${ns}:model:${layoutScope}` : null;
+  const modelKey = layoutScope ? scoped(`${ns}:model:${layoutScope}`) : null;
   const firstModel = opts.models?.length
     ? initialModel(opts.models, readItem(modelKey), opts.defaultModel)
     : null;
@@ -3747,7 +3811,15 @@ export function createAiChatWidget(
     threadId = undefined;
     paintStarItem();
     history.length = 0;
-    saveState();
+    if (opts.siteChat) {
+      // "CLEAR THIS CONVERSATION" REMOVES IT. Not an empty record under the
+      // same name: nothing of the conversation, its id or the text typed
+      // and not yet sent is left in the visitor's browser.
+      inflight = null;
+      writeJson(storeKey, null);
+      writeItem(draftKey, null);
+      input.value = "";
+    } else saveState();
     clearRich();
     log.innerHTML = "";
     if (opts.greeting) addAssistantMessage(opts.greeting);
@@ -3957,7 +4029,9 @@ export function createAiChatWidget(
   let advFrame: HTMLIFrameElement | null = null;
   let frameUrlLabel: HTMLElement | null = null;
   let collapseBtnEl: HTMLButtonElement | null = null;
-  const advKey = opts.persistKey ? `${ns}:adv:${opts.persistKey}` : "";
+  const advKey = opts.persistKey
+    ? scoped(`${ns}:adv:${opts.persistKey}`)
+    : "";
   const rememberAdvanced = (): void => {
     writeFlag(advKey, advanced);
   };
@@ -4251,7 +4325,9 @@ export function createAiChatWidget(
   // Draggable divider between the chat column and the app pane (advanced view).
   // Drag to resize; the width persists per host so it survives reloads; a
   // double-click resets to the default. Only active in advanced, non-collapsed.
-  const advWidthKey = opts.persistKey ? `${ns}:advw:${opts.persistKey}` : "";
+  const advWidthKey = opts.persistKey
+    ? scoped(`${ns}:advw:${opts.persistKey}`)
+    : "";
   const resizer = el("div", `${PREFIX}-resizer`);
   resizer.setAttribute("role", "separator");
   resizer.setAttribute("aria-orientation", "vertical");

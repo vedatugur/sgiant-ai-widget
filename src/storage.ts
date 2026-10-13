@@ -39,13 +39,39 @@ type StorageKey = string | null | undefined;
 const live = (key: StorageKey): key is string => Boolean(key);
 
 /**
+ * A KEY THAT LIVES ONLY AS LONG AS THE TAB.
+ *
+ * Everything here went to `localStorage`, which a browser keeps until it is
+ * told otherwise. That is right for a signed-in person in an app. It is not
+ * right for a guest on somebody's website, on what may be a shared computer:
+ * what such a visitor wrote should follow them from page to page and be gone
+ * when they close the tab. That is `sessionStorage`.
+ *
+ * The choice travels WITH THE KEY rather than as a second argument, because
+ * the callers are thirty-odd reads and writes spread over this package and
+ * each already passes a key it built once. A key made with `tabKey` is kept
+ * in the tab; every other key is where it always was.
+ */
+const TAB = "tab|";
+export function tabKey(key: string): string {
+  return TAB + key;
+}
+/** Where a key lives, and its name there. May throw: storage can be refused. */
+function slot(key: string): [Storage, string] {
+  return key.startsWith(TAB)
+    ? [sessionStorage, key.slice(TAB.length)]
+    : [localStorage, key];
+}
+
+/**
  * Read a string. Returns `fallback` when the key is off, absent, or storage is
  * unreadable — the three cases callers have never needed to tell apart.
  */
 export function readItem(key: StorageKey, fallback = ""): string {
   if (!live(key)) return fallback;
   try {
-    return localStorage.getItem(key) ?? fallback;
+    const [store, name] = slot(key);
+    return store.getItem(name) ?? fallback;
   } catch {
     return fallback;
   }
@@ -55,8 +81,9 @@ export function readItem(key: StorageKey, fallback = ""): string {
 export function writeItem(key: StorageKey, value: string | null): void {
   if (!live(key)) return;
   try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
+    const [store, name] = slot(key);
+    if (value) store.setItem(name, value);
+    else store.removeItem(name);
   } catch {
     /* storage full or blocked — the value just does not persist */
   }
@@ -80,7 +107,8 @@ export function writeItem(key: StorageKey, value: string | null): void {
 export function readFlag(key: StorageKey, whenUnavailable = false): boolean {
   if (!live(key)) return false;
   try {
-    return localStorage.getItem(key) === "1";
+    const [store, name] = slot(key);
+    return store.getItem(name) === "1";
   } catch {
     return whenUnavailable;
   }
@@ -107,7 +135,8 @@ export function readJson<T>(
 ): T | null {
   if (!live(key)) return null;
   try {
-    const raw = localStorage.getItem(key);
+    const [store, name] = slot(key);
+    const raw = store.getItem(name);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isValid(parsed) ? parsed : null;
@@ -120,8 +149,9 @@ export function readJson<T>(
 export function writeJson(key: StorageKey, value: unknown | null): void {
   if (!live(key)) return;
   try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify(value));
+    const [store, name] = slot(key);
+    if (value === null) store.removeItem(name);
+    else store.setItem(name, JSON.stringify(value));
   } catch {
     /* storage full or blocked — non-fatal */
   }

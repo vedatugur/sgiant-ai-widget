@@ -37,6 +37,11 @@ export const WIDGET_LABELS = {
    * "Try again": asking again gets the same answer.
    */
   siteUnavailable: "The assistant is not available on this site right now.",
+  /**
+   * The header's button on a visitor's page, where "New chat" is: it removes
+   * the conversation kept in the visitor's tab and shows the greeting again.
+   */
+  clearChat: "Clear this conversation",
   /** The pill's reason when the host says its list could not be loaded
    *  (`modelsUnavailable`): nothing can be chosen, and the turn runs on the
    *  server's own default. */

@@ -110,7 +110,9 @@ export async function withBrowser(fn: (page: Page) => Promise<void>): Promise<vo
           assert.ok(i < 100, "the bundle never loaded in the page");
           await new Promise((r) => setTimeout(r, 50));
         }
-        await evaluate("localStorage.clear()");
+        // Both: a tab keeps its session storage across a navigation, so a
+        // conversation kept by one case would be restored in the next.
+        await evaluate("localStorage.clear(); sessionStorage.clear()");
       },
       async scheme(prefers) {
         await send(
