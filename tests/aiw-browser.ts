@@ -32,6 +32,12 @@ export interface Page {
   evaluate<T = unknown>(expression: string): Promise<T>;
   /** A real mouse click at a point, the kind that carries user activation. */
   click(x: number, y: number): Promise<void>;
+  /**
+   * The next page of the same visit: a real navigation in the same tab, with
+   * the bundle loaded again. Nothing is cleared, so what the tab and the
+   * browser keep is what a visitor's next page finds.
+   */
+  next(): Promise<void>;
   /** What the page is told the reader's device prefers, from here on. */
   scheme(prefers: "light" | "dark"): Promise<void>;
 }
@@ -113,6 +119,17 @@ export async function withBrowser(fn: (page: Page) => Promise<void>): Promise<vo
         // Both: a tab keeps its session storage across a navigation, so a
         // conversation kept by one case would be restored in the next.
         await evaluate("localStorage.clear(); sessionStorage.clear()");
+      },
+      async next() {
+        await send("Page.navigate", { url: `${pathToFileURL(harness)}?${++seq}` }, sessionId);
+        for (let i = 0; ; i++) {
+          const ready = await evaluate(
+            "document.readyState === 'complete' && typeof SgiantAiWidget"
+          ).catch(() => false);
+          if (ready === "object") break;
+          assert.ok(i < 100, "the bundle never loaded on the next page");
+          await new Promise((r) => setTimeout(r, 50));
+        }
       },
       async scheme(prefers) {
         await send(

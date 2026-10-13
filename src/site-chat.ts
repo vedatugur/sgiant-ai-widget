@@ -51,7 +51,11 @@ export interface SiteChatOptions {
    * has one, comes first.
    */
   locale?: string;
-  /** How long the settings may take, in milliseconds. Default 4000. */
+  /**
+   * How long the settings may take, in milliseconds: 4000, or less. A page
+   * may ask for a shorter wait. A longer one is brought down to 4000: how
+   * long a visitor's page waits for a button is not a host's to stretch.
+   */
   timeoutMs?: number;
 }
 
@@ -135,7 +139,7 @@ export async function askSite(
     return { answer: "unknown" };
   const limit =
     typeof opts.timeoutMs === "number" && opts.timeoutMs > 0
-      ? opts.timeoutMs
+      ? Math.min(opts.timeoutMs, SITE_SETTINGS_TIMEOUT_MS)
       : SITE_SETTINGS_TIMEOUT_MS;
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), limit);

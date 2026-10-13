@@ -21,6 +21,11 @@ import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
  *  - it stays when nobody answered (one bad connection erases nothing);
  *  - there is a limit to how much is kept;
  *  - a browser that refuses storage keeps nothing and the chat still works.
+ *
+ * EVERY "NEXT PAGE" HERE IS A REAL ONE: a navigation in the same tab, the
+ * bundle loaded again. The window allows one site chat per page view, so a
+ * second visit made inside one page would be answered with the first and
+ * prove nothing.
  */
 
 /** What a server answers, and a page to visit it from. Runs in the page. */
@@ -104,10 +109,46 @@ const SETUP = (): void => {
   });
 };
 
-const fresh = async (page: Page, viewport: readonly [number, number] = [1280, 800]) => {
-  await page.open(viewport);
-  await page.evaluate(`(${SETUP})()`);
+type Server = {
+  settings?: unknown;
+  settingsFail?: "" | "network" | "500" | "404";
 };
+type Seen<T> = {
+  drew: boolean;
+  out: T;
+  sent: Array<{ threadId: unknown; content: string; siteKey: unknown }>;
+};
+
+/**
+ * One page view of a visit. `first` starts a new visit (a fresh tab's worth
+ * of storage); otherwise it is the next page of the same one. `body` is the
+ * source of what the visitor does there, with the page's helpers in reach.
+ */
+async function view<T = unknown>(
+  page: Page,
+  how: {
+    first?: boolean;
+    viewport?: readonly [number, number];
+    server?: Server;
+    siteKey?: string;
+    lang?: string;
+    before?: string;
+  },
+  body = "return null;"
+): Promise<Seen<T>> {
+  if (how.first) await page.open(how.viewport ?? [1280, 800]);
+  else await page.next();
+  return page.evaluate<Seen<T>>(`(async () => {
+    (${SETUP})();
+    Object.assign(S, ${JSON.stringify(how.server ?? {})});
+    ${how.lang ? `document.documentElement.lang = ${JSON.stringify(how.lang)};` : ""}
+    ${how.before ?? ""}
+    const drew = await visit(${JSON.stringify(how.siteKey ?? "pk_1")});
+    const out = await (async () => { ${body} })();
+    leave();
+    return { drew, out, sent: S.sent };
+  })()`);
+}
 
 test(
   "in a browser: a visitor's conversation, kept in the tab",
@@ -115,14 +156,15 @@ test(
   async (t) => {
     await withBrowser(async (page) => {
       await t.test("EVERYTHING the window writes in a visitor's browser over a full visit, by name", async () => {
-        await fresh(page);
-        const seen = await page.evaluate<{
+        const { out: seen } = await view<{
           forGood: string[];
           inTheTab: string[];
           forGoodText: string;
           cookie: string;
-        }>(`(async () => {
-          await visit();
+        }>(
+          page,
+          { first: true },
+          `
           await ask("Is breakfast included?");
           type("an unsent thought about the spa");
           // The sound switch, pressed: the one other thing a visitor can set.
@@ -131,22 +173,22 @@ test(
             /chime|sound|ses/i.test((b.getAttribute("aria-label") || b.title || b.textContent || ""))
           );
           chime && chime.click();
-          // The window, dragged by its header.
+          // The window, dragged by its header: on the header's own text, not
+          // on one of its buttons. A made-up pointer cannot be captured,
+          // which the window survives.
           const h = document.querySelector("." + P + "-header");
           const r = h.getBoundingClientRect();
           const at = (type, x, y) =>
             new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1, button: 0, isPrimary: true });
-          // On the header's own text, not on one of its buttons. A made-up
-          // pointer cannot be captured, which the window survives.
           const grip = h.querySelector("." + P + "-title") || h;
           try { grip.dispatchEvent(at("pointerdown", r.left + 60, r.top + 12)); } catch {}
           h.dispatchEvent(at("pointermove", r.left - 80, r.top - 120));
           h.dispatchEvent(at("pointerup", r.left - 80, r.top - 120));
           await new Promise((r) => setTimeout(r, 200));
           const k = kept();
-          leave();
           return { forGood: k.forGood, inTheTab: k.inTheTab, forGoodText: k.forGoodText, cookie: document.cookie };
-        })()`);
+          `
+        );
         // FOR AS LONG AS THE BROWSER KEEPS IT: that the window was opened
         // before, and the sound setting once a visitor changes it. Nothing
         // else, ever.
@@ -160,16 +202,10 @@ test(
           "aiw:pos:site:pk_1",
           "aiw:v1:site:pk_1",
         ];
-        for (const name of seen.forGood)
-          assert.ok(FOR_GOOD.includes(name), `kept for good, and not on the list: ${name}`);
-        for (const name of seen.inTheTab)
-          assert.ok(IN_THE_TAB.includes(name), `kept in the tab, and not on the list: ${name}`);
-        // The visit above really did each thing: so the lists are what a
-        // full visit leaves, not what a short one happens to.
-        assert.deepEqual(seen.forGood, FOR_GOOD, "the sound switch was not pressed");
-        assert.deepEqual(seen.inTheTab, IN_THE_TAB, "the window was not dragged");
-        for (const must of ["aiw:v1:site:pk_1", "aiw:draft:site:pk_1", "aiw:open:site:pk_1"])
-          assert.ok(seen.inTheTab.includes(must), `not kept in the tab: ${must}`);
+        // Exactly these: a name missing means the visit did not really do
+        // the thing, a name added means the window keeps something new.
+        assert.deepEqual(seen.forGood, FOR_GOOD);
+        assert.deepEqual(seen.inTheTab, IN_THE_TAB);
         // Not one word of the visitor's in the storage a browser keeps.
         for (const word of ["breakfast", "spa", "thr_1", "Answer to"])
           assert.ok(!seen.forGoodText.includes(word), `"${word}" is kept for good`);
@@ -178,31 +214,25 @@ test(
 
       await t.test("on the next page the conversation is there, and goes on as the same one", async () => {
         for (const viewport of [[1280, 800], [320, 640]] as const) {
-          await fresh(page, viewport);
-          const seen = await page.evaluate<{
-            next: { questions: string[]; answers: string[]; box: string | null };
-            sent: Array<{ threadId: unknown; content: string }>;
-          }>(`(async () => {
-            await visit();
-            await ask("Is breakfast included?");
-            type("and the spa");
-            leave();
-            // The next page of the site.
-            await visit();
-            const next = shown();
-            await ask("And parking?");
-            leave();
-            return { next, sent: S.sent };
-          })()`);
-          assert.deepEqual(seen.next.questions, ["Is breakfast included?"]);
-          assert.ok(seen.next.answers.some((a) => a.includes("Answer to: Is breakfast included?")));
-          // What was typed and not sent is in the box again.
-          assert.equal(seen.next.box, "and the spa");
-          // The same conversation to the server: its id goes with the next question.
-          assert.deepEqual(
-            seen.sent.map((s) => s.threadId),
-            [null, "thr_1"]
+          const one = await view(
+            page,
+            { first: true, viewport },
+            `await ask("Is breakfast included?"); type("and the spa");`
           );
+          assert.deepEqual(one.sent.map((s) => s.threadId), [null]);
+          const two = await view<{ before: ReturnType<any>; }>(
+            page,
+            {},
+            `const before = shown(); await ask("And parking?"); return { before };`
+          );
+          const before = (two.out as any).before;
+          assert.equal(two.drew, true);
+          assert.deepEqual(before.questions, ["Is breakfast included?"]);
+          assert.ok(before.answers.some((a: string) => a.includes("Answer to: Is breakfast included?")));
+          // What was typed and not sent is in the box again.
+          assert.equal(before.box, "and the spa");
+          // The same conversation to the server: its id goes with the question.
+          assert.deepEqual(two.sent.map((s) => s.threadId), ["thr_1"]);
         }
       });
 
@@ -213,40 +243,27 @@ test(
           // A page in a language the window has no words for: the English.
           ["de", "Clear this conversation"],
         ] as const) {
-          await fresh(page, [320, 640]);
-          const seen = await page.evaluate<{
-            found: boolean;
-            title: string;
-            after: { questions: string[]; answers: string[]; box: string | null };
-            tab: string[];
-            all: string;
-            next: { questions: string[] };
-            nextThread: unknown;
-          }>(`(async (name, lang) => {
-            document.documentElement.lang = lang;
-            await visit();
+          const { out: seen } = await view<any>(
+            page,
+            { first: true, viewport: [320, 640], lang },
+            `
             await ask("Is breakfast included?");
             type("and the spa");
             const btn = [...document.querySelectorAll(".sgiant-aiw-panel button")].find(
-              (b) => b.getAttribute("aria-label") === name
+              (b) => b.getAttribute("aria-label") === ${JSON.stringify(name)}
             );
             const title = btn ? btn.title : "";
             btn && btn.click();
             await new Promise((r) => setTimeout(r, 200));
-            const after = shown();
             const k = kept();
-            leave();
-            await visit();
-            const next = shown();
-            await ask("Hello again");
-            leave();
-            return { found: !!btn, title, after, tab: k.inTheTab, all: k.all, next, nextThread: S.sent[S.sent.length - 1].threadId };
-          })(${JSON.stringify(name)}, ${JSON.stringify(lang)})`);
+            return { found: !!btn, title, after: shown(), tab: k.inTheTab, all: k.all };
+            `
+          );
           assert.equal(seen.found, true, `${lang}: no button named "${name}"`);
           assert.equal(seen.title, name);
           // The window is as it was at the start: the greeting, an empty box.
           assert.deepEqual(seen.after.questions, []);
-          assert.ok(seen.after.answers.some((a) => a.includes("Welcome.")));
+          assert.ok(seen.after.answers.some((a: string) => a.includes("Welcome.")));
           assert.equal(seen.after.box, "");
           // Nothing of the conversation, its id or the unsent text is left.
           for (const word of ["breakfast", "spa", "thr_1", "Answer to"])
@@ -254,87 +271,78 @@ test(
           assert.ok(!seen.tab.includes("aiw:v1:site:pk_1"));
           assert.ok(!seen.tab.includes("aiw:draft:site:pk_1"));
           // And the next page starts a new one, not the old one again.
-          assert.deepEqual(seen.next.questions, []);
-          assert.equal(seen.nextThread, null);
+          const next = await view<any>(
+            page,
+            { lang },
+            `const first = shown(); await ask("Hello again"); return first;`
+          );
+          assert.deepEqual(next.out.questions, []);
+          assert.deepEqual(next.sent.map((s) => s.threadId), [null]);
         }
       });
 
       await t.test("the server says no: nothing is drawn and what was kept is gone", async () => {
-        for (const how of ["false", "404"] as const) {
-          await fresh(page);
-          const seen = await page.evaluate<{ drew: boolean; drawn: number; tab: string[]; back: string[] }>(
-            `(async (how) => {
-              await visit();
-              await ask("Is breakfast included?");
-              leave();
-              if (how === "false") S.settings = { answersVisitors: false };
-              else S.settingsFail = "404";
-              const drew = await visit();
-              const out = { drew, drawn: shown().drawn, tab: kept().inTheTab };
-              // Turned on again later: a new conversation, not the old one.
-              S.settings = { answersVisitors: true };
-              S.settingsFail = "";
-              await visit();
-              const back = shown().questions;
-              leave();
-              return { ...out, back };
-            })(${JSON.stringify(how)})`
+        for (const server of [
+          { settings: { answersVisitors: false } },
+          { settingsFail: "404" },
+        ] as Server[]) {
+          const why = JSON.stringify(server);
+          await view(page, { first: true }, `await ask("Is breakfast included?");`);
+          const no = await view<any>(
+            page,
+            { server },
+            `return { drawn: shown().drawn, tab: kept().inTheTab };`
           );
-          assert.equal(seen.drew, false, how);
-          assert.equal(seen.drawn, 0, how);
-          assert.deepEqual(seen.tab, [], `${how}: still kept`);
-          assert.deepEqual(seen.back, [], how);
+          assert.equal(no.drew, false, why);
+          assert.equal(no.out.drawn, 0, why);
+          assert.deepEqual(no.out.tab, [], `${why}: still kept`);
+          // Turned on again later: a new conversation, not the old one.
+          const back = await view<any>(page, {}, `return shown().questions;`);
+          assert.equal(back.drew, true, why);
+          assert.deepEqual(back.out, [], why);
         }
       });
 
       await t.test("nobody answered: nothing is drawn, and what was kept is there on the next page", async () => {
-        for (const how of ["network", "500"] as const) {
-          await fresh(page);
-          const seen = await page.evaluate<{ drew: boolean; drawn: number; same: boolean; back: string[] }>(
-            `(async (how) => {
-              await visit();
-              await ask("Is breakfast included?");
-              leave();
-              const before = kept().all;
-              S.settingsFail = how;
-              const drew = await visit();
-              const out = { drew, drawn: shown().drawn, same: kept().all === before };
-              S.settingsFail = "";
-              await visit();
-              const back = shown().questions;
-              leave();
-              return { ...out, back };
-            })(${JSON.stringify(how)})`
+        for (const settingsFail of ["network", "500"] as const) {
+          const first = await view<string>(
+            page,
+            { first: true },
+            `await ask("Is breakfast included?"); return kept().all;`
           );
-          assert.equal(seen.drew, false, how);
-          assert.equal(seen.drawn, 0, how);
-          assert.equal(seen.same, true, `${how}: one bad connection changed what was kept`);
-          assert.deepEqual(seen.back, ["Is breakfast included?"], how);
+          const lost = await view<any>(
+            page,
+            { server: { settingsFail } },
+            `return { drawn: shown().drawn, all: kept().all };`
+          );
+          assert.equal(lost.drew, false, settingsFail);
+          assert.equal(lost.out.drawn, 0, settingsFail);
+          assert.equal(
+            lost.out.all,
+            first.out,
+            `${settingsFail}: one bad connection changed what was kept`
+          );
+          const back = await view<any>(page, {}, `return shown().questions;`);
+          assert.deepEqual(back.out, ["Is breakfast included?"], settingsFail);
         }
       });
 
       await t.test("the site's key changed: the old conversation is neither shown nor left behind", async () => {
-        await fresh(page);
-        const seen = await page.evaluate<{ questions: string[]; tab: string[]; all: string; sentKey: unknown; sentThread: unknown }>(
-          `(async () => {
-            await visit("pk_1");
-            await ask("Is breakfast included?");
-            leave();
-            await visit("pk_2");
-            const questions = shown().questions;
-            await ask("Hello");
-            const k = kept();
-            leave();
-            const last = S.sent[S.sent.length - 1];
-            return { questions, tab: k.inTheTab, all: k.all, sentKey: last.siteKey, sentThread: last.threadId };
-          })()`
+        await view(page, { first: true, siteKey: "pk_1" }, `await ask("Is breakfast included?");`);
+        const seen = await view<any>(
+          page,
+          { siteKey: "pk_2" },
+          `const questions = shown().questions; await ask("Hello"); const k = kept(); return { questions, tab: k.inTheTab, all: k.all };`
         );
-        assert.deepEqual(seen.questions, []);
-        assert.ok(seen.tab.every((n) => !n.endsWith(":site:pk_1")), seen.tab.join(", "));
-        assert.ok(!seen.all.includes("breakfast"));
-        assert.equal(seen.sentKey, "pk_2");
+        assert.deepEqual(seen.out.questions, []);
+        assert.ok(
+          seen.out.tab.every((n: string) => !n.endsWith(":site:pk_1")),
+          seen.out.tab.join(", ")
+        );
+        assert.ok(!seen.out.all.includes("breakfast"));
+        assert.equal(seen.sent[0]!.siteKey, "pk_2");
         // The old conversation's id is not sent under the new key.
-        assert.equal(seen.sentThread, null);
+        assert.equal(seen.sent[0]!.threadId, null);
       });
 
       await t.test("what is kept but is not what this window writes is removed, never drawn", async () => {
@@ -365,41 +373,40 @@ test(
           ],
         ];
         for (const [why, stored] of cases) {
-          await fresh(page);
-          const seen = await page.evaluate<{ panel: string; left: string | null; thread: unknown }>(
-            `(async (stored) => {
-              sessionStorage.setItem("aiw:v1:site:pk_1", stored);
-              await visit();
-              const panel = document.querySelector(".sgiant-aiw-panel").textContent;
-              const left = sessionStorage.getItem("aiw:v1:site:pk_1");
-              await ask("Hello");
-              leave();
-              return { panel, left, thread: S.sent[0].threadId };
-            })(${JSON.stringify(stored)})`
+          const seen = await view<any>(
+            page,
+            {
+              first: true,
+              before: `sessionStorage.setItem("aiw:v1:site:pk_1", ${JSON.stringify(stored)});`,
+            },
+            `
+            const panel = document.querySelector(".sgiant-aiw-panel").textContent;
+            const left = sessionStorage.getItem("aiw:v1:site:pk_1");
+            await ask("Hello");
+            return { panel, left };
+            `
           );
-          assert.ok(!seen.panel.includes("SHOULD NOT SHOW"), `${why}: it was drawn`);
-          assert.equal(seen.left, null, `${why}: it was left in the tab`);
-          assert.equal(seen.thread, null, `${why}: its id was sent`);
+          assert.ok(!seen.out.panel.includes("SHOULD NOT SHOW"), `${why}: it was drawn`);
+          assert.equal(seen.out.left, null, `${why}: it was left in the tab`);
+          assert.equal(seen.sent[0]!.threadId, null, `${why}: its id was sent`);
         }
       });
 
       await t.test("there is a limit to how much is kept: the oldest go first", async () => {
-        await fresh(page);
-        const seen = await page.evaluate<{ size: number; kept: number; last: string; first: string }>(
-          `(async () => {
-            await visit();
-            const long = "x".repeat(60000);
-            for (const n of [1, 2, 3, 4, 5]) await ask("Q" + n + " " + long);
-            const raw = sessionStorage.getItem("aiw:v1:site:pk_1");
-            const messages = JSON.parse(raw).messages;
-            leave();
-            return {
-              size: JSON.stringify(messages).length,
-              kept: messages.length,
-              last: messages[messages.length - 1].content.slice(0, 16),
-              first: messages[0].content.slice(0, 16),
-            };
-          })()`
+        const { out: seen } = await view<any>(
+          page,
+          { first: true },
+          `
+          const long = "x".repeat(60000);
+          for (const n of [1, 2, 3, 4, 5]) await ask("Q" + n + " " + long);
+          const messages = JSON.parse(sessionStorage.getItem("aiw:v1:site:pk_1")).messages;
+          return {
+            size: JSON.stringify(messages).length,
+            kept: messages.length,
+            last: messages[messages.length - 1].content.slice(0, 16),
+            first: messages[0].content.slice(0, 16),
+          };
+          `
         );
         assert.ok(seen.size <= 200000, `${seen.size} characters kept`);
         assert.ok(seen.kept >= 2 && seen.kept < 10, `${seen.kept} messages kept`);
@@ -409,47 +416,55 @@ test(
       });
 
       await t.test("a browser that refuses storage: nothing is kept, nothing is said, and the chat works", async () => {
-        await fresh(page);
-        const seen = await page.evaluate<{ drew: boolean; answers: string[]; next: string[]; errors: number; panel: string }>(
-          `(async () => {
-            let errors = 0;
-            addEventListener("error", () => errors++);
-            addEventListener("unhandledrejection", () => errors++);
-            const refuse = () => { throw new DOMException("refused", "SecurityError"); };
-            for (const store of [Storage.prototype]) {
-              store.getItem = refuse; store.setItem = refuse; store.removeItem = refuse;
-            }
-            Object.defineProperty(window, "sessionStorage", { get: refuse });
-            const drew = await visit();
-            await ask("Is breakfast included?");
-            const answers = shown().answers;
-            const panel = document.querySelector(".sgiant-aiw-panel").textContent;
-            leave();
-            await visit();
-            const next = shown().questions;
-            leave();
-            return { drew, answers, next, errors, panel };
-          })()`
+        const REFUSE = `
+          window.__errors = 0;
+          addEventListener("error", () => window.__errors++);
+          addEventListener("unhandledrejection", () => window.__errors++);
+          const refuse = () => { throw new DOMException("refused", "SecurityError"); };
+          Storage.prototype.getItem = refuse;
+          Storage.prototype.setItem = refuse;
+          Storage.prototype.removeItem = refuse;
+          Object.defineProperty(window, "sessionStorage", { get: refuse });
+        `;
+        const one = await view<any>(
+          page,
+          { first: true, before: REFUSE },
+          `
+          await ask("Is breakfast included?");
+          return {
+            answers: shown().answers,
+            panel: document.querySelector(".sgiant-aiw-panel").textContent,
+            errors: window.__errors,
+          };
+          `
         );
-        assert.equal(seen.drew, true);
-        assert.ok(seen.answers.some((a) => a.includes("Answer to: Is breakfast included?")));
+        assert.equal(one.drew, true);
+        assert.ok(one.out.answers.some((a: string) => a.includes("Answer to: Is breakfast included?")));
+        assert.equal(one.out.errors, 0);
+        assert.doesNotMatch(one.out.panel, /storage|refused|SecurityError/i);
         // One page at a time, as before there was anything to keep.
-        assert.deepEqual(seen.next, []);
-        assert.equal(seen.errors, 0);
-        assert.doesNotMatch(seen.panel, /storage|refused|SecurityError/i);
+        const two = await view<any>(
+          page,
+          { before: REFUSE },
+          `return { questions: shown().questions, errors: window.__errors };`
+        );
+        assert.equal(two.drew, true);
+        assert.deepEqual(two.out, { questions: [], errors: 0 });
       });
 
       await t.test("the other way in is as it was: a host's key still goes to the browser's long-lived storage", async () => {
-        await fresh(page);
+        await page.open([1280, 800]);
         const seen = await page.evaluate<{ forGood: string[]; inTheTab: string[]; name: string | null }>(
           `(async () => {
+            (${SETUP})();
             const w = SgiantAiWidget.createAiChatWidget({ endpoint: "https://api.example/chat", persistKey: "acc-1" });
             w.open();
             await new Promise((r) => setTimeout(r, 200));
             await ask("Hello");
             const k = kept();
-            const btn = document.querySelector('[data-ai-target="widget-new-chat"]') ||
-              [...document.querySelectorAll(".sgiant-aiw-panel button")].find((b) => b.getAttribute("aria-label") === "New chat");
+            const btn = [...document.querySelectorAll(".sgiant-aiw-panel button")].find(
+              (b) => b.getAttribute("aria-label") === "New chat"
+            );
             w.destroy();
             return { forGood: k.forGood, inTheTab: k.inTheTab, name: btn ? btn.getAttribute("aria-label") : null };
           })()`

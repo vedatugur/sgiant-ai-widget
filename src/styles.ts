@@ -422,7 +422,10 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-avatar-own{background:none}
 .${PREFIX}-avatar .${PREFIX}-ayca{width:34px;height:34px}
 .${PREFIX}-hname{display:flex;flex-direction:column;line-height:1.15;min-width:0;flex:1 1 auto}
-.${PREFIX}-title{font-weight:700;font-size:var(--aiw-font-lg);letter-spacing:.04em}
+/* One line, and "…" when it does not fit. A name with no space in it (a
+   long word, an address) used to be cut by the header's edge in the middle of
+   a letter, with nothing to say there was more. */
+.${PREFIX}-title{font-weight:700;font-size:var(--aiw-font-lg);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .${PREFIX}-sub{font-size:var(--aiw-font-2xs);opacity:.85}
 .${PREFIX}-metachip{align-self:flex-start;margin-top:3px;font-size:var(--aiw-font-3xs);font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:var(--aiw-radius-sm);background:rgba(255,255,255,.22);color:var(--aiw-accent-contrast);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .${PREFIX}-close{background:color-mix(in srgb,var(--aiw-header-fg) 15%,transparent);border:none;color:var(--aiw-header-fg);font-size:var(--aiw-font-2xl);line-height:1;width:26px;height:26px;border-radius:var(--aiw-radius-md);cursor:pointer;flex:0 0 auto}

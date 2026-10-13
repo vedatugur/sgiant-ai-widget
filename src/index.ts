@@ -225,7 +225,35 @@ export {
  * window's own words follow the site's language when it has one, else
  * `locale`, else the page's `<html lang>`, else English.
  */
-export async function createSiteChat(
+export function createSiteChat(
+  opts: SiteChatOptions
+): Promise<AiChatWidgetHandle | null> {
+  // ONE WINDOW FOR ONE SITE ON ONE PAGE. A page can carry the call twice
+  // without anybody meaning it: a plugin that prints it, and the same code
+  // pasted into the theme years ago. Two launchers on a guest's screen, two
+  // reads, two conversations under one name. The second call is answered
+  // with the first one's window, whatever that turned out to be; and with a
+  // new one only after the first was destroyed.
+  const key = typeof opts.siteKey === "string" ? opts.siteKey : "";
+  const already = siteChats.get(key);
+  if (already) return already;
+  const mine = drawSiteChat(opts).then((handle) => {
+    if (!handle) return null;
+    const destroy = handle.destroy.bind(handle);
+    handle.destroy = () => {
+      if (siteChats.get(key) === mine) siteChats.delete(key);
+      destroy();
+    };
+    return handle;
+  });
+  siteChats.set(key, mine);
+  return mine;
+}
+
+/** The site chats of this page, by site key: see `createSiteChat`. */
+const siteChats = new Map<string, Promise<AiChatWidgetHandle | null>>();
+
+async function drawSiteChat(
   opts: SiteChatOptions
 ): Promise<AiChatWidgetHandle | null> {
   const said = await askSite(opts);
@@ -245,7 +273,15 @@ export async function createSiteChat(
     // The visitor's conversation follows them from page to page, in the tab
     // only: see `scoped` in createAiChatWidget.
     persistKey: siteChatKey(opts.siteKey),
-    ...(site.name ? { title: site.name } : {}),
+    // A site that gave its assistant no name gets a plain word for it, in
+    // the window's language, and never this package's own default name: a
+    // guest of the site has no idea what that is.
+    title:
+      site.name ??
+      builtInLabels(
+        site.language ?? opts.locale,
+        typeof document !== "undefined" ? document.documentElement?.lang : null
+      ).unnamedAssistant,
     ...(site.greeting ? { greeting: site.greeting } : {}),
     ...(site.color ? { accent: site.color } : {}),
     ...(site.language ?? opts.locale

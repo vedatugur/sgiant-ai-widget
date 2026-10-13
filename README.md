@@ -417,12 +417,14 @@ says, with a real `true`, that this site's assistant answers visitors now.
 ```
 
 It resolves to the window's handle, or to `null` when nothing was drawn. It
-never rejects.
+never rejects. Called twice for one site key on one page (a plugin that
+prints it, and the same code pasted into a theme), it answers both with the
+same window: one read, one launcher.
 
 **The read.** One `GET` to `settingsUrl` with `?siteKey=…`, no cookies and no
 headers of its own, so a server on another origin needs only
 `access-control-allow-origin`. It is given 4 seconds for the whole answer
-(`timeoutMs` to change it), is made once per page view, and is never
+(`timeoutMs` to shorten it; a longer one is brought down to 4), is made once per page view, and is never
 repeated.
 
 **The answer.** A `200` whose body is a JSON object:
@@ -430,7 +432,7 @@ repeated.
 | Field | | When it is missing or wrong |
 |---|---|---|
 | `answersVisitors` | `true` to draw the window | **nothing is drawn** |
-| `name` | the window's title, up to 80 characters | the window's own title |
+| `name` | the window's title, up to 80 characters | "Assistant" / "Asistan" |
 | `greeting` | the first thing the assistant says, up to 500 | the window's own |
 | `language` | `"tr"` or `"en"`: the window's own words | follows the page |
 | `color` | `#rrggbb`, the accent | the window's own |

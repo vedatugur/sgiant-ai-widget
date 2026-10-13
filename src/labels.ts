@@ -38,6 +38,13 @@ export const WIDGET_LABELS = {
    */
   siteUnavailable: "The assistant is not available on this site right now.",
   /**
+   * What the assistant is called on a visitor's page whose site gave it no
+   * name. The window puts its title into its own sentences ("Open {name}",
+   * "Ask {name} anything…"), so without this a site's guest read this
+   * package's own default name in six places.
+   */
+  unnamedAssistant: "Assistant",
+  /**
    * The header's button on a visitor's page, where "New chat" is: it removes
    * the conversation kept in the visitor's tab and shows the greeting again.
    */
