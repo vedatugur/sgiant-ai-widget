@@ -25,6 +25,8 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   modelPicker: "Model",
   modelPickerAria: "Model: {model}. Başka bir model seçin",
   siteUnavailable: "Asistan şu anda bu sitede kullanılamıyor.",
+  clearChat: "Bu sohbeti temizle",
+  unnamedAssistant: "Asistan",
   modelPickerUnavailable:
     "Model listesi yüklenemedi. Varsayılan model kullanılıyor.",
   openBubble: "{name} aç",

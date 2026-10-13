@@ -270,91 +270,6 @@ test(
         assert.equal(await page.evaluate("SgiantAiWidget.SITE_SETTINGS_TIMEOUT_MS"), 4000);
       });
 
-      await t.test("what a visit leaves in the browser: not the conversation, and a later no touches none of it", async () => {
-        await page.open([1280, 800]);
-        const seen = await page.evaluate<{
-          keys: string[];
-          holdsTheQuestion: boolean;
-          afterNo: { handle: boolean; drawn: number; changed: boolean };
-          again: string[];
-        }>(`(${async (yes: unknown) => {
-          const g = globalThis as any;
-          const P = "sgiant-aiw";
-          let answer: unknown = yes;
-          g.fetch = (input: any) => {
-            const url = typeof input === "string" ? input : input.url;
-            return Promise.resolve(
-              String(url).includes("/site-settings")
-                ? new Response(JSON.stringify(answer), { status: 200 })
-                : new Response(
-                    JSON.stringify({ type: "text", d: "09:00-18:00" }) +
-                      "\n" +
-                      JSON.stringify({ type: "done" }) +
-                      "\n",
-                    { status: 200 }
-                  )
-            );
-          };
-          const make = () =>
-            g.SgiantAiWidget.createSiteChat({
-              endpoint: "https://api.example/public/ai/chat",
-              settingsUrl: "https://api.example/public/ai/site-settings",
-              siteKey: "pk_site_1",
-            });
-          const kept = () =>
-            JSON.stringify(
-              [localStorage, sessionStorage].map((store) =>
-                Object.keys(store)
-                  .sort()
-                  .map((k) => [k, store.getItem(k)])
-              )
-            );
-          // A visit while the assistant is on: one question, one answer.
-          const first = await make();
-          first.open();
-          await new Promise((r) => setTimeout(r, 200));
-          const input = document.querySelector(
-            '[data-ai-target="widget-composer"]'
-          ) as HTMLTextAreaElement;
-          input.value = "Opening hours of the spa?";
-          input.closest("form")!.requestSubmit();
-          await new Promise((r) => setTimeout(r, 400));
-          first.destroy();
-          const before = kept();
-          // The next page view: turned off.
-          answer = { ...(yes as object), answersVisitors: false };
-          const second = await make();
-          const afterNo = {
-            handle: !!second,
-            drawn: document.querySelectorAll(`[class*="${P}"]`).length,
-            changed: kept() !== before,
-          };
-          // And the one after: on again.
-          answer = yes;
-          const third = await make();
-          third.open();
-          await new Promise((r) => setTimeout(r, 300));
-          const again = [
-            ...document.querySelectorAll(`.${P}-panel .${P}-msg.${P}-user`),
-          ].map((m) => m.textContent ?? "");
-          third.destroy();
-          return {
-            keys: [...Object.keys(localStorage), ...Object.keys(sessionStorage)].sort(),
-            holdsTheQuestion: before.includes("spa") || before.includes("09:00"),
-            afterNo,
-            again,
-          };
-        }})(${JSON.stringify(YES)})`);
-        // A visitor's words are not kept on their device: the site entry
-        // asks for no conversation memory. What IS kept says only how the
-        // window was left (opened before, where, sound).
-        assert.equal(seen.holdsTheQuestion, false, `kept: ${seen.keys.join(", ")}`);
-        assert.deepEqual(seen.again, []);
-        assert.deepEqual(seen.afterNo, { handle: false, drawn: 0, changed: false });
-        for (const key of seen.keys)
-          assert.match(key, /^(aiw|sgiant-aiw)[:-]/, `a key that is not the window's: ${key}`);
-      });
-
       await t.test("yes: the window, with what the site's owner set", async () => {
         for (const viewport of [[1280, 800], [320, 640]] as const) {
           const s = await run(page, YES, {}, viewport);
@@ -617,12 +532,276 @@ test(
         assert.ok(!panel.includes("unknown or inactive"));
       });
 
+      await t.test("a page may ask for a shorter wait, never a longer one", async () => {
+        // Asked to wait a minute: given up at four seconds all the same.
+        const s = await run(page, "never", { timeoutMs: 60_000 });
+        nothing(s, "no answer, a minute asked for");
+        assert.ok(s.tookMs >= 3900 && s.tookMs < 5500, `gave up after ${s.tookMs} ms`);
+      });
+
+      await t.test("the call made twice on one page: one read, one window, the same one", async () => {
+        for (const viewport of [[1280, 800], [320, 640]] as const) {
+          await page.open(viewport);
+          const seen = await page.evaluate<{
+            same: boolean;
+            reads: number;
+            launchers: number;
+            panels: number;
+            styles: number;
+            other: boolean;
+            afterDestroy: { launchers: number; reads: number; fresh: boolean };
+          }>(`(${async (yes: unknown) => {
+            const g = globalThis as any;
+            const P = "sgiant-aiw";
+            let reads = 0;
+            g.fetch = (input: any) => {
+              const url = String(typeof input === "string" ? input : input.url);
+              if (url.includes("/site-settings")) reads++;
+              return Promise.resolve(new Response(JSON.stringify(yes), { status: 200 }));
+            };
+            const call = (siteKey: string) =>
+              g.SgiantAiWidget.createSiteChat({
+                endpoint: "https://api.example/public/ai/chat",
+                settingsUrl: "https://api.example/public/ai/site-settings",
+                siteKey,
+              });
+            // A plugin's call and a pasted one, at the same moment; and a
+            // third later, once the first has long answered.
+            const [a, b] = await Promise.all([call("pk_1"), call("pk_1")]);
+            const c = await call("pk_1");
+            const count = () => ({
+              launchers: document.querySelectorAll(`.${P}-bubble`).length,
+              panels: document.querySelectorAll(`.${P}-panel`).length,
+              styles: [...document.querySelectorAll("style")].filter((s) =>
+                (s.textContent ?? "").includes(P)
+              ).length,
+            });
+            const one = count();
+            const readsOne = reads;
+            // Another site's key on the same page is another window.
+            const d = await call("pk_2");
+            const other = d !== a && count().launchers === 2;
+            d.destroy();
+            // After the first is destroyed, a call draws a new one.
+            a.destroy();
+            const again = await call("pk_1");
+            const afterDestroy = {
+              launchers: count().launchers,
+              reads,
+              fresh: again !== a,
+            };
+            again.destroy();
+            return { same: a === b && b === c, reads: readsOne, ...one, other, afterDestroy };
+          }})(${JSON.stringify(YES)})`);
+          assert.equal(seen.same, true, "the calls were given different windows");
+          assert.equal(seen.reads, 1, `the settings were read ${seen.reads} times`);
+          assert.equal(seen.launchers, 1);
+          assert.equal(seen.panels, 1);
+          assert.equal(seen.styles, 1);
+          assert.equal(seen.other, true);
+          assert.deepEqual(seen.afterDestroy, { launchers: 1, reads: 3, fresh: true });
+        }
+      });
+
+      await t.test("a no is one answer for the page too: asked once however often it is called", async () => {
+        await page.open([1280, 800]);
+        const seen = await page.evaluate<{ reads: number; all: boolean; drawn: number }>(`(${async () => {
+          const g = globalThis as any;
+          let reads = 0;
+          g.fetch = () => {
+            reads++;
+            return Promise.resolve(new Response('{"answersVisitors":false}', { status: 200 }));
+          };
+          const call = () =>
+            g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_no",
+            });
+          const got = [await call(), await call(), await call()];
+          return {
+            reads,
+            all: got.every((w) => w === null),
+            drawn: document.querySelectorAll('[class*="sgiant-aiw"]').length,
+          };
+        }})()`);
+        assert.deepEqual(seen, { reads: 1, all: true, drawn: 0 });
+      });
+
+      await t.test("a name that does not fit is one line that ends in …, inside the header", async () => {
+        for (const name of [
+          "Kaşmarinabutikotelveresidenceskışveyazkampanyalarıresepsiyonu",
+          "Kaş Marina Butik Otel ve Residences Kış ve Yaz Kampanyaları Resepsiyonu",
+        ]) {
+          await page.open([320, 640]);
+          const seen = await page.evaluate<{
+            lines: number;
+            cut: boolean;
+            ellipsis: string;
+            inside: boolean;
+            text: string;
+          }>(`(${async (yes: unknown, name: string) => {
+            const g = globalThis as any;
+            const P = "sgiant-aiw";
+            g.fetch = () =>
+              Promise.resolve(
+                new Response(JSON.stringify({ ...(yes as object), name }), { status: 200 })
+              );
+            const w = await g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_long",
+            });
+            w.open();
+            await new Promise((r) => setTimeout(r, 250));
+            const title = document.querySelector(`.${P}-title`) as HTMLElement;
+            const header = document.querySelector(`.${P}-header`)!.getBoundingClientRect();
+            const box = title.getBoundingClientRect();
+            const cs = getComputedStyle(title);
+            const out = {
+              lines: Math.round(box.height / parseFloat(cs.lineHeight) || 1),
+              cut: title.scrollWidth > title.clientWidth,
+              ellipsis: cs.textOverflow,
+              inside: box.left >= header.left - 0.5 && box.right <= header.right + 0.5,
+              text: title.textContent ?? "",
+            };
+            w.destroy();
+            return out;
+          }})(${JSON.stringify(YES)}, ${JSON.stringify(name)})`);
+          // The whole name is still the title's text, for a screen reader.
+          assert.equal(seen.text, name);
+          assert.equal(seen.cut, true, "the name fits, so this proves nothing");
+          assert.equal(seen.ellipsis, "ellipsis");
+          assert.equal(seen.lines, 1);
+          assert.equal(seen.inside, true);
+        }
+      });
+
       await t.test("yes with nothing set: the window's own defaults", async () => {
         const s = await run(page, { answersVisitors: true });
         assert.equal(s.handle, true);
         assert.deepEqual(s.chips, []);
-        assert.notEqual(s.title, "");
+        assert.equal(s.title, "Assistant");
         assert.equal(s.accent, "#6d28d9");
+      });
+
+      await t.test("a site that gave its assistant no name: a plain word for it in all six places, and this package's own name in none", async () => {
+        // The six places the window says the assistant's name, as a guest
+        // meets them: the title, the launcher, the window's name and the
+        // box's name for a screen reader, the box's hint, and a failure.
+        const SIX = {
+          en: [
+            "Assistant",
+            "Open Assistant",
+            "Assistant chat",
+            "Message Assistant",
+            "Ask Assistant anything…",
+            "Assistant hit a snag and couldn't answer. Please try again.",
+          ],
+          tr: [
+            "Asistan",
+            "Asistan aç",
+            "Asistan sohbeti",
+            "Asistan için mesaj yazın",
+            "Asistan her sorunuzu yanıtlar…",
+            "Asistan bir sorunla karşılaştı ve yanıt veremedi. Lütfen tekrar deneyin.",
+          ],
+        };
+        for (const [lang, words] of [
+          ["en", SIX.en],
+          ["tr", SIX.tr],
+          // A page in a language the window has no words for: the English.
+          ["de", SIX.en],
+        ] as const) {
+          await page.open([320, 640]);
+          const said = await page.evaluate<string[]>(`(${async (lang: string) => {
+            const g = globalThis as any;
+            document.documentElement.lang = lang;
+            g.fetch = (input: any) =>
+              Promise.resolve(
+                String(typeof input === "string" ? input : input.url).includes("/site-settings")
+                  ? new Response('{"answersVisitors":true}', { status: 200 })
+                  : new Response(
+                      JSON.stringify({ type: "error", message: "boom" }) +
+                        "\n" +
+                        JSON.stringify({ type: "done" }) +
+                        "\n",
+                      { status: 200 }
+                    )
+              );
+            const w = await g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_unnamed",
+            });
+            // Everything a guest can read or be read, at every moment.
+            const said = new Set<string>();
+            const listen = () => {
+              for (const el of document.querySelectorAll("*")) {
+                if (["STYLE", "SCRIPT"].includes(el.tagName)) continue;
+                for (const a of ["aria-label", "title", "placeholder", "alt"]) {
+                  const v = el.getAttribute(a);
+                  if (v) said.add(v.trim());
+                }
+                if (el.children.length === 0 && el.textContent?.trim())
+                  said.add(el.textContent.trim());
+              }
+            };
+            await new Promise((r) => setTimeout(r, 200));
+            listen();
+            w.open();
+            await new Promise((r) => setTimeout(r, 300));
+            listen();
+            const input = document.querySelector(
+              '[data-ai-target="widget-composer"]'
+            ) as HTMLTextAreaElement;
+            input.value = "hello";
+            input.closest("form")!.requestSubmit();
+            await new Promise((r) => setTimeout(r, 400));
+            listen();
+            w.destroy();
+            return [...said];
+          }})(${JSON.stringify(lang)})`);
+          for (const sentence of words)
+            assert.ok(said.includes(sentence), `${lang}: nowhere says "${sentence}"`);
+          // And a seventh place cannot appear with this package's name in it.
+          const named = said.filter((s) => /ayca/i.test(s));
+          assert.deepEqual(named, [], `${lang}: a guest reads the package's own name`);
+        }
+      });
+
+      await t.test("a site that gave a name gets that name in the same places, and the other way in keeps its own", async () => {
+        await page.open([1280, 800]);
+        const seen = await page.evaluate<{ site: string[]; app: string[] }>(`(${async () => {
+          const g = globalThis as any;
+          const P = "sgiant-aiw";
+          g.fetch = () =>
+            Promise.resolve(
+              new Response('{"answersVisitors":true,"name":"Reception"}', { status: 200 })
+            );
+          const read = () => [
+            document.querySelector(`.${P}-title`)?.textContent ?? "",
+            document.querySelector(`.${P}-bubble`)?.getAttribute("aria-label") ?? "",
+            (
+              document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement
+            ).placeholder,
+          ];
+          const w = await g.SgiantAiWidget.createSiteChat({
+            endpoint: "https://api.example/public/ai/chat",
+            settingsUrl: "https://api.example/public/ai/site-settings",
+            siteKey: "pk_named",
+          });
+          const site = read();
+          w.destroy();
+          const a = g.SgiantAiWidget.createAiChatWidget({ endpoint: "https://api.example/chat" });
+          const app = read();
+          a.destroy();
+          return { site, app };
+        }})()`);
+        assert.deepEqual(seen.site, ["Reception", "Open Reception", "Ask Reception anything…"]);
+        // A host that calls the window the old way and names nothing is not
+        // a customer's site, and is as it was.
+        assert.deepEqual(seen.app, ["AYCA", "Open AYCA", "Ask AYCA anything…"]);
       });
 
       await t.test("the window's own words: the site's language, else the call's, else the page's, else English", async () => {

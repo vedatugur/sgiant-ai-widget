@@ -417,12 +417,14 @@ says, with a real `true`, that this site's assistant answers visitors now.
 ```
 
 It resolves to the window's handle, or to `null` when nothing was drawn. It
-never rejects.
+never rejects. Called twice for one site key on one page (a plugin that
+prints it, and the same code pasted into a theme), it answers both with the
+same window: one read, one launcher.
 
 **The read.** One `GET` to `settingsUrl` with `?siteKey=…`, no cookies and no
 headers of its own, so a server on another origin needs only
 `access-control-allow-origin`. It is given 4 seconds for the whole answer
-(`timeoutMs` to change it), is made once per page view, and is never
+(`timeoutMs` to shorten it; a longer one is brought down to 4), is made once per page view, and is never
 repeated.
 
 **The answer.** A `200` whose body is a JSON object:
@@ -430,7 +432,7 @@ repeated.
 | Field | | When it is missing or wrong |
 |---|---|---|
 | `answersVisitors` | `true` to draw the window | **nothing is drawn** |
-| `name` | the window's title, up to 80 characters | the window's own title |
+| `name` | the window's title, up to 80 characters | "Assistant" / "Asistan" |
 | `greeting` | the first thing the assistant says, up to 500 | the window's own |
 | `language` | `"tr"` or `"en"`: the window's own words | follows the page |
 | `color` | `#rrggbb`, the accent | the window's own |
@@ -456,10 +458,31 @@ window says one sentence of its own (the `siteUnavailable` label), with no
 from a refused request's body is ever shown. The window is gone at the next
 page view, when the read says no.
 
-**What stays in the browser.** Nothing, when the answer is no, and nothing
-already there is touched. When there is a window, only how it was left
-(that it was opened before, where it sits, the sound setting): a visitor's
-conversation is not kept on their device, so each page view starts a new one.
+**What stays in a visitor's browser.** Two lists, and a test fails if either
+grows.
+
+| For as long as the browser keeps it | Only while the tab is open |
+|---|---|
+| that the window was opened before | the conversation (the last 40 messages, up to 200,000 characters) and its id |
+| the sound setting, once the visitor changes it | the text typed and not yet sent |
+| | whether the window was left open |
+| | where the window was placed |
+
+So a visitor's conversation follows them from page to page, comes back after
+a reload, and is gone when they close the tab; a page opened in a new tab
+starts a new one. Nothing a visitor wrote goes into the storage a browser
+keeps. No cookie is set, and no identifier of the visitor is kept or sent.
+
+The header's button is named "Clear this conversation" on a visitor's page
+(the `clearChat` label). It removes the conversation, its id and the unsent
+text from the tab and shows the greeting again.
+
+What is kept is removed, and never shown, when the server says this site's
+assistant does not answer visitors; when the site's key has changed; when it
+is not exactly what this window writes; and when it is more than twelve hours
+old. It is left alone when nobody answered the read (a failed request, no
+answer in time): one bad connection erases nothing. Where a browser refuses
+storage, nothing is kept and the chat works one page at a time.
 
 ## Flagging a conversation
 

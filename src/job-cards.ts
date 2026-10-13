@@ -1,13 +1,9 @@
 import { el, escapeHtml } from "./dom";
 import { PREFIX } from "./prefix";
-import { readJson, writeJson } from "./storage";
+import { readJson, tabKey, writeJson } from "./storage";
 import { isSafeRelPath } from "./safe-url";
 import { WIDGET_LABELS } from "./labels";
-import type {
-  AiChatWidgetOptions,
-  WidgetJobView,
-  WidgetLabels,
-} from "./index";
+import type { AiChatWidgetOptions, WidgetJobView, WidgetLabels } from "./index";
 
 /**
  * LIVE BACKGROUND JOBS — tracking them, and drawing the card (#320).
@@ -28,7 +24,7 @@ import type {
 export interface JobCardContext {
   L: (
     key: keyof WidgetLabels,
-    params?: Record<string, string | number>
+    params?: Record<string, string | number>,
   ) => string;
   /** The transcript the cards are appended to. */
   log: HTMLElement;
@@ -54,7 +50,7 @@ export interface JobCardContext {
   autoNavigateFrame: (key: string, path: string) => void;
   dispatchAction: (
     name: string,
-    data: Record<string, string>
+    data: Record<string, string>,
   ) => Promise<string | void>;
 
   /**
@@ -77,6 +73,7 @@ export interface JobCardContext {
     | "getReport"
     | "listThreadJobs"
     | "persistKey"
+    | "siteChat"
   >;
 }
 
@@ -93,7 +90,7 @@ export interface JobCards {
   subscribeJob: (
     ref: { kind: "job" | "report"; id: string },
     node: HTMLElement,
-    paint: (view: WidgetJobView) => void
+    paint: (view: WidgetJobView) => void,
   ) => void;
   /** Remember that the USER confirmed this work, not the model. */
   trackConfirmedJob: (ref: { kind: "job" | "report"; id: string }) => void;
@@ -166,7 +163,11 @@ export function createJobCards(ctx: JobCardContext): JobCards {
   /** Tracked jobs outlive the page, so they live beside the conversation in
    *  localStorage (same opt-in: no persistKey → in-memory for this session only,
    *  which is exactly today's behaviour minus the refresh). */
-  const jobsKey = ctx.opts.persistKey ? `${ctx.ns}:jobs:${ctx.opts.persistKey}` : null;
+  const jobsKey = ctx.opts.persistKey
+    ? ctx.opts.siteChat
+      ? tabKey(`${ctx.ns}:jobs:${ctx.opts.persistKey}`)
+      : `${ctx.ns}:jobs:${ctx.opts.persistKey}`
+    : null;
   const TRACKED_JOB_TTL_MS = 24 * 60 * 60 * 1000;
   /** The card currently drawn for a job id. Re-pointed (not re-created) whenever
    *  the transcript is re-rendered, so a poll always paints the LIVE node. */
@@ -311,7 +312,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
   function subscribeJob(
     ref: WorkRef,
     node: HTMLElement,
-    paint: (view: WidgetJobView) => void
+    paint: (view: WidgetJobView) => void,
   ): void {
     const read = ref.kind === "report" ? ctx.opts.getReport : ctx.opts.getJob;
     if (!read || !ref.id) return;
@@ -327,7 +328,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
 
   function loadTrackedJobs(): TrackedJob[] {
     const parsed = readJson<unknown[]>(jobsKey, (v): v is unknown[] =>
-      Array.isArray(v)
+      Array.isArray(v),
     );
     if (!parsed) return [];
     const cutoff = Date.now() - TRACKED_JOB_TTL_MS;
@@ -341,7 +342,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
         typeof (j as TrackedJob).jobId === "string" &&
         typeof (j as TrackedJob).threadId === "string" &&
         typeof (j as TrackedJob).at === "number" &&
-        (j as TrackedJob).at > cutoff
+        (j as TrackedJob).at > cutoff,
     );
   }
   function saveTrackedJobs(jobs: TrackedJob[]): void {
@@ -354,7 +355,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
   }
   function rememberJob(ref: WorkRef, tid: string): void {
     const jobs = loadTrackedJobs().filter(
-      (j) => refKey(trackedRef(j)) !== refKey(ref)
+      (j) => refKey(trackedRef(j)) !== refKey(ref),
     );
     jobs.push({ jobId: ref.id, kind: ref.kind, threadId: tid, at: Date.now() });
     saveTrackedJobs(jobs);
@@ -364,7 +365,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
    *  artifact is the lasting record). */
   function forgetJob(ref: WorkRef): void {
     saveTrackedJobs(
-      loadTrackedJobs().filter((j) => refKey(trackedRef(j)) !== refKey(ref))
+      loadTrackedJobs().filter((j) => refKey(trackedRef(j)) !== refKey(ref)),
     );
   }
 
@@ -492,7 +493,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
           .join("")}</ul>` +
         (tailStart > 0
           ? `<details class="${PREFIX}-job-flow-all"><summary>${escapeHtml(
-              ctx.L("jobFlowAll", { count: events.length })
+              ctx.L("jobFlowAll", { count: events.length }),
             )}</summary><ul class="${PREFIX}-job-flow">${events
               .map(flowLine)
               .join("")}</ul></details>`

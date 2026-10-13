@@ -51,7 +51,11 @@ export interface SiteChatOptions {
    * has one, comes first.
    */
   locale?: string;
-  /** How long the settings may take, in milliseconds. Default 4000. */
+  /**
+   * How long the settings may take, in milliseconds: 4000, or less. A page
+   * may ask for a shorter wait. A longer one is brought down to 4000: how
+   * long a visitor's page waits for a button is not a host's to stretch.
+   */
   timeoutMs?: number;
 }
 
@@ -104,22 +108,38 @@ export function siteSettingsAddress(settingsUrl: string, siteKey: string): strin
 }
 
 /**
- * Ask the server. Never throws: every way of not getting a yes is null.
+ * What the server said about this site, in the three ways that matter.
+ *
+ * `no` is the SERVER saying so: a 200 without a real `true`, or a 404 (no
+ * such site). `unknown` is everything in which nobody answered the question:
+ * a failed request, no answer in time, the server's own trouble, too many
+ * requests, a body that is not the shape. Both draw nothing. They differ in
+ * what happens to a conversation kept in the visitor's tab: a `no` removes
+ * it, an `unknown` leaves it, because one bad connection must not erase what
+ * a guest wrote in the middle of their visit.
+ */
+export type SiteAnswer =
+  | { answer: "yes"; settings: SiteSettings }
+  | { answer: "no" }
+  | { answer: "unknown" };
+
+/**
+ * Ask the server. Never throws.
  * No cookies are sent: the key is the whole of what the server needs.
  */
-export async function fetchSiteSettings(
+export async function askSite(
   opts: Pick<SiteChatOptions, "settingsUrl" | "siteKey" | "timeoutMs">
-): Promise<SiteSettings | null> {
+): Promise<SiteAnswer> {
   if (
     typeof opts.settingsUrl !== "string" ||
     !opts.settingsUrl.trim() ||
     typeof opts.siteKey !== "string" ||
     !opts.siteKey.trim()
   )
-    return null;
+    return { answer: "unknown" };
   const limit =
     typeof opts.timeoutMs === "number" && opts.timeoutMs > 0
-      ? opts.timeoutMs
+      ? Math.min(opts.timeoutMs, SITE_SETTINGS_TIMEOUT_MS)
       : SITE_SETTINGS_TIMEOUT_MS;
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), limit);
@@ -129,13 +149,55 @@ export async function fetchSiteSettings(
       credentials: "omit",
       signal: stop.signal,
     });
-    if (res.status !== 200) return null;
+    if (res.status === 404) return { answer: "no" };
+    if (res.status !== 200) return { answer: "unknown" };
     // The body is read inside the limit too: headers that arrive in time
     // and a body that never ends is still "took too long".
-    return readSiteSettings(await res.json());
+    const body: unknown = await res.json();
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return { answer: "unknown" };
+    const settings = readSiteSettings(body);
+    return settings ? { answer: "yes", settings } : { answer: "no" };
   } catch {
-    return null;
+    return { answer: "unknown" };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** The settings when the answer is yes, else null. */
+export async function fetchSiteSettings(
+  opts: Pick<SiteChatOptions, "settingsUrl" | "siteKey" | "timeoutMs">
+): Promise<SiteSettings | null> {
+  const said = await askSite(opts);
+  return said.answer === "yes" ? said.settings : null;
+}
+
+/** The name a site's conversation is kept under: one per site key. */
+export function siteChatKey(siteKey: string): string {
+  return `site:${siteKey}`;
+}
+
+/**
+ * Remove what a site chat kept in this tab: the conversation, its id, the
+ * text typed and not yet sent, where the window was. All of it, or all but
+ * what belongs to `keep`.
+ *
+ * With no `keep`: the server said this site's assistant does not answer
+ * visitors. With one: the window is about to be drawn for that key, and
+ * anything kept under ANOTHER key is from before the site's key changed; it
+ * could never be shown again and must not stay behind.
+ *
+ * Only the tab's storage is touched, and only names this window writes.
+ */
+export function forgetSiteChats(keep?: string): void {
+  try {
+    const mine = /^[^:]+:(?:v1|draft|open|pos|model|jobs|adv|advw):site:(.*)$/;
+    for (const name of Object.keys(sessionStorage)) {
+      const found = mine.exec(name);
+      if (found && found[1] !== keep) sessionStorage.removeItem(name);
+    }
+  } catch {
+    /* storage refused: there is nothing kept to remove */
   }
 }
