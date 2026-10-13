@@ -36,22 +36,28 @@ function rule(selector: string): string {
   return widgetStyles.slice(open + 1, widgetStyles.indexOf("}", open));
 }
 
-/** The text field never gets narrower than this, border to border; the pill
- *  gives way first. */
+/** The least the text field was ever allowed to be, when it shared its row.
+ *  It has a row of its own now and is far wider (see a-box-that-grows); the
+ *  measured test below still holds this as a floor nothing may go under. */
 const INPUT_FLOOR = 96;
 
-test("the text field is allowed to shrink, down to a floor it keeps", () => {
+test("the text field has a row of its own, as wide as the window lets it be", () => {
+  // It shared its row with the picker and Send and was what gave way to
+  // them: down to a floor of 96px, which is eight characters on a phone. It
+  // has the whole width now (tests/a-box-that-grows.test.ts measures that in
+  // a browser); this holds the declarations that make it so.
   const input = rule("input");
-  assert.match(input, /(^|;)flex:1(;|$)/, "the field no longer takes the slack");
-  // The declaration whose absence was the bug. `min-width:auto` (the default)
-  // resolves to the input's built-in 180px; any explicit length replaces it.
-  assert.match(
-    input,
-    new RegExp(`(^|;)min-width:${INPUT_FLOOR}px(;|$)`),
-    "the composer's text field has no explicit min-width, so it cannot shrink below its built-in width"
-  );
-  // The floor is a promise about the box the person sees, padding included.
+  assert.match(input, /(^|;)width:100%(;|$)/, "the field is not full width");
+  // Its own content must not be what decides its width.
+  assert.match(input, /(^|;)min-width:0(;|$)/);
+  // The width is a promise about the box the person sees, padding included.
   assert.match(input, /(^|;)box-sizing:border-box(;|$)/);
+  // A text area: the script sizes it, there is no corner to drag, and it
+  // takes the window's own letters rather than a typewriter's.
+  assert.match(input, /(^|;)resize:none(;|$)/);
+  assert.match(input, /(^|;)font-family:inherit(;|$)/);
+  // And the form stacks: the box, then the row of controls.
+  assert.match(rule("form"), /(^|;)flex-direction:column(;|$)/);
 });
 
 test("the pill gives way before the text field does", () => {

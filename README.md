@@ -115,6 +115,20 @@ One POST endpoint that streams newline-delimited JSON. Four frame types matter:
 The full contract, including a dependency-free reference server short enough to
 read in one go, is in **[BACKEND.md](./BACKEND.md)**.
 
+## The box a person writes in
+
+A text area on a row of its own, as wide as the window, which grows with
+what is typed: one line when empty, up to five, then it scrolls inside (fewer
+when the window is short, as with a phone's keyboard up: the box takes about
+a third of the window's height at most). The model picker, the attach button
+and Send sit on the row under it.
+
+Enter sends. Shift+Enter is a new line. Enter in the middle of composing a
+letter with an input method sends nothing. A picture pasted into the box is
+an attachment, where the host takes attachments.
+
+Nothing here is an option: there is one layout at every width.
+
 ## Attachments
 
 Set `uploadEndpoint` and the composer grows a paperclip. Leave it unset and
