@@ -477,6 +477,80 @@ test(
         }
       });
 
+      await t.test("a server that says the same thing inside the conversation: the same words, drawn the same way", async () => {
+        // A newer server answers 200 and says it in the stream, in the
+        // visitor's language. The frame is exact.
+        for (const message of [
+          "The assistant is not available on this site right now.",
+          "Asistan şu anda bu sitede kullanılamıyor.",
+        ]) {
+          await page.open([320, 640]);
+          const seen = await page.evaluate<{
+            cards: number;
+            text: string;
+            retry: boolean;
+            questions: string[];
+            panel: string;
+          }>(`(${async (yes: unknown, message: string) => {
+            const g = globalThis as any;
+            const P = "sgiant-aiw";
+            g.fetch = (input: any) => {
+              const url = typeof input === "string" ? input : input.url;
+              return Promise.resolve(
+                String(url).includes("/site-settings")
+                  ? new Response(JSON.stringify(yes), { status: 200 })
+                  : new Response(
+                      JSON.stringify({
+                        type: "error",
+                        code: "site_unavailable",
+                        retry: false,
+                        message,
+                      }) +
+                        "\n" +
+                        JSON.stringify({ type: "done" }) +
+                        "\n",
+                      { status: 200, headers: { "content-type": "application/x-ndjson" } }
+                    )
+              );
+            };
+            const w = await g.SgiantAiWidget.createSiteChat({
+              endpoint: "https://api.example/public/ai/chat",
+              settingsUrl: "https://api.example/public/ai/site-settings",
+              siteKey: "pk_site_1",
+            });
+            w.open();
+            await new Promise((r) => setTimeout(r, 200));
+            const input = document.querySelector(
+              '[data-ai-target="widget-composer"]'
+            ) as HTMLTextAreaElement;
+            input.value = "Is breakfast included?";
+            input.closest("form")!.requestSubmit();
+            await new Promise((r) => setTimeout(r, 400));
+            const panel = document.querySelector(`.${P}-panel`)!;
+            const cards = [...panel.querySelectorAll(`.${P}-error`)];
+            const card = cards[cards.length - 1];
+            const out = {
+              cards: cards.length,
+              text: card?.querySelector(`.${P}-error-text`)?.textContent ?? "",
+              retry: !!card?.querySelector(`.${P}-error-retry`),
+              questions: [...panel.querySelectorAll(`.${P}-msg.${P}-user`)].map(
+                (m) => m.textContent ?? ""
+              ),
+              panel: panel.textContent ?? "",
+            };
+            w.destroy();
+            return out;
+          }})(${JSON.stringify(YES)}, ${JSON.stringify(message)})`);
+          assert.equal(seen.cards, 1);
+          assert.equal(seen.text, message);
+          assert.equal(seen.retry, false);
+          assert.deepEqual(seen.questions, ["Is breakfast included?"]);
+          assert.equal(seen.panel.split(message).length - 1, 1, "said more than once");
+          for (const leak of ["site_unavailable", "hit a snag", "(no response)"])
+            assert.ok(!seen.panel.includes(leak), `"${leak}" is on the screen`);
+        }
+      });
+
       await t.test("a refusal that asking again can cure keeps the window's ordinary card, and still nothing of its body", async () => {
         for (const status of [429, 500, 503]) {
           await page.open([1280, 800]);
