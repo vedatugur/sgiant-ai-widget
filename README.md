@@ -391,6 +391,68 @@ pass its public site key and the endpoint does the rest — see *Security*.
 </script>
 ```
 
+### A site that can turn its assistant off
+
+`createAiChatWidget` draws its launcher the moment it is called. On a
+visitor's page that is not always wanted: the script may sit in a cached copy
+of the page after the site's owner turned the assistant off, and a button
+that appears and then goes away is worse than none.
+
+`createSiteChat` asks first. It reads the site's public settings and puts
+nothing in the page (no launcher, no frame, no stylesheet) unless the answer
+says, with a real `true`, that this site's assistant answers visitors now.
+
+```html
+<script defer src="https://unpkg.com/sgiant-ai-widget/dist/sgiant-ai-widget.global.js"></script>
+<script>
+  addEventListener("DOMContentLoaded", function () {
+    SgiantAiWidget.createSiteChat({
+      endpoint: "https://api.example.com/public/ai/chat",
+      settingsUrl: "https://api.example.com/public/ai/site-settings",
+      siteKey: "…",
+      // locale: "tr", // the page's language, if its <html lang> is not right
+    });
+  });
+</script>
+```
+
+It resolves to the window's handle, or to `null` when nothing was drawn. It
+never rejects.
+
+**The read.** One `GET` to `settingsUrl` with `?siteKey=…`, no cookies and no
+headers of its own, so a server on another origin needs only
+`access-control-allow-origin`. It is given 4 seconds for the whole answer
+(`timeoutMs` to change it), is made once per page view, and is never
+repeated.
+
+**The answer.** A `200` whose body is a JSON object:
+
+| Field | | When it is missing or wrong |
+|---|---|---|
+| `answersVisitors` | `true` to draw the window | **nothing is drawn** |
+| `name` | the window's title, up to 80 characters | the window's own title |
+| `greeting` | the first thing the assistant says, up to 500 | the window's own |
+| `language` | `"tr"` or `"en"`: the window's own words | follows the page |
+| `color` | `#rrggbb`, the accent | the window's own |
+| `suggestions` | up to 4 questions of up to 80 characters, as buttons | none |
+
+Only `answersVisitors` decides whether there is a window. Anything but the
+boolean `true` is no: `false`, the text `"true"`, `1`, a missing field (a
+server that does not know the field yet), any status other than `200`, a body
+that is not an object, no answer in time, a failed request. The other five
+are how the window looks, and a wrong one falls back to the default: a colour
+that is not a colour is not a reason to take a site's assistant away.
+
+**Language.** The window has its own words in English and Turkish. It uses
+the site's `language` when it has one, else `locale`, else the page's
+`<html lang>`, else English. A page in another language gets the English
+words; what language the assistant answers in is the server's business.
+
+**What stays in the browser.** Nothing, when the answer is no, and nothing
+already there is touched. When there is a window, only how it was left
+(that it was opened before, where it sits, the sound setting): a visitor's
+conversation is not kept on their device, so each page view starts a new one.
+
 ## Flagging a conversation
 
 Pass `onFlag` to put a flag control in the header: clicking it asks for a
