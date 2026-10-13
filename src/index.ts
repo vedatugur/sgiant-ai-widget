@@ -198,6 +198,46 @@ export { PREFIX };
  */
 export const OPEN_ASSISTANT_EVENT = "sgiant:open-assistant";
 
+import { fetchSiteSettings, type SiteChatOptions } from "./site-chat";
+export {
+  readSiteSettings,
+  SITE_SETTINGS_TIMEOUT_MS,
+  type SiteChatOptions,
+  type SiteSettings,
+} from "./site-chat";
+
+/**
+ * The assistant on a visitor's page: see `./site-chat`.
+ *
+ * Resolves to the window's handle when the site's assistant answers
+ * visitors now, and to null when it does not, having put nothing in the
+ * page. It never rejects.
+ *
+ * What the site's owner set is applied over the window's defaults: the name
+ * as the title, the greeting, the colour, the suggested questions. The
+ * window's own words follow the site's language when it has one, else
+ * `locale`, else the page's `<html lang>`, else English.
+ */
+export async function createSiteChat(
+  opts: SiteChatOptions
+): Promise<AiChatWidgetHandle | null> {
+  const site = await fetchSiteSettings(opts);
+  if (!site) return null;
+  const suggestions = site.suggestions;
+  return createAiChatWidget({
+    endpoint: opts.endpoint,
+    extraBody: { siteKey: opts.siteKey },
+    siteChat: true,
+    ...(site.name ? { title: site.name } : {}),
+    ...(site.greeting ? { greeting: site.greeting } : {}),
+    ...(site.color ? { accent: site.color } : {}),
+    ...(site.language ?? opts.locale
+      ? { locale: (site.language ?? opts.locale) as string }
+      : {}),
+    ...(suggestions.length ? { getSuggestions: () => suggestions } : {}),
+  });
+}
+
 // Thread replay + branch navigation moved to `./replay.ts` (#320): a pure
 // transform, server payload in and render items out, with no DOM and no
 // host context — the shape #306 needs more of.
@@ -324,6 +364,17 @@ export interface AiChatWidgetOptions {
    * the anonymous marketing endpoint. Never put secrets here; it's plain JSON.
    */
   extraBody?: Record<string, unknown>;
+  /**
+   * This window is on a visitor's page and was drawn because the site's
+   * settings said yes. Set by `createSiteChat`; a host has no reason to.
+   *
+   * It changes one thing: a question the server refuses with a 403 or a 404
+   * (the site is gone, or its key changed, and this browser still believed
+   * the earlier yes) is answered with the `siteUnavailable` sentence alone
+   * and no "Try again", instead of the failure card. A guest can do nothing
+   * about "Server error (403)", and trying again gets it again.
+   */
+  siteChat?: boolean;
   /**
    * The models the person may choose from (sgiant-platform#465). Pass them and a
    * small model pill appears in the composer; the chosen option's `id` is sent
@@ -5319,7 +5370,13 @@ export function createAiChatWidget(
       // (#346). A 5xx/429 means asking again now will not work either; any
       // other 4xx is a REACHABLE api refusing this particular request.
       noteApiResult(res.ok ? "ok" : res.status);
-      if (!res.ok || !res.body) {
+      if (opts.siteChat && (res.status === 403 || res.status === 404)) {
+        // NOTHING FROM THE BODY, here or below. What a refused request
+        // carries is the server's text for its own log, or a stranger's
+        // page if the address is wrong; neither is for a guest.
+        failure = L("siteUnavailable");
+        failureIs = { alone: true, retry: false };
+      } else if (!res.ok || !res.body) {
         failure = `Server error (${res.status}).`;
         failureIs = {};
       } else {

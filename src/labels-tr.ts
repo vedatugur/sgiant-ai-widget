@@ -24,6 +24,7 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   questionSendFailed: "Cevabınız gönderilemedi — mevcut yanıt bitene kadar bekleyin, sonra tekrar deneyin.",
   modelPicker: "Model",
   modelPickerAria: "Model: {model}. Başka bir model seçin",
+  siteUnavailable: "Asistan şu anda bu sitede kullanılamıyor.",
   modelPickerUnavailable:
     "Model listesi yüklenemedi. Varsayılan model kullanılıyor.",
   openBubble: "{name} aç",
