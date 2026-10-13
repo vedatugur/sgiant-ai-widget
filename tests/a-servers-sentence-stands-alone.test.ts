@@ -278,6 +278,51 @@ test(
           assert.equal(s.retry, null);
         });
 
+        // A release on the server's side cuts a turn that is being
+        // answered. The frame has a code and NO retry field: asking again
+        // helps. In both languages, as the server sends them.
+        for (const interrupted of [
+          "Your answer was interrupted by an update on our side. Your question is saved. Please try again in a moment.",
+          "Yanıtınız, bizim tarafımızdaki bir güncelleme nedeniyle yarıda kesildi. Sorunuz kaydedildi. Lütfen birazdan yeniden deneyin.",
+        ])
+          await t.test(`${at}: a turn cut after text is on screen keeps the text, says the sentence once, and may be tried again (${interrupted.slice(0, 4)})`, async () => {
+            const s = await turn(page, viewport, [
+              { type: "text", d: "Bu ay 42 rezervasyon aldınız; geçen aya göre" },
+              { type: "error", code: "assistant_interrupted", message: interrupted },
+              done,
+            ]);
+            // What had been answered stays, as it was.
+            assert.deepEqual(s.answers, [
+              "Bu ay 42 rezervasyon aldınız; geçen aya göre",
+            ]);
+            // The sentence once, alone, inside the window.
+            assert.equal(s.cards, 1);
+            assert.equal(s.text, interrupted);
+            assert.equal(s.detail, "");
+            assert.equal(s.detailShown, false);
+            assert.equal(s.panel.split(interrupted).length - 1, 1);
+            assert.doesNotMatch(s.panel, SNAG);
+            assert.doesNotMatch(s.panel, /assistant_interrupted/);
+            assert.equal(s.inside, true);
+            assert.equal(s.offline, false);
+            // "Try again" is there, asks again once, and takes the card away.
+            assert.ok(s.retry, "no Try again on a cut turn");
+            await page.evaluate(
+              `T.frames = ${JSON.stringify([
+                { type: "text", d: "Bu ay 42 rezervasyon aldınız." },
+                done,
+              ])};`
+            );
+            await page.click(s.retry!.x, s.retry!.y);
+            const after = await look(page);
+            assert.equal(after.asked, 2);
+            assert.equal(after.cards, 0, "the sentence is still there after the answer came");
+            assert.equal(
+              after.answers[after.answers.length - 1],
+              "Bu ay 42 rezervasyon aldınız."
+            );
+          });
+
         await t.test(`${at}: an HTTP refusal is drawn as before`, async () => {
           const s = await turn(page, viewport, [], 429);
           assert.match(s.text, SNAG);
