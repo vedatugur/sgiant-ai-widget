@@ -85,7 +85,10 @@ test("the chosen id rides every turn, after extraBody, and only when there is a 
   // No picker unless the host passed models.
   assert.match(src, /const picker =\s*opts\.models\?\.length && firstModel/);
   // Remembered per layout scope, and validated against the list on mount.
-  assert.match(src, /const modelKey = layoutScope \? `\$\{ns\}:model:\$\{layoutScope\}` : null;/);
+  assert.match(
+    src,
+    /const modelKey = layoutScope \? scoped\(`\$\{ns\}:model:\$\{layoutScope\}`\) : null;/
+  );
   assert.match(src, /initialModel\(opts\.models, readItem\(modelKey\), opts\.defaultModel\)/);
   assert.match(src, /opts\.onModelChange\?\.\(id\)/);
 });
