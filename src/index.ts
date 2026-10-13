@@ -1983,6 +1983,10 @@ export function createAiChatWidget(
   const onResize = (): void => {
     const p = readPos();
     if (p) applyPos(p);
+    // The box's share of the window is a share of its HEIGHT: a browser
+    // made short with five lines typed kept the five lines and pushed Send
+    // out of the window until the next letter.
+    growComposer();
   };
   window.addEventListener("resize", onResize);
 
@@ -3542,15 +3546,36 @@ export function createAiChatWidget(
       Math.min(COMPOSER_MAX_LINES, Math.floor(room / line))
     );
     const most = Math.ceil(line * lines + chrome);
+    // AN EMPTY BOX IS ONE LINE, WHATEVER ITS HINT SAYS. A text area's hint
+    // wraps, and is measured like text: with a long assistant name ("Ask
+    // <a 36-letter name> anything…") the empty box stood two or three lines
+    // high, dropped to one at the first letter and jumped back when emptied.
+    // So the hint is taken out for the moment of measuring: an empty box is
+    // then measured exactly as a box with one short line is, to the pixel.
+    // (The stylesheet keeps the hint itself to one line, cut at the edge.)
+    const hint = input.placeholder;
+    if (input.value === "") input.placeholder = "";
     input.style.height = "auto";
     // scrollHeight leaves the border out; the box is sized border and all.
     const wanted =
       input.scrollHeight +
       parseFloat(cs.borderTopWidth) +
       parseFloat(cs.borderBottomWidth);
+    if (input.placeholder !== hint) input.placeholder = hint;
     input.style.height = `${Math.min(wanted, most)}px`;
     // A scrollbar only when there is something to scroll to.
     input.style.overflowY = wanted > most ? "auto" : "hidden";
+    // THE LINE BEING WRITTEN IS WHOLLY IN VIEW. The browser scrolls the
+    // caret into view BEFORE this runs, against the height the box had a
+    // moment ago; once the box is at its tallest that left the last line
+    // sitting on the lower edge, cut by a few pixels after every letter.
+    // When the caret is at the end, the box is scrolled to its end.
+    if (
+      wanted > most &&
+      input.selectionStart === input.value.length &&
+      input.selectionEnd === input.value.length
+    )
+      input.scrollTop = input.scrollHeight;
   };
   input.addEventListener("input", growComposer);
   // ENTER SENDS; NOT IN THE MIDDLE OF COMPOSING A LETTER. An input method

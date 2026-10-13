@@ -271,6 +271,125 @@ test(
         assert.equal(seen.sideways, 0);
       });
 
+      await t.test("an empty box is one line whatever its hint says, and does not jump when a letter is typed and taken back", async () => {
+        for (const viewport of [[1280, 800], [320, 640]] as const) {
+          await page.open(viewport);
+          const heights = await page.evaluate<number[]>(`(${async () => {
+            const g = globalThis as any;
+            g.fetch = async () => new Response("{}", { status: 200 });
+            // A long name makes a long hint: "Ask <name> anything…".
+            const w = g.SgiantAiWidget.createAiChatWidget({
+              endpoint: "/x",
+              title: "Kaşmarinabutikotelveresidencesresepsiyonu",
+            });
+            w.open();
+            await new Promise((r) => setTimeout(r, 300));
+            const box = document.querySelector(
+              '[data-ai-target="widget-composer"]'
+            ) as HTMLTextAreaElement;
+            const h = () => Math.round(box.getBoundingClientRect().height);
+            const set = (v: string) => {
+              box.value = v;
+              box.dispatchEvent(new Event("input", { bubbles: true }));
+            };
+            const empty = h();
+            set("a");
+            // One line is what a box with one letter in it is.
+            const oneLine = h();
+            const one = oneLine;
+            set("");
+            const again = h();
+            // And the hint is still there once the box is empty again.
+            const hint = box.placeholder.length;
+            w.destroy();
+            return [oneLine, empty, one, again, hint];
+          }})()`);
+          const [oneLine, empty, one, again, hint] = heights as [number, number, number, number, number];
+          assert.ok(hint > 40, "the hint is short, so this proves nothing");
+          assert.equal(empty, oneLine, `an empty box is ${empty}px, one line is ${oneLine}px`);
+          assert.equal(one, oneLine);
+          assert.equal(again, oneLine);
+        }
+      });
+
+      await t.test("past five lines, the line being written is wholly in view after every letter", async () => {
+        await page.open([1280, 800]);
+        const short = await page.evaluate<number[]>(`(${async () => {
+          const g = globalThis as any;
+          g.fetch = async () => new Response("{}", { status: 200 });
+          const w = g.SgiantAiWidget.createAiChatWidget({ endpoint: "/x" });
+          w.open();
+          await new Promise((r) => setTimeout(r, 300));
+          const box = document.querySelector(
+            '[data-ai-target="widget-composer"]'
+          ) as HTMLTextAreaElement;
+          box.focus();
+          const seen: number[] = [];
+          let text = Array.from({ length: 7 }, (_, i) => "satır " + (i + 1)).join("\n");
+          for (const letter of ["", " a", "b", "\n", "c", "\n", "d"]) {
+            text += letter;
+            box.value = text;
+            box.setSelectionRange(text.length, text.length);
+            // What a browser does on a typed letter: bring the caret into
+            // view against the box as it is, THEN tell the page.
+            box.scrollTop = Math.max(0, box.scrollTop);
+            box.dispatchEvent(new Event("input", { bubbles: true }));
+            // How far the box is from being scrolled to its end.
+            seen.push(Math.round(box.scrollHeight - box.clientHeight - box.scrollTop));
+          }
+          w.destroy();
+          return seen;
+        }})()`);
+        for (const left of short) assert.equal(left, 0, `scrolled ${left}px short of its end`);
+      });
+
+      await t.test("the window made short with five lines typed: the box gives lines back at once, without waiting for a letter", async () => {
+        await page.open([1280, 800]);
+        const seen = await page.evaluate<{ before: number; after: number; sendInside: boolean; back: number }>(
+          `(${async () => {
+            const g = globalThis as any;
+            const P = "sgiant-aiw";
+            g.fetch = async () => new Response("{}", { status: 200 });
+            const w = g.SgiantAiWidget.createAiChatWidget({ endpoint: "/x" });
+            w.open();
+            await new Promise((r) => setTimeout(r, 300));
+            const panel = document.querySelector(`.${P}-panel`) as HTMLElement;
+            const box = document.querySelector(
+              '[data-ai-target="widget-composer"]'
+            ) as HTMLTextAreaElement;
+            box.value = Array.from({ length: 9 }, (_, i) => "satır " + (i + 1)).join("\n");
+            box.dispatchEvent(new Event("input", { bubbles: true }));
+            const cs = getComputedStyle(box);
+            const chrome =
+              parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) +
+              parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+            const lines = () =>
+              Math.round((box.getBoundingClientRect().height - chrome) / parseFloat(cs.lineHeight));
+            const before = lines();
+            // The browser's window is made short: the panel can be no
+            // taller than it. No letter is typed.
+            panel.style.maxHeight = "300px";
+            window.dispatchEvent(new Event("resize"));
+            await new Promise((r) => setTimeout(r, 100));
+            const p = panel.getBoundingClientRect();
+            const send = panel.querySelector(`.${P}-send`)!.getBoundingClientRect();
+            const after = lines();
+            const sendInside = send.bottom <= p.bottom + 0.5 && send.top >= p.top;
+            // And tall again: the lines come back.
+            panel.style.maxHeight = "";
+            window.dispatchEvent(new Event("resize"));
+            await new Promise((r) => setTimeout(r, 100));
+            const back = lines();
+            w.destroy();
+            return { before, after, sendInside, back };
+          }})()`
+        );
+        assert.equal(seen.before, 5);
+        assert.ok(seen.after >= 1 && seen.after < 5, `${seen.after} lines in a 300px window`);
+        assert.equal(seen.sendInside, true, "Send is outside the window");
+        assert.equal(seen.back, 5);
+      });
+
       await t.test("a word with no space in it wraps inside the box, it does not push it wider", async () => {
         const s = await look(page, [320, 640], { models: LONG, lang: "tr" }, "x".repeat(200));
         assert.equal(s.box.width, s.inner);
