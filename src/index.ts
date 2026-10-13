@@ -3496,7 +3496,75 @@ export function createAiChatWidget(
   suggestionsEl.style.display = "none";
 
   const form = el("form", `${PREFIX}-form`) as HTMLFormElement;
-  const input = el("input", `${PREFIX}-input`) as HTMLInputElement;
+  // THE BOX IS A TEXT AREA THAT GROWS, ON A ROW OF ITS OWN (#611).
+  //
+  // It was a one-line field sharing its row with the model picker and Send,
+  // each of which took its width first. Measured in a real window with a
+  // question of 138 characters: 38 of them visible in the default window
+  // with no picker, 22 with the picker, and on a 320 px phone, in Turkish
+  // with a long model name, eight. Nobody could read back what they were
+  // writing.
+  //
+  // So the box takes the whole width, always, and grows with what is typed:
+  // one line when empty, up to five, then it scrolls inside. The picker, the
+  // attach button and Send sit on the row under it, where a long model name
+  // has room and takes nothing from the box.
+  //
+  // Enter sends, as it always did. Shift+Enter is a new line, which a one-
+  // line field could not hold.
+  const input = el("textarea", `${PREFIX}-input`) as HTMLTextAreaElement;
+  input.rows = 1;
+  /** Lines the box grows to before it scrolls inside. */
+  const COMPOSER_MAX_LINES = 5;
+  /** The most of the window's height the box may take, when that is less. */
+  const COMPOSER_MAX_SHARE = 0.32;
+  /** Size the box to its text. After every change, typed or set. */
+  const growComposer = (): void => {
+    // Not laid out (the window is closed): there is nothing to measure, and
+    // it is measured again when the window opens.
+    if (!input.isConnected || input.offsetParent === null) return;
+    const cs = getComputedStyle(input);
+    const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4;
+    const chrome =
+      parseFloat(cs.paddingTop) +
+      parseFloat(cs.paddingBottom) +
+      parseFloat(cs.borderTopWidth) +
+      parseFloat(cs.borderBottomWidth);
+    // FIVE LINES, OR FEWER WHEN THE WINDOW IS SHORT. With a phone's keyboard
+    // up the window is what is left of the screen, about 300 px. Five lines
+    // there, with the header and the row of controls, were taller than the
+    // window: the row and Send went behind the keyboard and the conversation
+    // above was squeezed to nothing. So the box may take about a third of
+    // the window's height, in whole lines, and never less than one.
+    const room = panel.clientHeight * COMPOSER_MAX_SHARE - chrome;
+    const lines = Math.max(
+      1,
+      Math.min(COMPOSER_MAX_LINES, Math.floor(room / line))
+    );
+    const most = Math.ceil(line * lines + chrome);
+    input.style.height = "auto";
+    // scrollHeight leaves the border out; the box is sized border and all.
+    const wanted =
+      input.scrollHeight +
+      parseFloat(cs.borderTopWidth) +
+      parseFloat(cs.borderBottomWidth);
+    input.style.height = `${Math.min(wanted, most)}px`;
+    // A scrollbar only when there is something to scroll to.
+    input.style.overflowY = wanted > most ? "auto" : "hidden";
+  };
+  input.addEventListener("input", growComposer);
+  // ENTER SENDS; NOT IN THE MIDDLE OF COMPOSING A LETTER. An input method
+  // (Chinese, Japanese, Korean, and some Turkish and accent keyboards) uses
+  // Enter to accept what is being composed. Sending there would send half a
+  // word. `isComposing` says so in current browsers; the key code 229 is
+  // what older ones give for the same moment.
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)
+      return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    form.requestSubmit();
+  });
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
   input.placeholder = L("askAnything", { name });
   input.setAttribute("aria-label", L("messageAria", { name }));
@@ -3524,6 +3592,8 @@ export function createAiChatWidget(
   input.addEventListener("input", watchComposer);
   input.addEventListener("focus", watchComposer);
   input.addEventListener("blur", () => motion?.attend(null));
+  // The row under the box: attach, the model picker, and Send at its end.
+  const formRow = el("div", `${PREFIX}-form-row`);
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
@@ -3823,9 +3893,11 @@ export function createAiChatWidget(
         void uploadFiles(files);
       }
     });
-    form.append(attachBtn, input, ...(pill ? [pill.root] : []), sendBtn, fileInput);
+    formRow.append(attachBtn, ...(pill ? [pill.root] : []), sendBtn);
+    form.append(input, formRow, fileInput);
   } else {
-    form.append(input, ...(pill ? [pill.root] : []), sendBtn);
+    formRow.append(...(pill ? [pill.root] : []), sendBtn);
+    form.append(input, formRow);
   }
 
   // The chat lives in its own column so advanced view can lay a drivable app
@@ -3869,6 +3941,7 @@ export function createAiChatWidget(
       writeJson(storeKey, null);
       writeItem(draftKey, null);
       input.value = "";
+      growComposer();
     } else saveState();
     clearRich();
     log.innerHTML = "";
@@ -3891,6 +3964,9 @@ export function createAiChatWidget(
     // the panel below the fold — the "invisible widget" bug. No saved position →
     // applyPos(null) restores the default CSS corner.
     applyPos(readPos());
+    // The box could not be measured while the window was closed: size it to
+    // whatever it holds now (a draft kept from before, a prefilled question).
+    growComposer();
     // Belt AND braces: whatever happened above, if the panel is not actually
     // on-screen now, discard the saved position and snap to the default corner.
     // A visible assistant on open is non-negotiable — a stranded panel reads as
@@ -3924,6 +4000,7 @@ export function createAiChatWidget(
       (forceNew || !input.value.trim())
     ) {
       input.value = prefill;
+      growComposer();
       saveDraft(input.value);
     }
     input.focus();
@@ -3983,6 +4060,8 @@ export function createAiChatWidget(
       }
       panel.style.height = `${vv.height}px`;
       panel.style.top = `${vv.offsetTop}px`;
+      // The window just changed height: the box's share of it changes too.
+      growComposer();
       // The sheet's CSS is `inset:0`, so `bottom:0` is still in play. top +
       // height + bottom is over-constrained; engines are entitled to resolve
       // that differently, and the one that honours `bottom` stretches the
@@ -4790,6 +4869,7 @@ export function createAiChatWidget(
     // A turn needs text OR at least one staged attachment.
     if ((!content && stagedAtts.length === 0) || busy) return;
     input.value = "";
+    growComposer();
     saveDraft(""); // sent — drop the persisted draft
     void send(content);
   });

@@ -508,8 +508,16 @@ export function injectStyles(side: "left" | "right"): void {
    What the row does NOT promise: at 320px with attach, the fixed ends plus the
    two floors leave Send 94px. "Send" is 67 and "Gönder" 82; a host label wider
    than 94px will run past the row there. */
-.${PREFIX}-form{position:relative;display:flex;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
-.${PREFIX}-input{flex:1;box-sizing:border-box;min-width:96px;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:10px 12px;font-size:var(--aiw-font-md);outline:none}
+/* The box on a row of its own, the controls on the row under it (#611). One
+   layout at every width: the box is never narrower than the window allows. */
+.${PREFIX}-form{position:relative;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--aiw-border);background:var(--aiw-surface)}
+.${PREFIX}-form-row{display:flex;align-items:stretch;gap:8px;min-height:36px;min-width:0}
+/* Send at the end of its row, whatever is before it. */
+.${PREFIX}-form-row .${PREFIX}-send{margin-left:auto}
+/* A text area that grows with its text (the script sets its height, to five
+   lines at most). font-family is said because a text area does not take the
+   page's by itself; resize is the script's, not a corner to drag. */
+.${PREFIX}-input{display:block;width:100%;box-sizing:border-box;min-width:0;background:var(--aiw-surface);color:var(--aiw-text);border:1px solid var(--aiw-border-strong);border-radius:var(--aiw-radius-lg);padding:9px 12px;font-family:inherit;font-size:var(--aiw-font-md);line-height:1.4;outline:none;resize:none;overflow-y:hidden;overflow-wrap:anywhere}
 .${PREFIX}-meter{padding:7px 12px 0;background:var(--aiw-surface)}
 .${PREFIX}-meter-bar{height:4px;border-radius:var(--aiw-radius-pill);background:var(--aiw-surface-2);overflow:hidden}
 .${PREFIX}-meter-bar>span{display:block;height:100%;width:100%;transform-origin:left;border-radius:var(--aiw-radius-pill);background:linear-gradient(90deg,var(--aiw-accent),#FBAA34);transition:transform var(--duration-base) var(--ease-out)}

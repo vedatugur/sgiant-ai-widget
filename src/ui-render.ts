@@ -106,7 +106,7 @@ export interface UiRenderCtx {
     comparisonRows?: unknown,
   ) => boolean;
   /** The composer input, focused when a chip is dismissed. */
-  input: HTMLInputElement;
+  input: HTMLInputElement | HTMLTextAreaElement;
   /** The host's options. Only three are read here — `renderDataWidget`,
    *  `renderChartFallback` and `resolveMediaUrls` — but the whole object is
    *  passed so the bodies keep saying `opts.x`, which is what makes this a move
