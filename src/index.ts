@@ -234,10 +234,16 @@ export function createSiteChat(
   // reads, two conversations under one name. The second call is answered
   // with the first one's window, whatever that turned out to be; and with a
   // new one only after the first was destroyed.
-  const key = typeof opts.siteKey === "string" ? opts.siteKey : "";
+  // THE KEY, WITHOUT THE SPACES AROUND IT, from here on. A server trims a
+  // key before it looks the site up, so " pk " and "pk" are one site to it;
+  // to this page they were two: two reads, two launchers, and a visitor's
+  // conversation kept under two names. Trimmed once, here, and the trimmed
+  // key is what is read with, sent, and kept under. (Capitals are another
+  // key to a server, and so they are here.)
+  const key = typeof opts.siteKey === "string" ? opts.siteKey.trim() : "";
   const already = siteChats.get(key);
   if (already) return already;
-  const mine = drawSiteChat(opts).then((handle) => {
+  const mine = drawSiteChat({ ...opts, siteKey: key }).then((handle) => {
     if (!handle) return null;
     const destroy = handle.destroy.bind(handle);
     handle.destroy = () => {
@@ -1991,6 +1997,14 @@ export function createAiChatWidget(
   const hName = el("div", `${PREFIX}-hname`);
   const titleEl = el("span", `${PREFIX}-title`);
   titleEl.textContent = name;
+  // A name that does not fit ends in "…", and a person with a mouse had no
+  // way to read the rest. The whole name is the tooltip WHILE it is cut, and
+  // only then: a tooltip that repeats a name already in full view is noise,
+  // and some screen readers say it a second time.
+  titleEl.addEventListener("mouseenter", () => {
+    if (titleEl.scrollWidth > titleEl.clientWidth) titleEl.title = name;
+    else titleEl.removeAttribute("title");
+  });
   const subEl = el("span", `${PREFIX}-sub`);
   // The host's own line, or none: an empty line is not drawn at all, so the
   // name is not pushed up by a gap.
