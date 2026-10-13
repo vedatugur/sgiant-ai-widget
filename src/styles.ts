@@ -514,6 +514,9 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-form-row{display:flex;align-items:stretch;gap:8px;min-height:36px;min-width:0}
 /* Send at the end of its row, whatever is before it. */
 .${PREFIX}-form-row .${PREFIX}-send{margin-left:auto}
+/* The hint in an empty box is one line, cut at the box's edge: see
+   growComposer for why the box does not grow to fit it. */
+.${PREFIX}-input::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* A text area that grows with its text (the script sets its height, to five
    lines at most). font-family is said because a text area does not take the
    page's by itself; resize is the script's, not a corner to drag. */
