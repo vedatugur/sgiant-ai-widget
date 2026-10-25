@@ -17,6 +17,8 @@ import { WIDGET_LABELS, type WidgetLabels } from "./labels";
  * Turkish here does not compile.
  */
 export const WIDGET_LABELS_TR: WidgetLabels = {
+  searchedWeb: "Web'de aradı: {terms} · {credits} kredi",
+  searchedWebFree: "Web'de aradı: {terms}",
   widgetSourceEstimate: "Tahmini — ölçülmüş veri değil",
   widgetSourceProvided: "Sizin verdiğiniz rakamlar",
   questionConfirm: "Gönder",

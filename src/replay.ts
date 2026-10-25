@@ -56,6 +56,13 @@ export type LoadedThreadItem =
        *  shapes. The renderer turns it into a path via `opts.reportHref`. */
       reportId?: string;
     }
+  | {
+      /** The web searches a reply ran (sgiant-platform#661), drawn under it. */
+      kind: "searches";
+      queries: string[];
+      /** Credits they cost; null when nothing was charged. */
+      credits: number | null;
+    }
   | ReplayProposalItem;
 
 /**
@@ -368,6 +375,35 @@ export function buildThreadReplay(payload: {
     }
     items.push({ t: reply?.createdAt ?? own, rank, t2: own, item });
   };
+  /**
+   * UNDER THE REPLY IT FOLLOWS (sgiant-platform#661). The searches record is
+   * saved once the turn is charged, AFTER its reply, so "the first reply saved
+   * after it" is the NEXT turn's, or a regenerated answer's (QA). It takes the
+   * latest drawn reply of its own question saved at or before it; without a
+   * question's id, the latest drawn reply before it. A reply off the active
+   * branch takes its record with it.
+   */
+  const underItsReply = (
+    a: { createdAt?: string; messageId?: string | null },
+    rank: number,
+    item: LoadedThreadItem
+  ) => {
+    const own = a.createdAt ?? "";
+    const asked = question(a);
+    let reply: (typeof replies)[number] | undefined;
+    for (const m of replies) {
+      if ((m.createdAt ?? "") > own) break;
+      if (!said(m.content)) continue;
+      if (asked && questionOf(m) !== asked.id) continue;
+      reply = m;
+    }
+    if (!reply) {
+      byTurn(a, rank, item);
+      return;
+    }
+    if (activeSet && reply.id && !activeSet.has(reply.id)) return;
+    items.push({ t: reply.createdAt ?? own, rank, t2: own, item });
+  };
   for (const a of payload.artifacts ?? []) {
     // Branch-scoped artifacts (tied to a message) only belong to the active
     // branch; artifacts with no messageId are thread-wide and always stay.
@@ -394,6 +430,22 @@ export function buildThreadReplay(payload: {
           rows: p.rows ?? [],
           comparisonRows: p.comparisonRows ?? null,
         },
+      });
+    } else if (
+      a.kind === "activity" &&
+      (a.payload as { name?: unknown } | null)?.name === "searches"
+    ) {
+      // What the reply searched on the web, and its cost (#661): saved by the
+      // server once the turn is charged, drawn under the reply.
+      const p = (a.payload ?? {}) as { queries?: unknown; credits?: unknown };
+      const queries = Array.isArray(p.queries)
+        ? p.queries.filter((q): q is string => typeof q === "string")
+        : [];
+      if (!queries.length) continue;
+      underItsReply(a, RANK.decision, {
+        kind: "searches",
+        queries,
+        credits: typeof p.credits === "number" ? p.credits : null,
       });
     } else if (a.kind === "activity") {
       // A persisted process step — replays the timeline (+ acting agent) on reopen.

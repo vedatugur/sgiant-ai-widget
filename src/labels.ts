@@ -17,6 +17,11 @@
  * at runtime by the widget (single-brace so a host's i18next leaves it intact).
  */
 export const WIDGET_LABELS = {
+  // Under a reply that searched the web (sgiant-platform#661): its search
+  // terms, each in quotes, and what the searches cost. The second when the
+  // turn is not charged (staff). The owner's words, 25 Oct 2026.
+  searchedWeb: "Searched the web: {terms} · {credits} credits",
+  searchedWebFree: "Searched the web: {terms}",
   // Provenance badges on a data widget (sgiant-platform#483). Measured figures
   // carry none; these two are the exceptions a reader must not mistake for data.
   widgetSourceEstimate: "Estimate — not measured",

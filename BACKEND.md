@@ -113,8 +113,10 @@ The widget understands more frames, and each one is inert if you never send it:
 allowance), `activity` (live "running → ok" steps for a long turn), `question`
 (the assistant asking the human to choose), `tool_proposal` (a confirm-gated
 write), **`widget`** (a chart: `spec` + `rows`, plus optional `comparisonRows` for a prior-period overlay — note the type is `widget`, not `chart`), and `meta` (which model wrote the
-turn). Their exact fields are the `StreamFrame` interface in `src/dom.ts`, which
-is the only place they are defined.
+turn), and `searches` (the web searches a reply ran, sent once the turn is
+charged: `queries`, `count` and `credits`, drawn under the reply; `credits: null`
+draws no credits part). Their exact fields are the `StreamFrame` interface in
+`src/dom.ts`, which is the only place they are defined.
 
 **Optional in the type does not mean optional in practice.** `StreamFrame` marks
 every field `?`, because one interface describes a dozen frame shapes. Three of
@@ -127,6 +129,7 @@ is the list:
 | `activity` | `label` **and** `status` |
 | `tool_proposal` | `name`, plus a host that passes `onApplyProposal` |
 | `meta` | `isStaff` **and** `modelLabel` |
+| `searches` | `queries` (a list; terms with no text draw nothing) |
 
 The **type name** matters as much as the fields. A chart is `type: "widget"`; sent as `type: "text"` with a `spec` it renders nothing, silently. Every type the widget acts on is named in this document, and a test asserts that.
 

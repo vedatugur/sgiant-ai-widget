@@ -239,6 +239,11 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-usage{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:-4px;padding:0 2px;font-size:var(--aiw-font-3xs);color:var(--aiw-muted);font-variant-numeric:tabular-nums}
 .${PREFIX}-usage-pill{display:inline-flex;align-items:center;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-sm);padding:0 5px;line-height:16px}
 .${PREFIX}-usage-sep{opacity:.5}
+.${PREFIX}-searches{align-self:flex-start;margin-top:-4px;padding:0 2px;font-size:var(--aiw-font-3xs);color:var(--aiw-muted);overflow-wrap:anywhere}
+.${PREFIX}-notice{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-bottom:1px solid var(--aiw-border-soft);background:color-mix(in srgb,var(--aiw-accent) 8%,var(--aiw-surface));font-size:var(--aiw-font-2xs);color:var(--aiw-text-2)}
+.${PREFIX}-notice[hidden]{display:none}
+.${PREFIX}-notice-title{font-weight:600;color:var(--aiw-text)}
+.${PREFIX}-notice-action{align-self:flex-start;margin-top:2px;font-weight:600;color:var(--aiw-accent-ink);text-decoration:underline}
 @keyframes ${PREFIX}-pulse{0%{box-shadow:0 0 0 0 rgba(96,199,200,.5)}70%{box-shadow:0 0 0 12px rgba(96,199,200,0)}100%{box-shadow:0 0 0 0 rgba(96,199,200,0)}}
 @keyframes ${PREFIX}-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 @keyframes ${PREFIX}-blink2{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(.12)}}
