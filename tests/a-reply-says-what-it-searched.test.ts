@@ -150,3 +150,51 @@ test("the notice at the top is the host's words, refreshed on open and after eac
     /\(external \|\| isSafeRelPath\(href\)\)/,
   );
 });
+
+test("after a regenerate, each answer keeps its own searches, and a record with no question id stays in its turn", () => {
+  const messages = [
+    { id: "u1", parentId: null, role: "user", content: "q", createdAt: T("10:00:00") },
+    { id: "a1", parentId: "u1", role: "assistant", content: "first answer", createdAt: T("10:00:20") },
+    { id: "a1b", parentId: "u1", role: "assistant", content: "regenerated", createdAt: T("10:05:00") },
+  ];
+  const record = (at: string, terms: string) => ({
+    kind: "activity",
+    status: "applied",
+    messageId: "u1",
+    createdAt: T(at),
+    payload: { name: "searches", queries: [terms], count: 1, credits: 2 },
+  });
+  const artifacts = [record("10:00:21", "OLD terms"), record("10:05:01", "NEW terms")];
+  const drawn = (activePath: string[]) =>
+    (
+      buildThreadReplay({ messages, artifacts, activePath } as never) as Array<
+        Record<string, unknown>
+      >
+    ).map((i) =>
+      i.kind === "searches" ? `searches:${(i.queries as string[])[0]}` : String(i.content)
+    );
+  assert.deepEqual(drawn(["u1", "a1b"]), ["q", "regenerated", "searches:NEW terms"]);
+  assert.deepEqual(drawn(["u1", "a1"]), ["q", "first answer", "searches:OLD terms"]);
+  // The question was not saved first: the record still follows its own reply.
+  const two = buildThreadReplay({
+    messages: [
+      { id: "u1", parentId: null, role: "user", content: "q1", createdAt: T("10:00:00") },
+      { id: "a1", parentId: "u1", role: "assistant", content: "ans1", createdAt: T("10:00:20") },
+      { id: "u2", parentId: "a1", role: "user", content: "q2", createdAt: T("10:01:00") },
+      { id: "a2", parentId: "u2", role: "assistant", content: "ans2", createdAt: T("10:01:20") },
+    ],
+    artifacts: [
+      {
+        kind: "activity",
+        status: "applied",
+        messageId: null,
+        createdAt: T("10:00:21"),
+        payload: { name: "searches", queries: ["turn1 terms"], credits: 2 },
+      },
+    ],
+  } as never) as Array<Record<string, unknown>>;
+  assert.deepEqual(
+    two.map((i) => (i.kind === "searches" ? "searches" : String(i.content))),
+    ["q1", "ans1", "searches", "q2", "ans2"]
+  );
+});
