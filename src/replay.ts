@@ -56,6 +56,13 @@ export type LoadedThreadItem =
        *  shapes. The renderer turns it into a path via `opts.reportHref`. */
       reportId?: string;
     }
+  | {
+      /** The web searches a reply ran (sgiant-platform#661), drawn under it. */
+      kind: "searches";
+      queries: string[];
+      /** Credits they cost; null when nothing was charged. */
+      credits: number | null;
+    }
   | ReplayProposalItem;
 
 /**
@@ -394,6 +401,22 @@ export function buildThreadReplay(payload: {
           rows: p.rows ?? [],
           comparisonRows: p.comparisonRows ?? null,
         },
+      });
+    } else if (
+      a.kind === "activity" &&
+      (a.payload as { name?: unknown } | null)?.name === "searches"
+    ) {
+      // What the reply searched on the web, and its cost (#661): saved by the
+      // server once the turn is charged, drawn under the reply.
+      const p = (a.payload ?? {}) as { queries?: unknown; credits?: unknown };
+      const queries = Array.isArray(p.queries)
+        ? p.queries.filter((q): q is string => typeof q === "string")
+        : [];
+      if (!queries.length) continue;
+      byTurn(a, RANK.decision, {
+        kind: "searches",
+        queries,
+        credits: typeof p.credits === "number" ? p.credits : null,
       });
     } else if (a.kind === "activity") {
       // A persisted process step — replays the timeline (+ acting agent) on reopen.

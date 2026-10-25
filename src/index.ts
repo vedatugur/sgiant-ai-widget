@@ -395,6 +395,15 @@ export interface WidgetJobView {
   }>;
 }
 
+/** A standing notice at the top of the chat (sgiant-platform#661). */
+export interface WidgetNotice {
+  title: string;
+  body?: string;
+  /** A link the notice offers, e.g. "Add credits" to a contact page. */
+  actionLabel?: string;
+  actionHref?: string;
+}
+
 export interface AiChatWidgetOptions {
   /** Streaming chat endpoint (POST). e.g. https://api.example.com/accounts/:id/ai/chat */
   endpoint: string;
@@ -547,6 +556,13 @@ export interface AiChatWidgetOptions {
    * return the current credit balance (null = unknown/hidden).
    */
   getBalance?: () => Promise<number | null> | number | null;
+  /**
+   * A standing notice at the top of the chat (sgiant-platform#661): what the
+   * account's AI page used to say, said where the person asks — out of
+   * credits, or the assistant unavailable. Called on open and after each
+   * turn; null = nothing to say. The host writes the words.
+   */
+  getNotice?: () => Promise<WidgetNotice | null> | WidgetNotice | null;
   /** Assistant name shown in the header + bubble aria-label. Default "AYCA". */
   title?: string;
   /** Small line under the name. No default: without one, nothing is drawn
@@ -2677,6 +2693,28 @@ export function createAiChatWidget(
     return cap;
   }
 
+  /**
+   * The line under a reply that searched the web (sgiant-platform#661): its
+   * terms, each in quotes, and the credits they cost; no credits part when
+   * nothing was charged. Null when there are no terms to show. Text only:
+   * the terms are what the model searched, never markup.
+   */
+  function searchLine(
+    queries: readonly string[],
+    credits: number | null
+  ): HTMLElement | null {
+    const shown = queries.map((q) => q.trim()).filter(Boolean);
+    if (!shown.length) return null;
+    const terms = shown.map((q) => `\u201c${q}\u201d`).join(", ");
+    const line = el("div", `${PREFIX}-searches`);
+    line.textContent =
+      "\u{1F50E} " +
+      (credits === null
+        ? L("searchedWebFree", { terms })
+        : L("searchedWeb", { terms, credits: num(credits) }));
+    return line;
+  }
+
   function renderThreadItems(
     items: LoadedThreadItem[],
     tid: string | undefined = threadId
@@ -2731,6 +2769,9 @@ export function createAiChatWidget(
           it.rows,
           it.comparisonRows
         );
+      } else if ("kind" in it && it.kind === "searches") {
+        const line = searchLine(it.queries, it.credits);
+        if (line) log.appendChild(line);
       } else if ("kind" in it && it.kind === "activity") {
         // Replay a persisted process step (static, already finished) + its agent.
         addActivityChip(
@@ -3398,6 +3439,47 @@ export function createAiChatWidget(
   const TOOL_ROLE: Record<string, string> = opts.toolRoles ?? {};
   // Persistent status structure so the credits number can ANIMATE (a live
   // count-down after a turn / count-up after a top-up) instead of snapping.
+  // The standing notice (#661): out of credits, or the assistant unavailable.
+  const noticeEl = el("div", `${PREFIX}-notice`);
+  noticeEl.hidden = true;
+  noticeEl.setAttribute("role", "status");
+  async function refreshNotice(): Promise<void> {
+    if (!opts.getNotice) return;
+    let n: WidgetNotice | null;
+    try {
+      n = await opts.getNotice();
+    } catch {
+      return; // keep what is shown
+    }
+    noticeEl.textContent = "";
+    if (!n || !n.title) {
+      noticeEl.hidden = true;
+      return;
+    }
+    const title = el("div", `${PREFIX}-notice-title`);
+    title.textContent = n.title;
+    noticeEl.append(title);
+    if (n.body) {
+      const body = el("div", `${PREFIX}-notice-body`);
+      body.textContent = n.body;
+      noticeEl.append(body);
+    }
+    // The host's own link (a contact page); still only http(s) or a path.
+    const href = n.actionHref;
+    const external = typeof href === "string" && /^https?:\/\//i.test(href);
+    if (n.actionLabel && typeof href === "string" && (external || isSafeRelPath(href))) {
+      const a = el("a", `${PREFIX}-notice-action`) as HTMLAnchorElement;
+      a.href = href;
+      a.textContent = n.actionLabel;
+      if (external) {
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+      }
+      noticeEl.append(a);
+    }
+    noticeEl.hidden = false;
+  }
+
   const statusEl = el("div", `${PREFIX}-status`);
   statusEl.style.display = "none";
   const statusRoleEl = el("span", `${PREFIX}-status-role`);
@@ -3930,6 +4012,7 @@ export function createAiChatWidget(
   const chatCol = el("div", `${PREFIX}-chatcol`);
   chatCol.append(
     header,
+    noticeEl,
     log,
     meterEl,
     statusEl,
@@ -4031,6 +4114,7 @@ export function createAiChatWidget(
     input.focus();
     bindKeyboard();
     void refreshBalance();
+    void refreshNotice();
     // Refresh shortcuts for the page the user opened the widget on.
     void renderSuggestions();
     rememberOpen(true);
@@ -5316,6 +5400,9 @@ export function createAiChatWidget(
     };
     let turnIn = 0;
     let turnOut = 0;
+    // The web searches this reply ran, from the `searches` frame (#661).
+    let turnSearches: { queries: string[]; credits: number | null } | null =
+      null;
     let failure: string | null = null;
     // How the failure is to be drawn. A server's frame WITH A CODE is a
     // sentence it wrote for the reader, and is the card's whole text; see
@@ -5771,6 +5858,15 @@ export function createAiChatWidget(
                 quotaRemaining = Math.max(0, quotaRemaining - turn);
               renderMeter();
             }
+            if (frame.type === "searches" && Array.isArray(frame.queries)) {
+              turnSearches = {
+                queries: frame.queries.filter(
+                  (q): q is string => typeof q === "string"
+                ),
+                credits:
+                  typeof frame.credits === "number" ? frame.credits : null,
+              };
+            }
             if (frame.type === "meta" && frame.isStaff && frame.modelLabel) {
               metaChip.textContent = frame.modelLabel;
               metaChip.hidden = false;
@@ -5823,6 +5919,7 @@ export function createAiChatWidget(
       if (live()) input.focus();
       // A turn just consumed credits — refresh the remaining-credits readout.
       void refreshBalance();
+      void refreshNotice();
       // A generation/import may have just landed — refresh the artifact strip
       // (thread-scoped, so only when this turn's thread is the one on screen).
       if (threadId === turnThread) void refreshArtifacts();
@@ -5930,6 +6027,17 @@ export function createAiChatWidget(
         const cap = usageBadge(turnIn, turnOut);
         if (lastBubble) lastBubble.insertAdjacentElement("afterend", cap);
         else log.appendChild(cap);
+      }
+      // What the reply searched on the web, and what it cost (#661).
+      const searched = turnSearches
+        ? searchLine(turnSearches.queries, turnSearches.credits)
+        : null;
+      if (searched) {
+        const next = lastBubble?.nextElementSibling;
+        const after =
+          next && next.classList.contains(`${PREFIX}-usage`) ? next : lastBubble;
+        if (after) after.insertAdjacentElement("afterend", searched);
+        else log.appendChild(searched);
       }
       maybeDing();
       scrollDown();

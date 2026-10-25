@@ -76,6 +76,14 @@ export interface StreamFrame {
    *  the model that wrote it. Absent when the turn persisted nothing. */
   messageId?: string;
   model?: string;
+  /** activity frame — a web search's terms, on its step (sgiant-platform#661). */
+  query?: string;
+  /** searches frame — the web searches a reply ran, sent once the turn is
+   *  charged (sgiant-platform#661): their terms, how many were billed, and the
+   *  credits they cost (null when nothing was charged). Drawn under the reply. */
+  queries?: string[];
+  count?: number;
+  credits?: number | null;
 }
 
 /** Parse one stream line — tolerates `data: ` SSE prefix and bare NDJSON. */
