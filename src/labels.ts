@@ -50,6 +50,12 @@ export const WIDGET_LABELS = {
    */
   unnamedAssistant: "Assistant",
   /**
+   * The box a person writes in, in a preview of a site's window inside the
+   * app where its owner sets it up (sgiant-platform#592): nothing is sent
+   * from a preview. The owner's words, 27 Oct 2026 (row 20).
+   */
+  previewNoWriting: "You cannot write in the preview.",
+  /**
    * The header's button on a visitor's page, where "New chat" is: it removes
    * the conversation kept in the visitor's tab and shows the greeting again.
    */

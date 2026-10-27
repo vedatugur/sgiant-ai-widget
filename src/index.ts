@@ -205,6 +205,7 @@ import {
   siteChatKey,
   type SiteChatOptions,
 } from "./site-chat";
+import { readSiteSettings, type SiteSettings } from "./site-chat";
 export {
   readSiteSettings,
   forgetSiteChats,
@@ -271,7 +272,6 @@ async function drawSiteChat(
   const site = said.settings;
   // Anything kept under another key is from before this site's key changed.
   forgetSiteChats(opts.siteKey);
-  const suggestions = site.suggestions;
   return createAiChatWidget({
     endpoint: opts.endpoint,
     extraBody: { siteKey: opts.siteKey },
@@ -279,21 +279,69 @@ async function drawSiteChat(
     // The visitor's conversation follows them from page to page, in the tab
     // only: see `scoped` in createAiChatWidget.
     persistKey: siteChatKey(opts.siteKey),
+    ...siteWindow(site, opts.locale),
+  });
+}
+
+/**
+ * What a site's owner set, as the window's options: the same for the window
+ * on the site and for its preview in the app, so the two cannot differ.
+ */
+function siteWindow(
+  site: SiteSettings,
+  locale: string | undefined
+): Partial<AiChatWidgetOptions> {
+  const suggestions = site.suggestions;
+  return {
     // A site that gave its assistant no name gets a plain word for it, in
     // the window's language, and never this package's own default name: a
     // guest of the site has no idea what that is.
     title:
       site.name ??
       builtInLabels(
-        site.language ?? opts.locale,
+        site.language ?? locale,
         typeof document !== "undefined" ? document.documentElement?.lang : null
       ).unnamedAssistant,
     ...(site.greeting ? { greeting: site.greeting } : {}),
     ...(site.color ? { accent: site.color } : {}),
-    ...(site.language ?? opts.locale
-      ? { locale: (site.language ?? opts.locale) as string }
+    ...(site.language ?? locale
+      ? { locale: (site.language ?? locale) as string }
       : {}),
     ...(suggestions.length ? { getSuggestions: () => suggestions } : {}),
+    position: site.position,
+    ...(site.logo ? { avatarUrl: site.logo } : {}),
+  };
+}
+
+/**
+ * THE SITE'S WINDOW AS ITS OWNER SETS IT UP (sgiant-platform#592): drawn in
+ * `container` from the settings being edited, open, and unable to send.
+ * Nothing is read from or sent to a server; the settings are judged as the
+ * window on the site judges them (`readSiteSettings`), so the preview shows
+ * what a visitor will see. Call `destroy()` on the handle before drawing it
+ * again with changed settings.
+ */
+export function createSiteChatPreview(opts: {
+  container: HTMLElement;
+  /** The settings as the page holds them: name, greeting, language, color,
+   *  suggestions, position, logo. Judged like the public read's answer. */
+  settings: Record<string, unknown>;
+  /** Where the logo may be from: the api's address. */
+  from?: string;
+  /** The app's language, for the window's own words when the site has none. */
+  locale?: string;
+}): AiChatWidgetHandle {
+  const site = readSiteSettings(
+    { ...opts.settings, answersVisitors: true },
+    opts.from
+  ) as SiteSettings;
+  return createAiChatWidget({
+    // Never asked: nothing can be sent from a preview.
+    endpoint: "about:blank",
+    container: opts.container,
+    siteChat: true,
+    preview: true,
+    ...siteWindow(site, opts.locale),
   });
 }
 
@@ -443,6 +491,14 @@ export interface AiChatWidgetOptions {
    * about "Server error (403)", and trying again gets it again.
    */
   siteChat?: boolean;
+  /**
+   * A PREVIEW of a site's window, drawn inside the app where its owner sets
+   * it up (sgiant-platform#592): open from the start, placed in `container`
+   * (which the host makes `position: relative`) instead of over the page,
+   * not draggable, and nothing can be written or sent from it. No request
+   * leaves it. Use `createSiteChatPreview`, which sets this.
+   */
+  preview?: boolean;
   /**
    * The models the person may choose from (sgiant-platform#465). Pass them and a
    * small model pill appears in the composer; the chosen option's `id` is sent
@@ -1359,7 +1415,7 @@ export function createAiChatWidget(
    *  it only runs after the composer exists. */
   function syncBusy(): void {
     busy = isThreadPending(threadId) || tokenActionRunning;
-    sendBtn.disabled = busy;
+    sendBtn.disabled = busy || opts.preview === true;
     // The launcher's `working` state, from the real in-flight turn rather than
     // a separate flag that could drift from it (#305). Only while the panel is
     // CLOSED — a breathing launcher next to an open panel that is already
@@ -1954,6 +2010,8 @@ export function createAiChatWidget(
     if ((ev.target as HTMLElement)?.closest("button,a,input,select")) return;
     // Advanced/full-screen mode owns its own layout; only the floating panel moves.
     if (panel.classList.contains(`${PREFIX}-advanced`)) return;
+    // A preview stays where the host put it.
+    if (opts.preview) return;
     const r = panel.getBoundingClientRect();
     panelDrag = {
       dx: ev.clientX - r.left,
@@ -5299,6 +5357,9 @@ export function createAiChatWidget(
      *  again, with the attachments it had. */
     held?: { atts: WidgetAtt[] }
   ): Promise<void> {
+    // Nothing is sent from a preview: a suggested question pressed there is
+    // only a picture of one (sgiant-platform#592).
+    if (opts.preview) return;
     // A regenerate re-answers an existing user turn — it carries no new user
     // message, so it must NOT push a user bubble to the DOM / history.
     const isRegen = fork?.regenerate === true;
@@ -6727,6 +6788,37 @@ export function createAiChatWidget(
   window.addEventListener("resize", watchGround, { passive: true });
 
   applyLauncher();
+
+  // A LOGO THAT DOES NOT LOAD shows the window's own mark, not the browser's
+  // broken-image sign (sgiant-platform#592: a site's logo can be removed, or
+  // its server can fail).
+  for (const img of Array.from(
+    root.querySelectorAll<HTMLImageElement>(`img.${PREFIX}-av-img`)
+  )) {
+    if (img.closest(`.${PREFIX}-bubble, .${PREFIX}-panel`) === null) continue;
+    img.addEventListener(
+      "error",
+      () => {
+        const holder = document.createElement("span");
+        holder.innerHTML = AVATAR_SVG;
+        img.replaceWith(...Array.from(holder.childNodes));
+      },
+      { once: true }
+    );
+  }
+
+  // A PREVIEW (see `preview` on the options): in the host's box, open, and
+  // unable to send. The two parts are placed in the box, not over the page.
+  if (opts.preview) {
+    for (const part of [bubble, panel]) part.style.position = "absolute";
+    input.disabled = true;
+    input.value = "";
+    input.placeholder = L("previewNoWriting");
+    sendBtn.disabled = true;
+    if (attachBtn) attachBtn.disabled = true;
+    open();
+    applyPos(null);
+  }
 
   return {
     open,
