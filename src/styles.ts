@@ -111,7 +111,7 @@ ${panel}.${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
 ${panel}.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
 `;
 
-export function injectStyles(side: "left" | "right"): void {
+export function injectStyles(): void {
   if (stylesInjected) return;
   stylesInjected = true;
   // WARNING, and it costs a round trip every time: this whole stylesheet is a
@@ -297,7 +297,7 @@ export function injectStyles(side: "left" | "right"): void {
    place saying the same thing. #88 ("I can't see any chatbox") is answered by
    the disc's own contrast (navy on white is 16.82:1) and, on a first visit, by
    the named pill below — a word rather than a puzzle. */
-.${PREFIX}-bubble{position:fixed;bottom:var(--aiw-launcher-offset);${side}:var(--aiw-launcher-offset);z-index:48;width:var(--aiw-launcher-size);height:var(--aiw-launcher-size);border:none;border-radius:var(--aiw-launcher-radius);background:var(--aiw-launcher-bg);color:var(--aiw-launcher-fg);cursor:pointer;overflow:visible;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:var(--aiw-launcher-shadow);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
+.${PREFIX}-bubble{position:fixed;bottom:var(--aiw-launcher-offset);right:var(--aiw-launcher-offset);z-index:48;width:var(--aiw-launcher-size);height:var(--aiw-launcher-size);border:none;border-radius:var(--aiw-launcher-radius);background:var(--aiw-launcher-bg);color:var(--aiw-launcher-fg);cursor:pointer;overflow:visible;display:flex;align-items:center;justify-content:center;gap:9px;padding:0;box-shadow:var(--aiw-launcher-shadow);transition:transform var(--duration-fast,150ms) var(--ease-out),box-shadow var(--duration-fast,150ms) var(--ease-out)}
 /* 26 in 56 BY DEFAULT, and the ratio is deliberate: the built-in mark was tried
    at 34 and the object read flat — a disc with a shape stamped on it. Measured
    again at 48 while trying to make a mark BREAK the disc, and the default mark
@@ -348,7 +348,7 @@ export function injectStyles(side: "left" | "right"): void {
 .${PREFIX}-bubble-dozing::before{animation:${PREFIX}-zz 3.6s var(--ease-out) infinite}
 .${PREFIX}-bubble-dozing::after{font-size:8px;animation:${PREFIX}-zz 3.6s var(--ease-out) 1.2s infinite}
 @keyframes ${PREFIX}-zz{0%{opacity:0;transform:translate(0,0) rotate(-6deg) scale(.7)}18%{opacity:.8}70%{opacity:.3}100%{opacity:0;transform:translate(10px,-16px) rotate(12deg) scale(1.05)}}
-.${PREFIX}-bubble-dot{position:absolute;top:2px;${side === "left" ? "right" : "left"}:2px;min-width:var(--aiw-launcher-dot);height:var(--aiw-launcher-dot);padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
+.${PREFIX}-bubble-dot{position:absolute;top:2px;left:2px;min-width:var(--aiw-launcher-dot);height:var(--aiw-launcher-dot);padding:0 5px;border-radius:var(--aiw-radius-pill);background:#FA712D;color:#FCF7E3;font-size:var(--aiw-font-2xs);font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px #151D2F}
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.55}}
 /* GATED. There was no hover:hover query anywhere in this widget, so on a
    touchscreen the lift-and-scale stuck after the tap. The file already carries
@@ -375,7 +375,15 @@ export function injectStyles(side: "left" | "right"): void {
    keyed to different selectors. Measured: 44px applied, translate did not. */
 .${PREFIX}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);flex:0 0 auto;max-width:none;transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
 .${PREFIX}-bubble:hover svg{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
-.${PREFIX}-panel{position:fixed;bottom:20px;${side}:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
+.${PREFIX}-panel{position:fixed;bottom:20px;right:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
+/* EACH WINDOW ITS OWN CORNER (sgiant-platform#592). The stylesheet is
+   written once per page, so a corner baked into it was the FIRST window's
+   for every window after it: a site's preview drawn first in the app moved
+   the app's own assistant to the left. The right is the rule; a window at
+   the left carries this class on its launcher and its panel. */
+.${PREFIX}-bubble.${PREFIX}-at-left{right:auto;left:var(--aiw-launcher-offset)}
+.${PREFIX}-bubble.${PREFIX}-at-left .${PREFIX}-bubble-dot{left:auto;right:2px}
+.${PREFIX}-panel.${PREFIX}-at-left{right:auto;left:20px}
 /* NAVY, with the sweep as a 2px rule under it (#305). It was the gradient bar
    itself, which is why the avatar needed an rgba(12,17,30,.55) scrim to survive
    — a scrim over a gradient is a patch, not a decision. On navy the mark
@@ -1016,7 +1024,7 @@ ${darkWhenHostSaysSo}
      top of the widget's own avatar and buttons (reported 2026-08-07).
      A full-screen sheet covers the viewport and IS the modal surface while
      it is open, so here — and only here — it outranks host chrome. */
-  .${PREFIX}-panel{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup var(--duration-base) var(--ease-out);transition:none}
+  .${PREFIX}-panel,.${PREFIX}-panel.${PREFIX}-at-left{inset:0;z-index:51;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;animation:${PREFIX}-sheetup var(--duration-base) var(--ease-out);transition:none}
   .${PREFIX}-expanded{width:100%;max-width:100%;height:100vh;height:100dvh}
   .${PREFIX}-model-btn{max-width:118px;padding:0 6px 0 9px}
   .${PREFIX}-expanded .${PREFIX}-msg{max-width:86%}
@@ -1043,7 +1051,8 @@ ${darkWhenHostSaysSo}
      dead band under the composer. The keyboard handler sets this flag. */
   .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-form{padding-bottom:10px}
   .${PREFIX}-panel.${PREFIX}-kb .${PREFIX}-log{padding-bottom:14px}
-  .${PREFIX}-bubble{bottom:var(--aiw-launcher-offset-sm);${side}:var(--aiw-launcher-offset-sm)}
+  .${PREFIX}-bubble{bottom:var(--aiw-launcher-offset-sm);right:var(--aiw-launcher-offset-sm)}
+  .${PREFIX}-bubble.${PREFIX}-at-left{right:auto;left:var(--aiw-launcher-offset-sm)}
   /* THE PILL COLLAPSES TO THE PEBBLE ON A PHONE — the mark, no word.
      The pill is 119px of fixed, floating width in the corner a phone layout
      uses for its own controls. Measured on app.sgiant.io/demo at 375px: the
