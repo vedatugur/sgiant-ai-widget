@@ -42,6 +42,9 @@ test("a logo only from the server the settings came from, and only https (http f
     null,
   ])
     assert.equal(logo(elsewhere), null, String(elsewhere));
+  // http only on a developer's own machine, even when the settings came
+  // over http from the same server.
+  assert.equal(logo("http://api.example/x.png", "http://api.example/public/ai/site-settings"), null);
   // Without the address the settings came from, no logo at all.
   assert.equal(readSiteSettings({ ...YES, logo: "https://api.example/x.png" })?.logo, null);
   assert.equal(logo("http://localhost:4000/x.png", "http://localhost:4000/public/ai/site-settings"), "http://localhost:4000/x.png");
@@ -129,8 +132,7 @@ test(
         );
         assert.equal(seen.sendOff, true);
         assert.equal(seen.fetched, 0, "the preview asked a server");
-        // The left corner, inside the box.
-        assert.notEqual(seen.side, "auto");
+        // (The corner is held by its own test below.)
         // A logo from another server is not drawn: the window's own mark.
         assert.equal(seen.avatar, "mark");
       }
@@ -167,6 +169,137 @@ test(
       assert.equal(seen.before, "img");
       assert.equal(seen.src, "https://api.example/public/ai/site-logo?siteKey=pk");
       assert.equal(seen.after, "mark");
+    });
+  }
+);
+
+test(
+  "in a browser: the preview sits in the corner chosen, beside the app's own assistant, and leaves the page as it found it",
+  { skip: SKIP_WITHOUT_CHROME },
+  async () => {
+    await withBrowser(async (page) => {
+      for (const width of [1280, 375] as const) {
+        await page.open([width, 900]);
+        const seen = await page.evaluate<{
+          rows: { pos: string; left: number; right: number; inBox: boolean; height: number }[];
+          appSide: number;
+          sweeps: number;
+          sweepInBody: boolean;
+          leftOver: Record<string, number>;
+          stored: string[];
+        }>(`(${async () => {
+          const P = "sgiant-aiw";
+          const g = window as unknown as { SgiantAiWidget: any };
+          const counts: Record<string, number> = {};
+          for (const target of [window, document] as const) {
+            const add = target.addEventListener.bind(target);
+            const remove = target.removeEventListener.bind(target);
+            (target as any).addEventListener = (t: string, f: any, o?: any) => {
+              counts[t] = (counts[t] ?? 0) + 1;
+              return add(t, f, o);
+            };
+            (target as any).removeEventListener = (t: string, f: any, o?: any) => {
+              counts[t] = (counts[t] ?? 0) - 1;
+              return remove(t, f, o);
+            };
+          }
+          // The app's own assistant first, in the right corner.
+          const app = g.SgiantAiWidget.createAiChatWidget({ endpoint: "about:blank", title: "AYCA" });
+          const afterApp = { ...counts };
+          const box = document.createElement("div");
+          // As the app gives it: at most 420px, never wider than the page.
+          box.style.cssText = "position:relative;width:100%;max-width:420px;height:620px";
+          document.body.append(box);
+          const rows = [];
+          for (const position of ["bottom-left", "bottom-right", "bottom-left"]) {
+            const h = g.SgiantAiWidget.createSiteChatPreview({
+              container: box,
+              settings: { name: "Reception", position },
+            });
+            // After the window's own opening movement.
+            await new Promise((r) => setTimeout(r, 700));
+            const panel = box.querySelector(`.${P}-panel`) as HTMLElement;
+            const b = box.getBoundingClientRect();
+            const r = panel.getBoundingClientRect();
+            rows.push({
+              pos: position,
+              left: Math.round(r.left - b.left),
+              right: Math.round(b.right - r.right),
+              inBox: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
+              height: Math.round(r.height),
+              top: Math.round(r.top - b.top),
+              bottom: Math.round(b.bottom - r.bottom),
+            } as any);
+            h.destroy();
+          }
+          const bubble = document.querySelector(`body > .${P}-bubble`) as HTMLElement;
+          const appSide = Math.round(window.innerWidth - bubble.getBoundingClientRect().right);
+          const sweeps = document.querySelectorAll(`[id="${P}-av-sweep"]`).length;
+          const sweepInBody = !box.contains(document.getElementById(`${P}-av-sweep`));
+          const leftOver: Record<string, number> = {};
+          for (const k of Object.keys(counts)) if ((counts[k] ?? 0) !== (afterApp[k] ?? 0)) leftOver[k] = (counts[k] ?? 0) - (afterApp[k] ?? 0);
+          const stored = Object.keys(localStorage).filter((k) => !k.startsWith("ayca") && k !== "aiw:opened");
+          app.destroy();
+          return { rows, appSide, sweeps, sweepInBody, leftOver, stored };
+        }})()`);
+        for (const row of seen.rows) {
+          assert.equal(row.inBox, true, `${width}: ${row.pos} is outside its box: ${JSON.stringify(row)}`);
+          if (row.pos === "bottom-left") assert.equal(row.left, 20, `${width}: ${JSON.stringify(row)}`);
+          else assert.equal(row.right, 20, `${width}: ${JSON.stringify(row)}`);
+          assert.ok(row.height <= 580, `${width}: the preview took ${row.height}px`);
+        }
+        // The app's own launcher stays in its corner.
+        assert.ok(seen.appSide < 60, `${width}: the app's launcher moved (${seen.appSide}px from the right)`);
+        // One shared mark, in the page's body.
+        assert.equal(seen.sweeps, 1);
+        assert.equal(seen.sweepInBody, true);
+        // Three previews drawn and destroyed leave no listener behind.
+        assert.deepEqual(seen.leftOver, {}, `${width}: listeners left behind`);
+      }
+    });
+  }
+);
+
+test(
+  "in a browser: on a customer's site, the corner and the logo the server tells are drawn, and the window is asked of nothing else",
+  { skip: SKIP_WITHOUT_CHROME },
+  async () => {
+    await withBrowser(async (page) => {
+      await page.open([1280, 800]);
+      const seen = await page.evaluate<{ left: number; src: string; asked: string[] }>(`(${async () => {
+        const P = "sgiant-aiw";
+        const asked: string[] = [];
+        window.fetch = (async (url: string) => {
+          asked.push(String(url));
+          return new Response(
+            JSON.stringify({
+              answersVisitors: true,
+              name: "Reception",
+              position: "bottom-left",
+              logo: "https://api.example/public/ai/site-logo?siteKey=pk&v=1",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }) as typeof fetch;
+        const g = window as unknown as { SgiantAiWidget: any };
+        const h = await g.SgiantAiWidget.createSiteChat({
+          endpoint: "https://api.example/public/ai/chat",
+          siteKey: "pk",
+          settingsUrl: "https://api.example/public/ai/site-settings",
+        });
+        const bubble = document.querySelector(`.${P}-bubble`) as HTMLElement;
+        const img = bubble.querySelector(`.${P}-av-img`) as HTMLImageElement | null;
+        const out = {
+          left: Math.round(bubble.getBoundingClientRect().left),
+          src: img?.getAttribute("src") ?? "",
+          asked,
+        };
+        h?.destroy();
+        return out;
+      }})()`);
+      assert.ok(seen.left < 60, `the launcher is ${seen.left}px from the left`);
+      assert.equal(seen.src, "https://api.example/public/ai/site-logo?siteKey=pk&v=1");
+      assert.deepEqual(seen.asked, ["https://api.example/public/ai/site-settings?siteKey=pk"]);
     });
   }
 );

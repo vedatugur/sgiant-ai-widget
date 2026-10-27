@@ -341,6 +341,10 @@ export function createSiteChatPreview(opts: {
     container: opts.container,
     siteChat: true,
     preview: true,
+    // In a box: no full screen, no mark that follows the pointer, no dozing.
+    expandable: false,
+    markMotion: false,
+    dozeAfterMs: 0,
     ...siteWindow(site, opts.locale),
   });
 }
@@ -1694,6 +1698,8 @@ export function createAiChatWidget(
     return readFlag(OPENED_KEY, true);
   }
   function markOpened(): void {
+    // A preview was never opened by anybody: it keeps nothing.
+    if (opts.preview) return;
     writeFlag(OPENED_KEY, true);
   }
 
@@ -1937,7 +1943,9 @@ export function createAiChatWidget(
   // looks like, and a phone in landscape used to fall between them (#309).
   const SHEET_QUERY =
     "(max-width:640px),(max-height:520px) and (pointer:coarse)";
-  const isSheet = (): boolean => window.matchMedia(SHEET_QUERY).matches;
+  // A preview is a window in the host's box, never the phone's full sheet.
+  const isSheet = (): boolean =>
+    !opts.preview && window.matchMedia(SHEET_QUERY).matches;
 
   /**
    * Keep the panel fully on screen.
@@ -1962,6 +1970,7 @@ export function createAiChatWidget(
     // hard-coding the default, so the corner stays whatever CSS says.
     panel.style.left = panel.style.top = "";
     panel.style.right = panel.style.bottom = "";
+    if (opts.preview) previewCorner();
   };
 
   const applyPos = (p: { x: number; y: number } | null): void => {
@@ -4083,11 +4092,15 @@ export function createAiChatWidget(
   panel.append(chatCol, pane);
   renderStatus();
   // Shared avatar gradient/filter defs (once) — see AVATAR_DEFS.
-  if (!document.getElementById(`${PREFIX}-av-g`)) {
+  // ONCE PER PAGE, AND IN THE PAGE'S BODY. It was looked for under an id it
+  // does not have, so every window added another copy, and a copy inside a
+  // host's box (a preview, sgiant-platform#592) could be what the page's
+  // other marks drew from: hidden with its box, it erased them (QA).
+  if (!document.getElementById(`${PREFIX}-av-sweep`)) {
     const defs = document.createElement("div");
     defs.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
     defs.innerHTML = AVATAR_DEFS;
-    root.append(defs);
+    document.body.append(defs);
   }
   root.append(bubble, panel);
 
@@ -4212,7 +4225,9 @@ export function createAiChatWidget(
   let vvCleanup: (() => void) | null = null;
   const bindKeyboard = (): void => {
     const vv = window.visualViewport;
-    if (!vv || vvCleanup) return;
+    // A preview is in the host's box: the phone's keyboard is not its to
+    // follow, and this handler would undo its size (QA on #592).
+    if (!vv || vvCleanup || opts.preview) return;
     const apply = (): void => {
       if (!isSheet() || panel.style.display === "none") {
         panel.style.height = "";
@@ -6810,7 +6825,6 @@ export function createAiChatWidget(
   // A PREVIEW (see `preview` on the options): in the host's box, open, and
   // unable to send. The two parts are placed in the box, not over the page.
   if (opts.preview) {
-    for (const part of [bubble, panel]) part.style.position = "absolute";
     input.disabled = true;
     input.value = "";
     input.placeholder = L("previewNoWriting");
@@ -6818,6 +6832,29 @@ export function createAiChatWidget(
     if (attachBtn) attachBtn.disabled = true;
     open();
     applyPos(null);
+  }
+
+  /**
+   * A PREVIEW'S OWN CORNER, inline (QA on #592): the corner in the stylesheet
+   * is the first window's on the page, so a preview beside the app's own
+   * assistant showed the right corner whatever was chosen. In the box, at the
+   * window's own size, whatever the page's width.
+   */
+  function previewCorner(): void {
+    const other = side === "left" ? "right" : "left";
+    for (const part of [bubble, panel]) {
+      part.style.position = "absolute";
+      part.style.top = "auto";
+      part.style[other] = "auto";
+    }
+    panel.style.bottom = "20px";
+    panel.style[side] = "20px";
+    panel.style.width = "368px";
+    panel.style.maxWidth = "calc(100% - 40px)";
+    panel.style.height = "540px";
+    panel.style.maxHeight = "calc(100% - 40px)";
+    bubble.style.bottom = "var(--aiw-launcher-offset)";
+    bubble.style[side] = "var(--aiw-launcher-offset)";
   }
 
   return {
@@ -6840,6 +6877,14 @@ export function createAiChatWidget(
       window.removeEventListener("scroll", watchGround);
       window.removeEventListener("resize", watchGround);
       window.clearTimeout(groundTimer);
+      // The mark's motion and the launcher's dozing listen on the window and
+      // the document: a window redrawn many times (a preview) must not leave
+      // one listener behind each time (QA on #592).
+      motion?.destroy();
+      if (dozeTimer) clearTimeout(dozeTimer);
+      if (dozeAfter > 0)
+        for (const ev of ["pointerdown", "pointermove", "keydown", "scroll", "focusin"])
+          document.removeEventListener(ev, wake);
       unbindKeyboard();
       clearRich();
       teardownFrame();
