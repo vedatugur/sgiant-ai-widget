@@ -36,6 +36,14 @@ export interface SiteSettings {
   color: string | null;
   /** Questions offered as buttons before the visitor types. At most four. */
   suggestions: string[];
+  /** Which bottom corner the window sits in (sgiant-platform#592). */
+  position: "bottom-right" | "bottom-left";
+  /**
+   * The window's logo: an image address on the SAME server the settings
+   * were read from, or null for the window's own mark. An address anywhere
+   * else is not taken: every visitor's browser would fetch it.
+   */
+  logo: string | null;
 }
 
 export interface SiteChatOptions {
@@ -76,7 +84,12 @@ function text(value: unknown, max: number): string | null {
  * The settings in a server's answer, or null when the answer does not say
  * that this site's assistant answers visitors.
  */
-export function readSiteSettings(body: unknown): SiteSettings | null {
+export function readSiteSettings(
+  body: unknown,
+  /** The address the settings were read from: a logo must be on its server.
+   *  Without it, no logo is taken. */
+  from?: string
+): SiteSettings | null {
   if (typeof body !== "object" || body === null || Array.isArray(body))
     return null;
   const b = body as Record<string, unknown>;
@@ -98,7 +111,27 @@ export function readSiteSettings(body: unknown): SiteSettings | null {
     language: b.language === "tr" || b.language === "en" ? b.language : null,
     color,
     suggestions,
+    position: b.position === "bottom-left" ? "bottom-left" : "bottom-right",
+    logo: sameServerImage(b.logo, from),
   };
+}
+
+/**
+ * A logo's address, taken only when it is https (or http on localhost, for
+ * a developer's machine) and on the very server the settings came from.
+ */
+function sameServerImage(value: unknown, from?: string): string | null {
+  if (typeof value !== "string" || !value.trim() || !from) return null;
+  try {
+    const base = new URL(from);
+    const url = new URL(value.trim(), base);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(local && url.protocol === "http:"))
+      return null;
+    return url.origin === base.origin ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The settings address with the site's key on it. */
@@ -156,7 +189,7 @@ export async function askSite(
     const body: unknown = await res.json();
     if (typeof body !== "object" || body === null || Array.isArray(body))
       return { answer: "unknown" };
-    const settings = readSiteSettings(body);
+    const settings = readSiteSettings(body, opts.settingsUrl);
     return settings ? { answer: "yes", settings } : { answer: "no" };
   } catch {
     return { answer: "unknown" };

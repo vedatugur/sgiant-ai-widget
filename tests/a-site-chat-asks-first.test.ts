@@ -43,6 +43,10 @@ test("how the window looks is judged field by field, and a bad one is the defaul
     language: null,
     color: "#0f766e",
     suggestions: ["What are your opening hours?", "Where are you?"],
+    // sgiant-platform#592: the right corner and the window's own mark when
+    // the site set neither.
+    position: "bottom-right",
+    logo: null,
   });
   // A wrong colour is not a reason to take the assistant away.
   for (const color of ["teal", "#fff", "#12345g", 7, null, "", "0f766e"])
