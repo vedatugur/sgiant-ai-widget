@@ -261,6 +261,52 @@ test(
 );
 
 test(
+  "in a browser: drawn FIRST, a preview at the left does not move the app's own assistant, and two windows keep two corners",
+  { skip: SKIP_WITHOUT_CHROME },
+  async () => {
+    await withBrowser(async (page) => {
+      for (const width of [1280, 375] as const) {
+        await page.open([width, 900]);
+        const seen = await page.evaluate<{ app: number; appPanel: number; preview: number; left: number }>(`(${async () => {
+          const P = "sgiant-aiw";
+          const g = window as unknown as { SgiantAiWidget: any };
+          const box = document.createElement("div");
+          box.style.cssText = "position:relative;width:100%;max-width:420px;height:620px";
+          document.body.append(box);
+          // The preview first, at the left, as when the app's assistant is
+          // drawn after a slow answer.
+          const h = g.SgiantAiWidget.createSiteChatPreview({ container: box, settings: { name: "R", position: "bottom-left" } });
+          const app = g.SgiantAiWidget.createAiChatWidget({ endpoint: "about:blank", title: "AYCA" });
+          // And a third window of the page's own, at the left.
+          const other = g.SgiantAiWidget.createAiChatWidget({ endpoint: "about:blank", title: "Other", position: "bottom-left", storageNamespace: "other" });
+          await new Promise((r) => setTimeout(r, 700));
+          const bubbles = [...document.querySelectorAll(`body > .${P}-bubble`)] as HTMLElement[];
+          const appBubble = bubbles[0]!.getBoundingClientRect();
+          const otherBubble = bubbles[1]!.getBoundingClientRect();
+          h.destroy();
+          app.open();
+          await new Promise((r) => setTimeout(r, 400));
+          const appPanel = (document.querySelectorAll(`body > .${P}-panel`)[0] as HTMLElement).getBoundingClientRect();
+          const out = {
+            app: Math.round(window.innerWidth - appBubble.right),
+            appPanel: Math.round(window.innerWidth - appPanel.right),
+            preview: 0,
+            left: Math.round(otherBubble.left),
+          };
+          app.destroy();
+          other.destroy();
+          return out;
+        }})()`);
+        assert.ok(seen.app < 60, `${width}: the app's launcher is ${seen.app}px from the right`);
+        // On a phone the open panel is the full sheet: 0 from the right.
+        assert.ok(seen.appPanel <= 20, `${width}: the app's panel is ${seen.appPanel}px from the right`);
+        assert.ok(seen.left < 60, `${width}: the left window is ${seen.left}px from the left`);
+      }
+    });
+  }
+);
+
+test(
   "in a browser: on a customer's site, the corner and the logo the server tells are drawn, and the window is asked of nothing else",
   { skip: SKIP_WITHOUT_CHROME },
   async () => {

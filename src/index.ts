@@ -1655,7 +1655,7 @@ export function createAiChatWidget(
   }
   loadState();
 
-  injectStyles(side);
+  injectStyles();
 
   const bubble = el("button", `${PREFIX}-bubble`);
   bubble.setAttribute("aria-label", L("openBubble", { name }));
@@ -4102,6 +4102,9 @@ export function createAiChatWidget(
     defs.innerHTML = AVATAR_DEFS;
     document.body.append(defs);
   }
+  // Its own corner, on itself: see `-at-left` in the stylesheet.
+  if (side === "left")
+    for (const part of [bubble, panel]) part.classList.add(`${PREFIX}-at-left`);
   root.append(bubble, panel);
 
   // Drop the active thread + transcript (the old one stays in history) and
