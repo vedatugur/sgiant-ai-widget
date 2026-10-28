@@ -548,6 +548,7 @@ export function injectStyles(): void {
 .${PREFIX}-lead{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);padding:11px 12px;background:var(--aiw-surface-raised);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-form-title{font-size:var(--aiw-font-sm);font-weight:600;margin-bottom:8px}
 .${PREFIX}-lead-form{display:flex;flex-direction:column;gap:8px}
+.${PREFIX}-saved-note{margin:0;font-size:11px;line-height:1.35;color:var(--aiw-muted)}
 /* The flag reason form (#433) reuses the lead card, and adds one row so
    Cancel and Flag sit together at the end rather than stacking full width. */
 .${PREFIX}-flag-row{display:flex;align-items:center;justify-content:flex-end;gap:6px}
