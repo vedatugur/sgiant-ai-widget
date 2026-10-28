@@ -4073,6 +4073,15 @@ export function createAiChatWidget(
     formRow.append(...(pill ? [pill.root] : []), sendBtn);
     form.append(input, formRow);
   }
+  // ON A CUSTOMER'S SITE, A VISITOR IS TOLD BEFORE THEY WRITE that the
+  // conversation is kept and the business can read it (sgiant-platform#648,
+  // the owner's row 18 of 28 Oct 2026: under the box, always there). Not on
+  // our own sites, which are not a business's.
+  if (opts.siteChat) {
+    const savedNote = el("p", `${PREFIX}-saved-note`);
+    savedNote.textContent = L("savedNotice");
+    form.append(savedNote);
+  }
 
   // The chat lives in its own column so advanced view can lay a drivable app
   // pane beside it. In normal mode `chatCol` fills the panel; `pane` is hidden.

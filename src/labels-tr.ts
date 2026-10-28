@@ -30,6 +30,7 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   clearChat: "Bu sohbeti temizle",
   unnamedAssistant: "Asistan",
   previewNoWriting: "Önizlemede mesaj yazılmaz.",
+  savedNotice: "Bu konuşma kaydedilir ve işletme tarafından okunabilir.",
   modelPickerUnavailable:
     "Model listesi yüklenemedi. Varsayılan model kullanılıyor.",
   openBubble: "{name} aç",

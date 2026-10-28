@@ -56,6 +56,12 @@ export const WIDGET_LABELS = {
    */
   previewNoWriting: "You cannot write in the preview.",
   /**
+   * Under the box a visitor writes in, on a customer's site only
+   * (sgiant-platform#648): what they write is kept, and the business can
+   * read it. The owner's words, 28 Oct 2026 (row 18).
+   */
+  savedNotice: "This conversation is saved and can be read by the business.",
+  /**
    * The header's button on a visitor's page, where "New chat" is: it removes
    * the conversation kept in the visitor's tab and shows the greeting again.
    */
