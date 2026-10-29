@@ -198,7 +198,12 @@ export function prefillFor(
 }
 
 /** Why one answer is held back, in the window's own words (40–43). */
-export type SiteFormProblem = "required" | "phone" | "email" | "dateOrder";
+export type SiteFormProblem =
+  | "required"
+  | "phone"
+  | "email"
+  | "dateOrder"
+  | "number";
 
 /** The window's own check of one answer; the api checks it again. */
 export function checkValue(
@@ -230,14 +235,19 @@ export function checkValue(
       (field.min !== undefined && n < field.min) ||
       (field.max !== undefined && n > field.max)
     )
-      return "required";
+      return field.min !== undefined || field.max !== undefined
+        ? "number"
+        : "required";
   }
   return null;
 }
 
 /** An api refusal of one field, as one of the window's sentences. */
 export function problemFromServer(code: unknown): SiteFormProblem {
-  return code === "phone" || code === "email" || code === "dateOrder"
+  return code === "phone" ||
+    code === "email" ||
+    code === "dateOrder" ||
+    code === "number"
     ? code
     : "required";
 }
@@ -252,6 +262,11 @@ export interface SiteFormWords {
   phone: string;
   email: string;
   dateOrder: string;
+  /** A number outside its bounds, with the bounds it has. */
+  number: (min?: number, max?: number) => string;
+  /** The form can no longer be sent (the conversation ended, or the
+   *  site's day is full): nothing the visitor does would send it. */
+  closed: string;
   consent: string;
   failed: string;
   checkIn: string;
@@ -268,7 +283,12 @@ export interface SiteFormSend {
 
 export type SiteFormOutcome =
   | { ok: true; thanks?: string | null }
-  | { ok: false; problems?: Record<string, unknown>; consent?: boolean };
+  | {
+      ok: false;
+      problems?: Record<string, unknown>;
+      consent?: boolean;
+      closed?: boolean;
+    };
 
 interface Control {
   field: SiteFormField;
@@ -516,7 +536,14 @@ export function buildSiteForm(input: {
 
   const say = (c: Control, p: SiteFormProblem | null) => {
     c.err.hidden = p === null;
-    c.err.textContent = p ? w[p] : "";
+    c.err.textContent =
+      p === "number"
+        ? c.field.min === undefined && c.field.max === undefined
+          ? w.required
+          : w.number(c.field.min, c.field.max)
+        : p
+          ? w[p]
+          : "";
     c.node.classList.toggle(`${PREFIX}-field-invalid`, p !== null);
     for (const x of c.node.querySelectorAll<HTMLElement>("input,select,textarea")) {
       if (p) {
@@ -580,6 +607,14 @@ export function buildSiteForm(input: {
       done.tabIndex = -1;
       wrap.appendChild(done);
       done.focus();
+      return;
+    }
+    if (out.closed) {
+      // Nothing would send it now: say so, and offer no button that cannot.
+      failed.textContent = w.closed;
+      failed.hidden = false;
+      submit.remove();
+      later.disabled = false;
       return;
     }
     submit.disabled = false;

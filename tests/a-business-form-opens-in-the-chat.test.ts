@@ -39,6 +39,10 @@ test("the form's words, as approved, in both languages", () => {
     siteFormCheckIn: "Giriş",
     siteFormCheckOut: "Çıkış",
     siteFormThanks: "Teşekkürler, talebiniz bize ulaştı. En kısa sürede size dönüş yapacağız.",
+    siteFormNumberRange: "Bir sayı yazın: en az {min}, en çok {max}.",
+    siteFormNumberMin: "Bir sayı yazın: en az {min}.",
+    siteFormNumberMax: "Bir sayı yazın: en çok {max}.",
+    siteFormClosed: "Bu form artık gönderilemiyor. Talebinizi buraya yazabilirsiniz.",
   });
   assert.deepEqual(pick(WIDGET_LABELS), {
     siteFormOptional: "(optional)",
@@ -55,6 +59,10 @@ test("the form's words, as approved, in both languages", () => {
     siteFormCheckIn: "Check-in",
     siteFormCheckOut: "Check-out",
     siteFormThanks: "Thank you, we have your request. We will get back to you as soon as we can.",
+    siteFormNumberRange: "Enter a number: at least {min}, at most {max}.",
+    siteFormNumberMin: "Enter a number: at least {min}.",
+    siteFormNumberMax: "Enter a number: at most {max}.",
+    siteFormClosed: "This form can no longer be sent. You can write your request here.",
   });
 });
 
@@ -105,6 +113,8 @@ test("the window's own checks name the sentence a visitor reads", () => {
   assert.equal(checkValue(f("dateRange"), { from: "2027-06-16", to: "2027-06-12" }), "dateOrder");
   assert.equal(checkValue(f("dateRange"), { from: "2027-06-12", to: "" }), "required");
   assert.equal(checkValue(f("checkbox"), "false"), "required");
+  assert.equal(checkValue({ ...f("number"), min: 1, max: 12 }, "40"), "number");
+  assert.equal(checkValue(f("number"), "iki"), "required");
 });
 
 test("a read that does not fit is no forms, and the addresses sit beside the settings", () => {
@@ -218,6 +228,14 @@ test(
         (form.querySelector('input[id$="-name"]') as HTMLInputElement).value = "Elif Kaya";
         (form.querySelector('input[id$="-phone"]') as HTMLInputElement).value = "+90 532 000 00 00";
         (form.querySelector(`.${P}-site-form-consent input`) as HTMLInputElement).checked = true;
+        // A count above the form's bound is said with its bounds.
+        (form.querySelector('input[id$="-people"]') as HTMLInputElement).value = "40";
+        (form.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+        await wait(100);
+        out.range = [...form.querySelectorAll(`.${P}-form-err`)]
+          .filter((e) => !(e as HTMLElement).hidden)
+          .map((e) => e.textContent);
+        (form.querySelector('input[id$="-people"]') as HTMLInputElement).value = "2";
         // The api refuses the phone: said on that field, everything kept.
         submitAnswer = { status: 400, body: { code: "FIELDS", problems: { phone: "phone" } } };
         (form.querySelector('button[type="submit"]') as HTMLButtonElement).click();
@@ -271,6 +289,7 @@ test(
         "Devam etmek için izin kutusunu işaretleyin.",
       ]);
       assert.equal(seen.sentWhileHeld, 0);
+      assert.deepEqual(seen.range, ["Bir sayı yazın: en az 1, en çok 12."]);
       assert.deepEqual(seen.serverHeld, ["Telefon numarası eksik ya da hatalı görünüyor."]);
       assert.equal(seen.keptName, "Elif Kaya");
       assert.deepEqual(seen.sent, {
@@ -384,6 +403,28 @@ test(
         out.readsAfterSent = reads.length - readsBefore;
         h.destroy();
 
+        // A form that can no longer be sent says so and offers no button.
+        out.closed = await (async () => {
+          const h2 = await g.SgiantAiWidget.createSiteChat({ endpoint: "https://api.example/public/ai/chat", siteKey: "pk_y", settingsUrl: "https://api.example/public/ai/site-settings" });
+          h2.open();
+          await wait(300);
+          answer = { status: 403, body: { code: "NO_CONVERSATION" } };
+          await ask("Arar mısınız?");
+          const f2 = [...forms()].pop() as HTMLElement;
+          (f2.querySelector('input[id$="-n"]') as HTMLInputElement).value = "Elif";
+          (f2.querySelector(`.${P}-site-form-consent input`) as HTMLInputElement).checked = true;
+          (f2.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+          await wait(50);
+          release();
+          await wait(100);
+          const r = {
+            said: [...f2.querySelectorAll(`.${P}-form-err`)].filter((e) => !(e as HTMLElement).hidden).map((e) => e.textContent),
+            button: !!f2.querySelector('button[type="submit"]'),
+          };
+          h2.destroy();
+          return r;
+        })();
+
         // A window that is not a site's: stripped, nothing read or drawn.
         reads.length = 0;
         const plain = g.SgiantAiWidget.createAiChatWidget({ endpoint: "https://api.example/public/ai/chat", title: "AYCA" });
@@ -407,6 +448,10 @@ test(
       assert.equal(seen.thanked, true);
       assert.equal(seen.formsAfterSent, 1, "a second form was drawn after one was sent");
       assert.equal(seen.readsAfterSent, 0);
+      assert.deepEqual(seen.closed, {
+        said: ["Bu form artık gönderilemiyor. Talebinizi buraya yazabilirsiniz."],
+        button: false,
+      });
       assert.deepEqual(seen.plain, { drawn: 0, reads: 0, raw: false });
     });
   }

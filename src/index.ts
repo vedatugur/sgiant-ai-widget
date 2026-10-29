@@ -6312,6 +6312,13 @@ export function createAiChatWidget(
         phone: L("siteFormPhone"),
         email: L("siteFormEmail"),
         dateOrder: L("siteFormDateOrder"),
+        number: (min?: number, max?: number) =>
+          min !== undefined && max !== undefined
+            ? L("siteFormNumberRange", { min, max })
+            : min !== undefined
+              ? L("siteFormNumberMin", { min })
+              : L("siteFormNumberMax", { max: max ?? "" }),
+        closed: L("siteFormClosed"),
         consent: L("siteFormConsent"),
         failed: L("siteFormFailed"),
         checkIn: L("siteFormCheckIn"),
@@ -6347,6 +6354,8 @@ export function createAiChatWidget(
         }
         if (body.code === "FIELDS") return { ok: false, problems: body.problems };
         if (body.code === "CONSENT") return { ok: false, consent: true };
+        if (body.code === "NO_CONVERSATION" || body.code === "TOO_MANY")
+          return { ok: false, closed: true };
         return { ok: false };
       },
       // "Şimdi değil": back to the box, where the conversation goes on.

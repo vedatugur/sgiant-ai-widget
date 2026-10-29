@@ -47,6 +47,10 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   siteFormCheckIn: "Giriş",
   siteFormCheckOut: "Çıkış",
   siteFormThanks: "Teşekkürler, talebiniz bize ulaştı. En kısa sürede size dönüş yapacağız.",
+  siteFormNumberRange: "Bir sayı yazın: en az {min}, en çok {max}.",
+  siteFormNumberMin: "Bir sayı yazın: en az {min}.",
+  siteFormNumberMax: "Bir sayı yazın: en çok {max}.",
+  siteFormClosed: "Bu form artık gönderilemiyor. Talebinizi buraya yazabilirsiniz.",
   modelPickerUnavailable:
     "Model listesi yüklenemedi. Varsayılan model kullanılıyor.",
   openBubble: "{name} aç",

@@ -77,6 +77,10 @@ export const WIDGET_LABELS = {
   siteFormCheckIn: "Check-in",
   siteFormCheckOut: "Check-out",
   siteFormThanks: "Thank you, we have your request. We will get back to you as soon as we can.",
+  siteFormNumberRange: "Enter a number: at least {min}, at most {max}.",
+  siteFormNumberMin: "Enter a number: at least {min}.",
+  siteFormNumberMax: "Enter a number: at most {max}.",
+  siteFormClosed: "This form can no longer be sent. You can write your request here.",
   /**
    * The header's button on a visitor's page, where "New chat" is: it removes
    * the conversation kept in the visitor's tab and shows the greeting again.
