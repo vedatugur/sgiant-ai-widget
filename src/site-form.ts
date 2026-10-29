@@ -279,6 +279,15 @@ interface Control {
 
 let seq = 0;
 
+/** The api's own limits (sgiant-platform lib/site-forms.ts), so an answer is
+ *  never refused for its length after it was typed. */
+const MAX_LENGTH: Partial<Record<SiteFormFieldType, number>> = {
+  text: 200,
+  textarea: 2000,
+  email: 254,
+  phone: 30,
+};
+
 /**
  * Draw one form. `send` posts it and says what became of it; the node then
  * shows the thanks sentence in the form's place, or the failure line with
@@ -325,6 +334,7 @@ export function buildSiteForm(input: {
     const box = el("div", `${PREFIX}-site-form-field`);
     const err = el("div", `${PREFIX}-form-err`);
     err.setAttribute("role", "alert");
+    err.id = `${id}-err`;
     err.hidden = true;
     const pre = prefillFor(f, input_prefill(input.prefill, f.id));
     if (pre !== undefined) anyPrefilled = true;
@@ -342,9 +352,12 @@ export function buildSiteForm(input: {
       box.appendChild(row);
       read = () => (c.checked ? "true" : "false");
     } else if ((f.type === "radio" || f.type === "multi") && f.options) {
-      box.appendChild(caption(f));
+      const cap = caption(f);
+      cap.id = `${id}-label`;
+      box.appendChild(cap);
       const group = el("div", `${PREFIX}-field-group`);
       group.setAttribute("role", f.type === "radio" ? "radiogroup" : "group");
+      group.setAttribute("aria-labelledby", cap.id);
       const chosen = new Set(
         Array.isArray(pre) ? pre : typeof pre === "string" ? [pre] : []
       );
@@ -427,6 +440,8 @@ export function buildSiteForm(input: {
         }
         c = i;
       }
+      const max = MAX_LENGTH[f.type];
+      if (max && !(c instanceof HTMLSelectElement)) c.maxLength = max;
       if (typeof pre === "string") c.value = pre;
       box.appendChild(c);
       const ctl = c;
@@ -503,6 +518,15 @@ export function buildSiteForm(input: {
     c.err.hidden = p === null;
     c.err.textContent = p ? w[p] : "";
     c.node.classList.toggle(`${PREFIX}-field-invalid`, p !== null);
+    for (const x of c.node.querySelectorAll<HTMLElement>("input,select,textarea")) {
+      if (p) {
+        x.setAttribute("aria-invalid", "true");
+        x.setAttribute("aria-describedby", c.err.id);
+      } else {
+        x.removeAttribute("aria-invalid");
+        x.removeAttribute("aria-describedby");
+      }
+    }
   };
   const focusFirst = () => {
     const bad =
@@ -511,8 +535,12 @@ export function buildSiteForm(input: {
     bad?.querySelector<HTMLElement>("input,select,textarea")?.focus();
   };
 
+  // One send at a time: Enter, a second click or a script's requestSubmit
+  // while one is on its way sends nothing more.
+  let sending = false;
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (sending) return;
     failed.hidden = true;
     let held = false;
     const answers: Record<string, SiteFormValue> = {};
@@ -529,6 +557,7 @@ export function buildSiteForm(input: {
       focusFirst();
       return;
     }
+    sending = true;
     submit.disabled = true;
     later.disabled = true;
     submit.textContent = w.sending;
@@ -542,12 +571,15 @@ export function buildSiteForm(input: {
     } catch {
       out = { ok: false };
     }
+    sending = false;
     if (out.ok) {
       wrap.innerHTML = "";
       const done = el("div", `${PREFIX}-lead-ok`);
       done.setAttribute("role", "status");
       done.textContent = out.thanks || def.thanks || w.thanks;
+      done.tabIndex = -1;
       wrap.appendChild(done);
+      done.focus();
       return;
     }
     submit.disabled = false;

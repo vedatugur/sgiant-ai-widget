@@ -139,6 +139,7 @@ test(
         const g = window as unknown as { SgiantAiWidget: any };
         const sent: any[] = [];
         let formId = "form1";
+        let thread = "thr_1";
         let submitAnswer: { status: number; body: unknown } = { status: 201, body: { ok: true, thanks: null } };
         window.fetch = (async (input: any, init?: any) => {
           const url = String(typeof input === "string" ? input : input.url);
@@ -171,7 +172,7 @@ test(
             });
           const reply = `Talebinizi otele iletebilirim. [[site-form:{"id":"${formId}","prefill":{"stay":{"from":"2027-06-12","to":"2027-06-16"},"people":"2","room":"Kral dairesi","password":"x"}}]]`;
           return new Response(
-            [{ type: "thread", threadId: "thr_1" }, { type: "text", d: reply }, { type: "done" }]
+            [{ type: "thread", threadId: thread }, { type: "text", d: reply }, { type: "done" }]
               .map((f) => JSON.stringify(f) + "\n")
               .join(""),
             { status: 200, headers: { "content-type": "application/x-ndjson" } }
@@ -231,7 +232,9 @@ test(
         out.sent = sent[sent.length - 1];
         out.thanks = document.querySelector(`.${P}-site-form .${P}-lead-ok`)?.textContent;
 
-        // "Şimdi değil" takes it away; an id the business does not have draws nothing.
+        // In a new conversation: "Şimdi değil" takes it away; an id the
+        // business does not have draws nothing.
+        thread = "thr_2";
         await ask("Bir daha?");
         const second = [...document.querySelectorAll(`.${P}-site-form`)].pop() as HTMLElement;
         (second.querySelector(`.${P}-site-form-later`) as HTMLButtonElement).click();
@@ -291,6 +294,120 @@ test(
       );
       assert.equal(seen.afterNotNow, 1, "Şimdi değil left the form");
       assert.equal(seen.afterUnknown, 1, "a form the business does not have was drawn");
+    });
+  }
+);
+
+test("a replayed reply loses its form directive, and leaves no note", async () => {
+  const { stripDirectivesForReplay } = await import("../dist/specs.js");
+  const r = stripDirectivesForReplay(
+    'Talebinizi iletebilirsiniz. [[site-form:{"id":"f1","prefill":{"people":"2"}}]]'
+  );
+  assert.equal(r.clean, "Talebinizi iletebilirsiniz.");
+  assert.deepEqual(r.notes, []);
+});
+
+test(
+  "in a browser: one form per conversation, a send in flight sends once, and only a site window draws it",
+  { skip: SKIP_WITHOUT_CHROME },
+  async () => {
+    await withBrowser(async (page) => {
+      await page.open([1280, 900]);
+      const seen = await page.evaluate<any>(`(${async () => {
+        const P = "sgiant-aiw";
+        const g = window as unknown as { SgiantAiWidget: any };
+        const reads: string[] = [];
+        const posts: any[] = [];
+        let release: () => void = () => undefined;
+        let answer = { status: 201, body: { ok: true, thanks: null } as unknown };
+        window.fetch = (async (input: any, init?: any) => {
+          const url = String(typeof input === "string" ? input : input.url);
+          const json = (b: unknown, status = 200) =>
+            new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
+          if (url.includes("/site-settings")) return json({ answersVisitors: true, name: "Blue Bay", language: "tr" });
+          if (url.includes("/site-forms/submit")) {
+            posts.push(JSON.parse(init.body));
+            await new Promise<void>((r) => (release = r));
+            return json(answer.body, answer.status);
+          }
+          if (url.includes("/site-forms")) {
+            reads.push(url);
+            return json({
+              privacyUrl: "https://bluebay.example/gizlilik",
+              consent: { tr: "Kabul.", en: "OK." },
+              forms: [{ id: "f1", name: "Sizi arayalım", thanks: null, fields: [{ id: "n", type: "text", label: "Ad", required: true }] }],
+            });
+          }
+          return new Response(
+            [{ type: "thread", threadId: "thr_9" }, { type: "text", d: 'A [[site-form:{"id":"f1"}]] B [[site-form:{"id":"f1"}]] C' }, { type: "done" }]
+              .map((f) => JSON.stringify(f) + "\n")
+              .join(""),
+            { status: 200, headers: { "content-type": "application/x-ndjson" } }
+          );
+        }) as typeof fetch;
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        const ask = async (q: string) => {
+          const box = document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement;
+          box.value = q;
+          box.closest("form")!.requestSubmit();
+          await wait(700);
+        };
+        const out: any = {};
+        const h = await g.SgiantAiWidget.createSiteChat({ endpoint: "https://api.example/public/ai/chat", siteKey: "pk_x", settingsUrl: "https://api.example/public/ai/site-settings" });
+        h.open();
+        await wait(300);
+        await ask("Arar mısınız?");
+        const forms = () => document.querySelectorAll(`.${P}-site-form`);
+        out.drawnFromTwo = forms().length;
+        out.text = [...document.querySelectorAll(`.${P}-msg.${P}-assistant`)].pop()?.textContent;
+        const form = forms()[0] as HTMLElement;
+        const trap = form.querySelector(`.${P}-site-form-trap`) as HTMLInputElement;
+        out.trap = { tab: trap.tabIndex, hidden: trap.getAttribute("aria-hidden") };
+        out.max = (form.querySelector('input[id$="-n"]') as HTMLInputElement).maxLength;
+        (form.querySelector('input[id$="-n"]') as HTMLInputElement).value = "Elif";
+        (form.querySelector(`.${P}-site-form-consent input`) as HTMLInputElement).checked = true;
+        const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+        btn.click();
+        await wait(50);
+        out.disabledWhileSending = btn.disabled;
+        btn.click();
+        form.querySelector("form")!.requestSubmit();
+        await wait(50);
+        out.postsInFlight = posts.length;
+        release();
+        await wait(100);
+        out.thanked = !!form.querySelector(`.${P}-lead-ok`);
+        // The same conversation asks again: nothing is drawn or read.
+        const readsBefore = reads.length;
+        await ask("Bir daha?");
+        out.formsAfterSent = forms().length;
+        out.readsAfterSent = reads.length - readsBefore;
+        h.destroy();
+
+        // A window that is not a site's: stripped, nothing read or drawn.
+        reads.length = 0;
+        const plain = g.SgiantAiWidget.createAiChatWidget({ endpoint: "https://api.example/public/ai/chat", title: "AYCA" });
+        plain.open();
+        await wait(300);
+        await ask("Merhaba");
+        out.plain = {
+          drawn: forms().length,
+          reads: reads.length,
+          raw: document.querySelector(`.${P}-panel`)?.textContent?.includes("[[site-form"),
+        };
+        plain.destroy();
+        return out;
+      }})()`);
+      assert.equal(seen.drawnFromTwo, 1);
+      assert.ok(!seen.text.includes("[[site-form"), seen.text);
+      assert.deepEqual(seen.trap, { tab: -1, hidden: "true" });
+      assert.equal(seen.max, 200);
+      assert.equal(seen.disabledWhileSending, true);
+      assert.equal(seen.postsInFlight, 1, "a send in flight was sent again");
+      assert.equal(seen.thanked, true);
+      assert.equal(seen.formsAfterSent, 1, "a second form was drawn after one was sent");
+      assert.equal(seen.readsAfterSent, 0);
+      assert.deepEqual(seen.plain, { drawn: 0, reads: 0, raw: false });
     });
   }
 );

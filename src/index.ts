@@ -5171,11 +5171,15 @@ export function createAiChatWidget(
     }
     // A business's own form (#550): stripped always, drawn only on its site,
     // in a conversation that has an id to send it from.
-    const siteForm = parseSiteFormDirective(t);
-    if (siteForm) {
+    // Every one is stripped; the first is the one opened.
+    let siteForm = parseSiteFormDirective(t);
+    let firstSiteForm: SiteFormDirective | null = null;
+    for (let i = 0; siteForm && i < 4; i++) {
       t = siteForm.stripped;
-      if (opts.siteForms && siteForm.spec.id) void openSiteForm(siteForm.spec);
+      firstSiteForm ??= siteForm.spec;
+      siteForm = parseSiteFormDirective(t);
     }
+    if (opts.siteForms && firstSiteForm?.id) void openSiteForm(firstSiteForm);
     const form = parseFormDirective(t);
     if (form) {
       // Same rule: the markup never survives to the reader, with or without a
@@ -6278,7 +6282,9 @@ export function createAiChatWidget(
   async function openSiteForm(spec: SiteFormDirective): Promise<void> {
     const sf = opts.siteForms;
     const from = threadId;
-    if (!sf || !from) return;
+    // One form per conversation: once one was sent from it, none is drawn
+    // again (the api would refuse it, and "try again" could never succeed).
+    if (!sf || !from || siteFormSentFrom.has(from)) return;
     let list: ReturnType<typeof readSiteForms> = null;
     try {
       const res = await fetch(
@@ -6333,16 +6339,25 @@ export function createAiChatWidget(
           problems?: Record<string, unknown>;
           thanks?: string | null;
         };
-        if (res.ok) return { ok: true, thanks: body.thanks ?? null };
+        // Sent, or sent already from this conversation: either way it is
+        // with the business, and the visitor is thanked once.
+        if (res.ok || body.code === "ALREADY_SENT") {
+          siteFormSentFrom.add(from);
+          return { ok: true, thanks: body.thanks ?? null };
+        }
         if (body.code === "FIELDS") return { ok: false, problems: body.problems };
         if (body.code === "CONSENT") return { ok: false, consent: true };
         return { ok: false };
       },
-      onClose: () => undefined,
+      // "Şimdi değil": back to the box, where the conversation goes on.
+      onClose: () => input.focus(),
     });
     log.appendChild(node);
     scrollDown(true);
   }
+
+  /** Conversations a business's form was sent from, in this window. */
+  const siteFormSentFrom = new Set<string>();
 
   /** Render an AI-described input form inline; submit → host action. */
   function renderForm(spec: FormSpec): void {
