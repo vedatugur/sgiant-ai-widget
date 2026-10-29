@@ -173,7 +173,11 @@ import {
   USER_BUBBLE_INK,
 } from "./styles";
 import type { WidgetLabels } from "./labels";
-import { builtInLabels, builtInOptionWords } from "./labels-tr";
+import {
+  WIDGET_LABELS_TR,
+  builtInLabels,
+  builtInOptionWords,
+} from "./labels-tr";
 export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
 export {
   WIDGET_LABELS_TR,
@@ -206,6 +210,15 @@ import {
   type SiteChatOptions,
 } from "./site-chat";
 import { readSiteSettings, type SiteSettings } from "./site-chat";
+import {
+  SITE_FORM_TAG,
+  buildSiteForm,
+  parseSiteFormDirective,
+  readSiteForms,
+  siteFormAddresses,
+  type SiteFormDirective,
+  type SiteFormOutcome,
+} from "./site-form";
 export {
   readSiteSettings,
   forgetSiteChats,
@@ -272,6 +285,7 @@ async function drawSiteChat(
   const site = said.settings;
   // Anything kept under another key is from before this site's key changed.
   forgetSiteChats(opts.siteKey);
+  const forms = siteFormAddresses(opts.settingsUrl);
   return createAiChatWidget({
     endpoint: opts.endpoint,
     extraBody: { siteKey: opts.siteKey },
@@ -279,6 +293,12 @@ async function drawSiteChat(
     // The visitor's conversation follows them from page to page, in the tab
     // only: see `scoped` in createAiChatWidget.
     persistKey: siteChatKey(opts.siteKey),
+    // The business's own forms (#550), next to the settings it was read from.
+    siteForms: {
+      formsUrl: forms.forms,
+      submitUrl: forms.submit,
+      siteKey: opts.siteKey,
+    },
     ...siteWindow(site, opts.locale),
   });
 }
@@ -773,6 +793,13 @@ export interface AiChatWidgetOptions {
     action: string,
     data: Record<string, string>
   ) => Promise<string | void>;
+  /**
+   * The forms a business built for its site (sgiant-platform#550). Set by
+   * `createSiteChat`: where the window reads them when its assistant opens
+   * one with `[[site-form:…]]`, and where a visitor's answers are sent. The
+   * form drawn is the business's own, never the model's.
+   */
+  siteForms?: { formsUrl: string; submitUrl: string; siteKey: string };
   /**
    * Show an expand/restore control in the header to grow the panel to a larger
    * reading size (and back). Default true. Set false for tight embeds.
@@ -5142,6 +5169,17 @@ export function createAiChatWidget(
       t = chips.stripped;
       renderChips(chips.spec);
     }
+    // A business's own form (#550): stripped always, drawn only on its site,
+    // in a conversation that has an id to send it from.
+    // Every one is stripped; the first is the one opened.
+    let siteForm = parseSiteFormDirective(t);
+    let firstSiteForm: SiteFormDirective | null = null;
+    for (let i = 0; siteForm && i < 4; i++) {
+      t = siteForm.stripped;
+      firstSiteForm ??= siteForm.spec;
+      siteForm = parseSiteFormDirective(t);
+    }
+    if (opts.siteForms && firstSiteForm?.id) void openSiteForm(firstSiteForm);
     const form = parseFormDirective(t);
     if (form) {
       // Same rule: the markup never survives to the reader, with or without a
@@ -5561,7 +5599,8 @@ export function createAiChatWidget(
         tag === "navigate" ||
         tag === "action" ||
         tag === "chips" ||
-        tag === "form"
+        tag === "form" ||
+        tag === SITE_FORM_TAG
       )
         return "later";
       return null;
@@ -6233,6 +6272,101 @@ export function createAiChatWidget(
    * `<select>` and letting it read `.value` worked only as long as every field
    * happened to be a single text-ish box.
    */
+
+  /**
+   * Open the business's form the assistant named (#550): read the site's
+   * forms now, so the one drawn is the one in the app; nothing is drawn when
+   * the id is not one of them, the read fails, or there is no conversation
+   * to send it from.
+   */
+  async function openSiteForm(spec: SiteFormDirective): Promise<void> {
+    const sf = opts.siteForms;
+    const from = threadId;
+    // One form per conversation: once one was sent from it, none is drawn
+    // again (the api would refuse it, and "try again" could never succeed).
+    if (!sf || !from || siteFormSentFrom.has(from)) return;
+    let list: ReturnType<typeof readSiteForms> = null;
+    try {
+      const res = await fetch(
+        `${sf.formsUrl}?siteKey=${encodeURIComponent(sf.siteKey)}`,
+        { credentials: "omit" }
+      );
+      if (res.ok) list = readSiteForms(await res.json());
+    } catch {
+      list = null;
+    }
+    const def = list?.forms.find((f) => f.id === spec.id);
+    if (!list || !def) return;
+    const node = buildSiteForm({
+      def,
+      prefill: spec.prefill,
+      consentText: own === WIDGET_LABELS_TR ? list.consent.tr : list.consent.en,
+      privacyUrl: list.privacyUrl,
+      words: {
+        optional: L("siteFormOptional"),
+        prefilled: L("siteFormPrefilled"),
+        send: L("siteFormSend"),
+        notNow: L("siteFormNotNow"),
+        privacy: L("siteFormPrivacy"),
+        required: L("siteFormRequired"),
+        phone: L("siteFormPhone"),
+        email: L("siteFormEmail"),
+        dateOrder: L("siteFormDateOrder"),
+        number: (min?: number, max?: number) =>
+          min !== undefined && max !== undefined
+            ? L("siteFormNumberRange", { min, max })
+            : min !== undefined
+              ? L("siteFormNumberMin", { min })
+              : L("siteFormNumberMax", { max: max ?? "" }),
+        closed: L("siteFormClosed"),
+        consent: L("siteFormConsent"),
+        failed: L("siteFormFailed"),
+        checkIn: L("siteFormCheckIn"),
+        checkOut: L("siteFormCheckOut"),
+        sending: L("sending"),
+        thanks: L("siteFormThanks"),
+      },
+      send: async (s): Promise<SiteFormOutcome> => {
+        const res = await fetch(sf.submitUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "omit",
+          body: JSON.stringify({
+            siteKey: sf.siteKey,
+            formId: def.id,
+            threadId: from,
+            answers: s.answers,
+            consent: true,
+            consentText: s.consentText,
+            website: s.website,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          code?: string;
+          problems?: Record<string, unknown>;
+          thanks?: string | null;
+        };
+        // Sent, or sent already from this conversation: either way it is
+        // with the business, and the visitor is thanked once.
+        if (res.ok || body.code === "ALREADY_SENT") {
+          siteFormSentFrom.add(from);
+          return { ok: true, thanks: body.thanks ?? null };
+        }
+        if (body.code === "FIELDS") return { ok: false, problems: body.problems };
+        if (body.code === "CONSENT") return { ok: false, consent: true };
+        if (body.code === "NO_CONVERSATION" || body.code === "TOO_MANY")
+          return { ok: false, closed: true };
+        return { ok: false };
+      },
+      // "Şimdi değil": back to the box, where the conversation goes on.
+      onClose: () => input.focus(),
+    });
+    log.appendChild(node);
+    scrollDown(true);
+  }
+
+  /** Conversations a business's form was sent from, in this window. */
+  const siteFormSentFrom = new Set<string>();
 
   /** Render an AI-described input form inline; submit → host action. */
   function renderForm(spec: FormSpec): void {

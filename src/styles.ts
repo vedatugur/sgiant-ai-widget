@@ -601,6 +601,24 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
 .${PREFIX}-lead-btn{border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:10px 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
 .${PREFIX}-lead-btn:disabled{opacity:.6;cursor:default}
 .${PREFIX}-lead-ok{font-size:var(--aiw-font-sm);font-weight:600;color:var(--aiw-accent-ink)}
+/* A business's own form on its site (sgiant-platform#550): every field has
+   its label above it, as the app's preview draws it; the consent sentence is
+   long, so its box sits at the first line; the field no person sees is off
+   screen rather than display:none, which a form-filling script skips. */
+.${PREFIX}-site-form-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.${PREFIX}-site-form-label,.${PREFIX}-site-form-sub{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-text)}
+.${PREFIX}-site-form-sub{font-weight:500;color:var(--aiw-muted)}
+.${PREFIX}-site-form-help{font-size:var(--aiw-font-xs);color:var(--aiw-muted)}
+.${PREFIX}-site-form-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.${PREFIX}-site-form-half{display:flex;flex-direction:column;gap:3px;min-width:0}
+.${PREFIX}-site-form-prefilled{font-size:var(--aiw-font-xs);color:var(--aiw-accent-ink)}
+.${PREFIX}-site-form-consent{align-items:flex-start;font-size:var(--aiw-font-xs)}
+.${PREFIX}-site-form-consent .${PREFIX}-check{margin-top:2px}
+.${PREFIX}-site-form-privacy{color:var(--aiw-accent-ink);text-decoration:underline}
+.${PREFIX}-site-form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.${PREFIX}-site-form-later{border:none;background:none;color:var(--aiw-muted);font:inherit;font-size:var(--aiw-font-sm);padding:8px 6px;cursor:pointer}
+.${PREFIX}-site-form-later:disabled{opacity:.5;cursor:default}
+.${PREFIX}-site-form-trap{position:absolute;left:-10000px;width:1px;height:1px;opacity:0}
 .${PREFIX}-input:focus{border-color:var(--aiw-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--aiw-accent) 13%,transparent)}
 .${PREFIX}-send{flex:0 0 auto;border:none;background:var(--aiw-accent);color:var(--aiw-accent-contrast);border-radius:var(--aiw-radius-lg);padding:0 16px;font-size:var(--aiw-font-md);font-weight:600;cursor:pointer}
 .${PREFIX}-send:disabled{opacity:.5;cursor:default}

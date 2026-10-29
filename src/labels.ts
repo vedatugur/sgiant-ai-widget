@@ -61,6 +61,26 @@ export const WIDGET_LABELS = {
    * read it. The owner's words, 28 Oct 2026 (row 18).
    */
   savedNotice: "This conversation is saved and can be read by the business.",
+  // Site forms (#550): the form a customer built, drawn in the chat on
+  // their site. Words 35–46 and 29 as approved by the owner on 29 Oct 2026.
+  siteFormOptional: "(optional)",
+  siteFormPrefilled: "Filled in from your chat; you can change it.",
+  siteFormSend: "Send",
+  siteFormNotNow: "Not now",
+  siteFormPrivacy: "Privacy notice",
+  siteFormRequired: "Please fill in this field.",
+  siteFormPhone: "The phone number looks incomplete or wrong.",
+  siteFormEmail: "The email address looks wrong.",
+  siteFormDateOrder: "The check-out date must be after the check-in date.",
+  siteFormConsent: "Tick the consent box to continue.",
+  siteFormFailed: "It could not be sent. Your details are still in the form; please try again.",
+  siteFormCheckIn: "Check-in",
+  siteFormCheckOut: "Check-out",
+  siteFormThanks: "Thank you, we have your request. We will get back to you as soon as we can.",
+  siteFormNumberRange: "Enter a number: at least {min}, at most {max}.",
+  siteFormNumberMin: "Enter a number: at least {min}.",
+  siteFormNumberMax: "Enter a number: at most {max}.",
+  siteFormClosed: "This form can no longer be sent. You can write your request here.",
   /**
    * The header's button on a visitor's page, where "New chat" is: it removes
    * the conversation kept in the visitor's tab and shows the greeting again.
