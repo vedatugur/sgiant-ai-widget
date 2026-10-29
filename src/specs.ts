@@ -383,6 +383,11 @@ export function stripDirectivesForReplay(text: string): {
     t = c.stripped;
     notes.push("💬 options offered");
   }
+  // A business's form on its site (sgiant-platform#550) leaves no note: a
+  // replayed reply cannot say whether the visitor sent it, and the window
+  // does not draw it again.
+  const sf = parseJsonDirective<unknown>(t, "site-form");
+  if (sf) t = sf.stripped;
   const f = parseFormDirective(t);
   if (f) {
     t = f.stripped;
