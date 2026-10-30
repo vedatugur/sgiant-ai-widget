@@ -14,6 +14,12 @@
  * skip the postMessage hop and act on a frame's document directly if it wants.
  */
 export * from "./dom-control.js";
+// The SURFACE MANIFEST — what is here, and what may be touched. Exported from
+// the root as well as its own subpath: the root is what an existing consumer
+// already imports, and a second specifier for types used in the same breath
+// would be friction with nothing behind it.
+export * from "./manifest.js";
+export * from "./manifest-generate.js";
 export * from "./protocol.js";
 export * from "./agent.js";
 export * from "./transport.js";
