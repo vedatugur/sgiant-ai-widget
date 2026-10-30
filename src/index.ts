@@ -902,8 +902,11 @@ export interface AiChatWidgetOptions {
   exitAdvancedLabel?: string;
   collapsePaneLabel?: string;
   expandPaneLabel?: string;
-  /** Labels for the advanced-view fullscreen toggle (edge-to-edge on/off). */
+  /** @deprecated No control reads it: the advanced view has no fullscreen
+   *  toggle any more. Kept so a host that passes it still compiles; removed at
+   *  the next major. */
   fullscreenLabel?: string;
+  /** @deprecated As `fullscreenLabel`. */
   exitFullscreenLabel?: string;
   /** Label for the draggable chat⇆app divider (advanced view; drag to resize,
    *  double-click to reset). Width persists to localStorage per host. */

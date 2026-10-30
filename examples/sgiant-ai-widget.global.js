@@ -716,9 +716,6 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 /* Advanced view IS the wide view (owns the screen), so the plain "wide" toggle
    is redundant here \u2014 hide it and leave advanced/exit + close. */
 .${e}-advanced .${e}-expand{display:none}
-/* Fullscreen toggle only makes sense in advanced view \u2014 hidden otherwise. */
-.${e}-fullbtn{display:none}
-.${e}-advanced .${e}-fullbtn{display:flex}
 .${e}-advanced{width:calc(100vw - 40px);max-width:1240px;height:calc(100vh - 40px);flex-direction:row;align-items:stretch}
 /* Fullscreen: drop the inset margins, width cap and radius so advanced view
    fills the whole viewport edge-to-edge. Two classes \u2192 wins over .advanced. */
