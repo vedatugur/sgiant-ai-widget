@@ -42,13 +42,22 @@ jobs:
       # anything is installed or built, so a misplaced tag costs seconds and
       # spends nothing: delete it, tag main, push again.
       #
+      # ON MAIN'S OWN LINE, not merely in its history. This repository has real
+      # merge commits (15 of them, as of 1.28.0). A commit of a branch that was
+      # merged that way is an ancestor of main and was still never main: its
+      # tree is the branch's. So the tag has to be one of the commits main
+      # itself has pointed at (its first-parent line). For a squashed commit
+      # the two are the same thing. The agent bridge's release does the same.
+      #
       # main is fetched explicitly rather than trusted from the checkout, so the
-      # answer is about main as it is now.
+      # answer is about main as it is now. The list goes to a file because
+      # `rev-list | grep -q` fails under pipefail the moment grep finds its line.
       - name: tagged commit is on main
         run: |
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor HEAD origin/main; then
-            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not on main"
+          git rev-list --first-parent origin/main > "${RUNNER_TEMP:-/tmp}/main-line"
+          if ! grep -qx "$(git rev-parse HEAD)" "${RUNNER_TEMP:-/tmp}/main-line"; then
+            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not a commit of main"
             exit 1
           fi
           echo "$GITHUB_REF_NAME is $(git rev-parse --short HEAD), on main"

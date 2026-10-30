@@ -21,11 +21,18 @@ const WORKFLOW = readFileSync(
 /** The steps only, comments removed. */
 const STEPS = WORKFLOW.slice(WORKFLOW.indexOf("    steps:")).replace(/^\s*#.*$/gm, "");
 
-test("the job refuses a tag whose commit main does not contain", () => {
+test("the job refuses a tag that is not one of main's own commits", () => {
   assert.match(STEPS, /- name: tagged commit is on main/);
   // main as it is now, fetched by the step, not whatever the checkout left.
   assert.match(STEPS, /git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main/);
-  assert.match(STEPS, /if ! git merge-base --is-ancestor HEAD origin\/main; then[\s\S]*?exit 1/);
+  // Main's first-parent line. This repository has real merge commits, and a
+  // commit that reached main inside one is in main's history while its tree
+  // was never main's: "is an ancestor of main" would let its tag publish.
+  assert.match(STEPS, /git rev-list --first-parent origin\/main > /);
+  assert.match(STEPS, /if ! grep -qx "\$\(git rev-parse HEAD\)" [\s\S]*?exit 1/);
+  assert.doesNotMatch(STEPS, /merge-base --is-ancestor/);
+  // Not piped: `rev-list | grep -q` fails under pipefail when grep succeeds.
+  assert.doesNotMatch(STEPS, /rev-list[^\n]*\|\s*grep/);
 });
 
 test("it has the history to answer with", () => {
