@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { WIDGET_LABELS, widgetLabelOverrides } from "../dist/labels.js";
 import * as entry from "../dist/index.js";
+import i18next from "i18next";
 
 /**
  * A HOST PASSES ONLY ITS OWN WORDS (audit F128).
@@ -41,6 +42,54 @@ test("a host's sentence equal to the window's English is still the host's", () =
     translator({ "chatWidget.send": WIDGET_LABELS.send })
   );
   assert.deepEqual(out, { send: WIDGET_LABELS.send });
+});
+
+/**
+ * A real i18next with `fallbackLng: "en"`, on a Turkish page: the Turkish file
+ * words `send`, the English file words `send` and `newChat`.
+ */
+async function turkishPageWithEnglishFallback() {
+  const i18n = i18next.createInstance();
+  await i18n.init({
+    lng: "tr",
+    fallbackLng: "en",
+    resources: {
+      en: { translation: { chatWidget: { send: "Send", newChat: "New chat" } } },
+      tr: { translation: { chatWidget: { send: "Gönder!" } } },
+    },
+  });
+  const t = (key: string, def: string): string => i18n.t(key, def);
+  return { i18n, t };
+}
+
+test("a key the page's language lacks is not handed over in the fallback's English", async () => {
+  const { i18n, t } = await turkishPageWithEnglishFallback();
+  // What the old call cannot see: t() answers the English for a key the
+  // Turkish file lacks, as if the host had worded it.
+  assert.equal(t("chatWidget.newChat", "absent"), "New chat");
+  const out = widgetLabelOverrides({ t, i18n });
+  assert.equal("newChat" in out, false);
+  assert.deepEqual(out, { send: "Gönder!" });
+});
+
+test("{ t, exists } reads the same way for a translator that is not i18next", async () => {
+  const { i18n, t } = await turkishPageWithEnglishFallback();
+  const out = widgetLabelOverrides({
+    t,
+    exists: (key) =>
+      i18n.exists(key, { lng: i18n.language, fallbackLng: [] }),
+  });
+  assert.deepEqual(out, { send: "Gönder!" });
+});
+
+test("t alone keeps working, with the limit its comment names", async () => {
+  // A t-only call still passes what the translator answers, the fallback's
+  // English included: the limit `widgetLabelOverrides` documents.
+  const { t } = await turkishPageWithEnglishFallback();
+  assert.deepEqual(widgetLabelOverrides(t), {
+    send: "Gönder!",
+    newChat: "New chat",
+  });
 });
 
 test("every label is asked for under chatWidget.<key>", () => {

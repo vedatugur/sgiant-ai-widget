@@ -327,7 +327,7 @@ in that tab; pressing the pill brings it back.
 createAiChatWidget({
   // …
   locale: i18n.language, // a BCP 47 tag: "tr", "en-GB"
-  labels: widgetLabelOverrides(t), // only the labels you word differently
+  labels: widgetLabelOverrides({ t, i18n }), // only the labels you word differently
 });
 ```
 
@@ -344,9 +344,14 @@ do not pass in `labels`, it uses its own for the page's language: Turkish when
 Turkish page and an English one everywhere else. For any other language, pass
 `labels`; a label you leave out is shown in English.
 
-`widgetLabelOverrides(t)` turns your translator into that bag: it holds the
-`chatWidget.<key>` labels your translator knows, and nothing else, so every
-label you do not word differently stays the window's own. `resolveWidgetLabels`
+`widgetLabelOverrides({ t, i18n })` turns your translator into that bag: it
+holds the `chatWidget.<key>` labels your file holds in the page's language, and
+nothing else, so every label you do not word differently stays the window's
+own. For a translator that is not i18next, pass `{ t, exists }`, where
+`exists(key)` says whether the current language's file holds the key.
+`widgetLabelOverrides(t)` alone still works, but it cannot tell a key the
+page's language lacks from one it holds when the translator falls back
+(i18next's `fallbackLng: "en"`): it hands that key's English to a Turkish page. `resolveWidgetLabels`
 is deprecated: it hands over every label, defaulted to English, and a copy wins
 over the window's own sentence even after the window rewords it.
 

@@ -6,7 +6,8 @@ import { join } from "node:path";
 /**
  * The examples import ./bridge/*.js, a copy of sgiant-ai-agent-bridge's dist.
  * It was copied by hand and went stale: its index.js predated the manifest
- * exports. The build copies it now; this holds the copy to the installed one.
+ * exports. `npm run examples` copies it; this holds the committed copy to the
+ * installed one (the build does not write it, so it cannot hide a stale one).
  */
 const ROOT = join(import.meta.dirname, "..");
 const DIST = join(ROOT, "node_modules", "sgiant-ai-agent-bridge", "dist");
@@ -19,6 +20,6 @@ test("examples/bridge is the installed bridge, file for file", () => {
     assert.equal(
       readFileSync(join(COPY, f), "utf8"),
       readFileSync(join(DIST, f), "utf8"),
-      `examples/bridge/${f} is not the installed bridge's`
+      `examples/bridge/${f} is not the installed bridge's — run npm run examples`
     );
 });

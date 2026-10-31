@@ -170,7 +170,7 @@ export const WIDGET_LABELS = {
   // has never heard of (an AI-defined job type must still render).
   jobTitleCoder: "Working on a code task",
   jobTitleReport: "Generating the report",
-  jobTitleFallback: "Background job",
+  jobTitleFallback: "Working on it",
   jobQueued: "Queued",
   jobRunning: "Running",
   jobDone: "Finished",
@@ -186,7 +186,7 @@ export const WIDGET_LABELS = {
   jobFlowAll: "Show all {count} steps",
   /** Shown INSTEAD of the step feed when the app pane is already showing this
    *  run — see the collapse in renderJobCard. */
-  jobWatchingInPane: "Following along in the panel →",
+  jobWatchingInPane: "Following along at the side →",
   /** Advanced view — the pane is showing a computed widget, not a route. */
   paneBackToPage: "Back to the page",
   paneShowingWidget: "Result",
@@ -198,7 +198,7 @@ export const WIDGET_LABELS = {
   // why the set below can grow without the widget ever showing a blank line.
   jobEvCancelled: "Cancelled",
   jobEvCancelledBeforeStart: "Cancelled before it started",
-  jobEvInterrupted: "Interrupted by a restart — not retried automatically",
+  jobEvInterrupted: "Interrupted, and not started again by itself",
   // Proposal confirm cards
   // The SEVEN write tools that used to hit the generic English fallback
   // ("Apply this change?") — including generate_report, the most expensive
@@ -330,7 +330,7 @@ export type WidgetLabels = Record<keyof typeof WIDGET_LABELS, string>;
  * English string in WIDGET_LABELS. Call once per (re-)mount so the widget picks
  * up the active language.
  *
- * @deprecated Use `widgetLabelOverrides(t)` with `locale` (audit F128). This
+ * @deprecated Use `widgetLabelOverrides({ t, i18n })` with `locale` (audit F128). This
  * hands the window EVERY label, so a host's copy of a sentence wins over the
  * window's own even when the host never meant to word it differently: when the
  * window rewords a label, the host keeps showing the old words, and a host
@@ -347,25 +347,69 @@ export function resolveWidgetLabels(
   return out;
 }
 
+/** A translator: `t(key, defaultValue)`, the shape i18next's `t` answers. */
+export type WidgetLabelTranslate = (key: string, defaultValue: string) => string;
+
+/**
+ * The part of an i18next instance `widgetLabelOverrides` reads: the language
+ * the page is in, and whether a key is held for a language.
+ */
+export interface WidgetLabelI18n {
+  language: string;
+  exists(
+    key: string,
+    options: { lng: string; fallbackLng: string[] }
+  ): boolean;
+}
+
+/** What `widgetLabelOverrides` reads the host's labels from. */
+export type WidgetLabelSource =
+  | WidgetLabelTranslate
+  | { t: WidgetLabelTranslate; i18n: WidgetLabelI18n }
+  | { t: WidgetLabelTranslate; exists: (key: string) => boolean };
+
 /**
  * Only the labels a host words differently (audit F128).
  *
  * The window carries every label in English and Turkish and picks one from
  * `locale`. A host passes `locale` and this: exactly the `chatWidget.<key>`
- * labels its translator knows. A key the translator does not know is left
- * out, and the window uses its own sentence for it.
+ * labels its file holds IN THE PAGE'S LANGUAGE. A key that file does not hold
+ * is left out, and the window uses its own sentence for it.
  *
- * `t` is the same shape `resolveWidgetLabels` took. A key it does not know
- * comes back as the default it was given, which is how an absent label is
- * told apart from a present one; the default is a value no locale file holds.
+ * Pass `{ t, i18n }` (an i18next instance), or `{ t, exists }` for any other
+ * translator. A label counts as the host's only when the key is held in the
+ * current language: with i18next that is
+ * `i18n.exists(key, { lng: i18n.language, fallbackLng: [] })`. The empty list
+ * matters: i18next reads `fallbackLng: false` as "use the configured
+ * fallback", so `false` still finds the English.
+ *
+ * `t` alone still works, with a limit: a key the translator does not know is
+ * told apart only by coming back as the default it was given. A translator
+ * with a fallback language (i18next's `fallbackLng: "en"`) knows every key its
+ * fallback file holds, so `t` alone hands English to a Turkish page for a key
+ * the Turkish file lacks. Pass `{ t, i18n }` whenever the translator falls
+ * back.
  */
 export function widgetLabelOverrides(
-  t: (key: string, defaultValue: string) => string
+  source: WidgetLabelSource
 ): Partial<WidgetLabels> {
+  const t = typeof source === "function" ? source : source.t;
+  const held: ((key: string) => boolean) | null =
+    typeof source === "function"
+      ? null
+      : "i18n" in source
+        ? (key) =>
+            source.i18n.exists(key, {
+              lng: source.i18n.language,
+              fallbackLng: [],
+            })
+        : source.exists;
   const absent = "\u0000sgiant-ai-widget:absent";
   const out: Partial<WidgetLabels> = {};
   for (const k of Object.keys(WIDGET_LABELS) as (keyof WidgetLabels)[]) {
-    const v = t(`chatWidget.${k}`, absent);
+    const key = `chatWidget.${k}`;
+    if (held && !held(key)) continue;
+    const v = t(key, absent);
     if (v !== absent) out[k] = v;
   }
   return out;

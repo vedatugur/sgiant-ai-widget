@@ -191,6 +191,11 @@ export {
   builtInOptionWords,
 } from "./labels-tr";
 export type { WidgetLabels };
+export type {
+  WidgetLabelI18n,
+  WidgetLabelSource,
+  WidgetLabelTranslate,
+} from "./labels";
 import {
   createModelPicker,
   createUnavailablePicker,
@@ -972,7 +977,7 @@ export interface AiChatWidgetOptions {
    *  status bar, activity chips, proposal cards, history panel, error state. The
    *  widget is vanilla DOM and can't call i18next, so the host passes only the
    *  labels it words differently, from its own t() via
-   *  `widgetLabelOverrides(t)` (audit F128). Any omitted key falls back to the
+   *  `widgetLabelOverrides({ t, i18n })` (audit F128). Any omitted key falls back to the
    *  window's own words for the page's language: Turkish on a Turkish page
    *  (see `locale`), English otherwise. The widget never hardcodes visible
    *  copy. */

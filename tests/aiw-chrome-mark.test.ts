@@ -50,20 +50,28 @@ test("the demo does not keep its own copy of the mark", () => {
   assert.match(ui, /SgiantAiWidget\.CHROME_MARK/);
 });
 
-test("the examples bundle is not older than the package", () => {
+test("the examples bundles are the committed copies of a fresh build", () => {
   // examples/*.html load a SIBLING copy of the global build, because they open
   // as plain files. That copy was maintained by hand and lagged: ui.html began
   // using CHROME_MARK while the checked-in bundle predated the export. Nothing
   // errors when that happens — `avatarSvg: undefined` quietly falls back to the
   // crescent — so the demo shows the old mark while claiming to show the new
-  // one. The build mirrors it now; this catches a mirror that stopped running.
-  const dist = readFileSync("dist/sgiant-ai-widget.global.js", "utf8");
-  const demo = readFileSync("examples/sgiant-ai-widget.global.js", "utf8");
-  assert.equal(
-    demo,
-    dist,
-    "examples/sgiant-ai-widget.global.js is out of date — run npm run build"
-  );
+  // one.
+  //
+  // `npm test` builds dist first, and the build no longer writes examples/
+  // (`npm run examples` does), so this compares what is committed in examples/
+  // with what the source builds to now. While the build wrote the copy, this
+  // compared the copy with itself and could not fail.
+  for (const f of [
+    "sgiant-ai-widget.global.js",
+    "sgiant-ai-widget-charts.global.js",
+  ]) {
+    assert.equal(
+      readFileSync(`examples/${f}`, "utf8"),
+      readFileSync(`dist/${f}`, "utf8"),
+      `examples/${f} is not a fresh build — run npm run examples`
+    );
+  }
 });
 
 test("the attachment feature has an example", () => {
