@@ -327,7 +327,7 @@ in that tab; pressing the pill brings it back.
 createAiChatWidget({
   // …
   locale: i18n.language, // a BCP 47 tag: "tr", "en-GB"
-  labels: resolveWidgetLabels(t), // your translations of the widget's own chrome
+  labels: widgetLabelOverrides(t), // only the labels you word differently
 });
 ```
 
@@ -343,6 +343,12 @@ do not pass in `labels`, it uses its own for the page's language: Turkish when
 `<html lang>` is. So a host that passes neither gets a Turkish window on a
 Turkish page and an English one everywhere else. For any other language, pass
 `labels`; a label you leave out is shown in English.
+
+`widgetLabelOverrides(t)` turns your translator into that bag: it holds the
+`chatWidget.<key>` labels your translator knows, and nothing else, so every
+label you do not word differently stays the window's own. `resolveWidgetLabels`
+is deprecated: it hands over every label, defaulted to English, and a copy wins
+over the window's own sentence even after the window rewords it.
 
 A label that says `{name}` is given the window's own name (`title`), so a
 sentence about what the assistant does names your assistant.

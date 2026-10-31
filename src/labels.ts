@@ -329,6 +329,13 @@ export type WidgetLabels = Record<keyof typeof WIDGET_LABELS, string>;
  * Each label resolves the `chatWidget.<key>` locale key, defaulting to the
  * English string in WIDGET_LABELS. Call once per (re-)mount so the widget picks
  * up the active language.
+ *
+ * @deprecated Use `widgetLabelOverrides(t)` with `locale` (audit F128). This
+ * hands the window EVERY label, so a host's copy of a sentence wins over the
+ * window's own even when the host never meant to word it differently: when the
+ * window rewords a label, the host keeps showing the old words, and a host
+ * whose file lacks a key shows English on a Turkish page. Removed in the next
+ * major.
  */
 export function resolveWidgetLabels(
   t: (key: string, defaultValue: string) => string
@@ -336,6 +343,30 @@ export function resolveWidgetLabels(
   const out = {} as WidgetLabels;
   for (const k of Object.keys(WIDGET_LABELS) as (keyof WidgetLabels)[]) {
     out[k] = t(`chatWidget.${k}`, WIDGET_LABELS[k]);
+  }
+  return out;
+}
+
+/**
+ * Only the labels a host words differently (audit F128).
+ *
+ * The window carries every label in English and Turkish and picks one from
+ * `locale`. A host passes `locale` and this: exactly the `chatWidget.<key>`
+ * labels its translator knows. A key the translator does not know is left
+ * out, and the window uses its own sentence for it.
+ *
+ * `t` is the same shape `resolveWidgetLabels` took. A key it does not know
+ * comes back as the default it was given, which is how an absent label is
+ * told apart from a present one; the default is a value no locale file holds.
+ */
+export function widgetLabelOverrides(
+  t: (key: string, defaultValue: string) => string
+): Partial<WidgetLabels> {
+  const absent = "\u0000sgiant-ai-widget:absent";
+  const out: Partial<WidgetLabels> = {};
+  for (const k of Object.keys(WIDGET_LABELS) as (keyof WidgetLabels)[]) {
+    const v = t(`chatWidget.${k}`, absent);
+    if (v !== absent) out[k] = v;
   }
   return out;
 }

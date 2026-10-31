@@ -178,7 +178,11 @@ import {
   builtInLabels,
   builtInOptionWords,
 } from "./labels-tr";
-export { WIDGET_LABELS, resolveWidgetLabels } from "./labels";
+export {
+  WIDGET_LABELS,
+  resolveWidgetLabels,
+  widgetLabelOverrides,
+} from "./labels";
 export {
   WIDGET_LABELS_TR,
   WIDGET_OPTION_WORDS,
@@ -966,8 +970,9 @@ export interface AiChatWidgetOptions {
   voteDownLabel?: string;
   /** Translated copy for the widget's OWN chrome — header, More menu, composer,
    *  status bar, activity chips, proposal cards, history panel, error state. The
-   *  widget is vanilla DOM and can't call i18next, so the host builds this from
-   *  its own t() via `resolveWidgetLabels(t)`. Any omitted key falls back to the
+   *  widget is vanilla DOM and can't call i18next, so the host passes only the
+   *  labels it words differently, from its own t() via
+   *  `widgetLabelOverrides(t)` (audit F128). Any omitted key falls back to the
    *  window's own words for the page's language: Turkish on a Turkish page
    *  (see `locale`), English otherwise. The widget never hardcodes visible
    *  copy. */
