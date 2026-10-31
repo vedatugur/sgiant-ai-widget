@@ -16,7 +16,7 @@
  * nothing a consumer installs pulls it.
  */
 import { build } from "esbuild";
-import { readFileSync, copyFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
 
@@ -62,32 +62,9 @@ for (const t of TARGETS) {
     `${pkg.name}: ${t.out.replace("dist/", "")} ${(out.bytes / 1024).toFixed(1)} kB ` +
       `(window.${t.global})`
   );
-
-  // THE EXAMPLES LOAD A COPY, AND A COPY GOES STALE.
-  //
-  // examples/*.html point at ./sgiant-ai-widget.global.js — a sibling file, not
-  // dist — because they open as plain files with no server and no build step.
-  // That copy was updated by hand, so it lagged: on 2026-09-04 ui.html started
-  // using a NEW export (CHROME_MARK) that the checked-in bundle predated. The
-  // failure is silent, because `avatarSvg: undefined` falls back to the
-  // crescent — so the demo shows the OLD mark while claiming to show the new
-  // one, and whoever is looking concludes the feature does not work.
-  //
-  // The build owns the copy now. It cannot lag what it is copied from.
-  const mirror = t.out.replace("dist/", "examples/");
-  if (existsSync("examples")) {
-    copyFileSync(t.out, mirror);
-    console.log(`${pkg.name}: → ${mirror}`);
-  }
 }
 
-// THE SAME, FOR THE AGENT BRIDGE. examples/app.html imports ./bridge/index.js,
-// a hand copy of sgiant-ai-agent-bridge's dist that predated its manifest
-// exports. The build copies the installed bridge's modules now, so the
-// examples run the version this package depends on.
-const bridgeDist = "node_modules/sgiant-ai-agent-bridge/dist";
-if (existsSync("examples/bridge") && existsSync(bridgeDist)) {
-  for (const f of readdirSync(bridgeDist).filter((f) => f.endsWith(".js")))
-    copyFileSync(`${bridgeDist}/${f}`, `examples/bridge/${f}`);
-  console.log("sgiant-ai-agent-bridge: → examples/bridge/");
-}
+// The examples' copies of this build and of the agent bridge are NOT written
+// here: `npm run examples` writes them (scripts/copy-examples.mjs). A build
+// that overwrote them would hide a stale copy from the test that compares
+// them with a fresh build, since `npm test` builds first.

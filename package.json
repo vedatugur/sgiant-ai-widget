@@ -53,6 +53,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist *.tsbuildinfo",
     "build:global": "node scripts/build-global.mjs",
+    "examples": "npm run build && node scripts/copy-examples.mjs",
     "audit": "./scripts/audit-tarball.sh",
     "prepublishOnly": "npm run build && npm run audit",
     "test": "npm run build && node --test \"tests/*.test.ts\""
@@ -61,8 +62,9 @@
     "sgiant-ai-agent-bridge": "1.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "i18next": "24.2.3",
+    "typescript": "^5.7.2"
   },
   "publishConfig": {
     "access": "public",

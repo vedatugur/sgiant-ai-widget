@@ -34,9 +34,11 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # Copy the FRESH bundle over the committed one, so the page can never
-      # demonstrate a version that is no longer what this repo builds.
-      - run: cp dist/sgiant-ai-widget.global.js examples/
+      # Write the FRESH bundles over the committed ones (the widget global, the
+      # charts global and examples/bridge), so the page can never demonstrate a
+      # version that is no longer what this repo builds. Since audit F128 the
+      # build itself no longer writes examples/; `npm run examples` does.
+      - run: npm run examples
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
