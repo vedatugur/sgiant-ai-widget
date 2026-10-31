@@ -16,7 +16,7 @@
  * nothing a consumer installs pulls it.
  */
 import { build } from "esbuild";
-import { readFileSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, copyFileSync, existsSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
 
@@ -79,4 +79,15 @@ for (const t of TARGETS) {
     copyFileSync(t.out, mirror);
     console.log(`${pkg.name}: → ${mirror}`);
   }
+}
+
+// THE SAME, FOR THE AGENT BRIDGE. examples/app.html imports ./bridge/index.js,
+// a hand copy of sgiant-ai-agent-bridge's dist that predated its manifest
+// exports. The build copies the installed bridge's modules now, so the
+// examples run the version this package depends on.
+const bridgeDist = "node_modules/sgiant-ai-agent-bridge/dist";
+if (existsSync("examples/bridge") && existsSync(bridgeDist)) {
+  for (const f of readdirSync(bridgeDist).filter((f) => f.endsWith(".js")))
+    copyFileSync(`${bridgeDist}/${f}`, `examples/bridge/${f}`);
+  console.log("sgiant-ai-agent-bridge: → examples/bridge/");
 }

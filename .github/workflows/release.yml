@@ -5,13 +5,9 @@
 # artefact comes from the tag and not from whatever was on someone's laptop.
 #
 # The tag has to be on main. The job refuses, before it installs anything, a
-# tag whose commit main does not contain; and before it publishes, a tag whose
-# name is not the version in package.json.
-#
-# "On main" here means in main's history. A commit that reached main through a
-# real merge commit passes, because it is in that history. This repository
-# squashes, so it does not arise; if it ever takes real merges, tighten the
-# step to main's first-parent line.
+# tag that is not one of main's own commits (its first-parent line: this
+# repository takes real merges); and before it publishes, a tag whose name is
+# not the version in package.json.
 name: release
 
 on:
@@ -42,13 +38,23 @@ jobs:
       # anything is installed or built, so a misplaced tag costs seconds and
       # spends nothing: delete it, tag main, push again.
       #
+      # ON MAIN'S OWN LINE, not merely in its history. This repository has real
+      # merge commits (15 of them, as of 1.28.0). A commit of a branch that was
+      # merged that way is an ancestor of main and was still never main: its
+      # tree is the branch's. So the tag has to be one of the commits main
+      # itself has pointed at (its first-parent line). For a squashed commit
+      # the two are the same thing. The agent bridge's release does the same.
+      #
       # main is fetched explicitly rather than trusted from the checkout, so the
-      # answer is about main as it is now.
+      # answer is about main as it is now. The list goes to a file because
+      # `rev-list | grep -q` can fail under pipefail once the list outgrows the
+      # pipe buffer: grep exits on its match and rev-list dies on SIGPIPE.
       - name: tagged commit is on main
         run: |
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor HEAD origin/main; then
-            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not on main"
+          git rev-list --first-parent origin/main > "${RUNNER_TEMP:-/tmp}/main-line"
+          if ! grep -qx "$(git rev-parse HEAD)" "${RUNNER_TEMP:-/tmp}/main-line"; then
+            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not a commit of main"
             exit 1
           fi
           echo "$GITHUB_REF_NAME is $(git rev-parse --short HEAD), on main"
