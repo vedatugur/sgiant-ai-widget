@@ -143,7 +143,7 @@ test("the readme says how to refuse, and what an older widget does with it", () 
 // ── In a browser ───────────────────────────────────────────────────────────
 
 /** Runs in the page: a widget whose token step answers as `T.mode` says. */
-const MOUNT = (a: string, aLabel: string, b: string): void => {
+const MOUNT = (a: string, aLabel: string, b: string, TOP: string): void => {
   const T = ((globalThis as any).T = {
     mode: "A",
     fetches: [] as Array<{ auth: string | null; content: unknown }>,
@@ -167,6 +167,10 @@ const MOUNT = (a: string, aLabel: string, b: string): void => {
     endpoint: "/demo-chat",
     title: "AYCA",
     uploadEndpoint: "/demo-upload",
+    // The standing notice at the top of the chat (#661) is up too, as it is on
+    // a site that is low on credits. It is a different thing from the token
+    // notice, and must neither be counted as one nor dressed as one.
+    getNotice: () => ({ title: TOP }),
     getToken: () => {
       if (T.mode === "ok") return Promise.resolve("tok");
       if (T.mode === "old") return Promise.reject(new Error("Server error (401)."));
@@ -245,10 +249,34 @@ const ASK = (q: string): void => {
 };
 
 const Q = "Bu ay kaç rezervasyon aldık?";
+const TOP = "Krediniz azaldı.";
+
+/** Runs in the page: each notice found by its words, never by its class. */
+const STYLES = async (a: string, top: string) => {
+  await new Promise((r) => setTimeout(r, 200));
+  const panel = document.querySelector(".sgiant-aiw-panel")!;
+  const by = (text: string) =>
+    [...panel.querySelectorAll("div")].find((d) => d.firstElementChild?.textContent === text) ?? null;
+  const token = by(a);
+  const banner = by(top);
+  const btn = token?.querySelector("button") ?? null;
+  const css = (n: Element) => getComputedStyle(n);
+  return {
+    found: [!!token, !!banner],
+    // The token notice is a card in the conversation, its button as wide as its words.
+    tokenDisplay: token ? css(token).display : null,
+    buttonNarrower: btn && token ? btn.getBoundingClientRect().width < token.getBoundingClientRect().width - 40 : null,
+    // The notice at the top is a strip under the header: no card corners, no frame.
+    bannerRadius: banner ? css(banner).borderTopLeftRadius : null,
+    bannerTopBorder: banner ? css(banner).borderTopWidth : null,
+  };
+};
 
 async function mounted(page: Page, mode: string): Promise<void> {
   await page.open([1280, 800]);
-  await page.evaluate(`(${MOUNT})(${JSON.stringify(A)}, ${JSON.stringify(A_LABEL)}, ${JSON.stringify(B)})`);
+  await page.evaluate(
+    `(${MOUNT})(${JSON.stringify(A)}, ${JSON.stringify(A_LABEL)}, ${JSON.stringify(B)}, ${JSON.stringify(TOP)})`
+  );
   await page.evaluate(`T.mode = ${JSON.stringify(mode)}`);
 }
 const look = (page: Page) => page.evaluate<Awaited<ReturnType<typeof LOOK>>>(`(${LOOK})()`);
@@ -274,6 +302,19 @@ test("in a browser: the whole of it, from the refusal to the question being sent
       // Read out by the conversation's own live region, once, not as an alert.
       assert.equal(s.noticeInLiveRegion, true);
       assert.equal(s.noticeRole, null);
+    });
+
+    await t.test("the notice at the top and the token notice are two things, and look it", async () => {
+      await mounted(page, "A");
+      await ask(page, Q);
+      const s = await page.evaluate<Awaited<ReturnType<typeof STYLES>>>(
+        `(${STYLES})(${JSON.stringify(A)}, ${JSON.stringify(TOP)})`
+      );
+      assert.deepEqual(s.found, [true, true]);
+      assert.equal(s.tokenDisplay, "block", "the top notice's flex column reached the token notice");
+      assert.equal(s.buttonNarrower, true, "the token notice's button was stretched across the card");
+      assert.equal(s.bannerRadius, "0px", "the token notice's card corners reached the notice at the top");
+      assert.equal(s.bannerTopBorder, "0px", "the token notice's frame reached the notice at the top");
     });
 
     await t.test("the click reaches the handler as a click; while it runs nothing is sent", async () => {
