@@ -231,7 +231,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
     /**
      * Deliver the answer as an ordinary user message.
      *
-     * The ask_user turn ENDED server-ctx.side the moment the question was emitted
+     * The ask_user turn ENDED server-side the moment the question was emitted
      * (see runAgentTurn) — there is no mid-turn channel to reply on, and "the
      * answer arrives as the next message" is the design. `onAnswer` is only an
      * observer hook, so it can never be what makes the answer land.
@@ -259,9 +259,9 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
       // Built before the options so toggling one can enable it. A multi-select
       // confirm with nothing picked has nothing to ctx.send: leaving it enabled made
       // the click a silent no-op (`deliver` bails on an empty answer), which
-      // reads as a broken button. The React ctx.panel disables it; so does this.
+      // reads as a broken button. The React panel disables it; so does this.
       const confirm = q.multi
-        ? (el("button", `${PREFIX}-question-ctx.send`) as HTMLButtonElement)
+        ? (el("button", `${PREFIX}-question-send`) as HTMLButtonElement)
         : null;
       if (confirm) {
         confirm.type = "button";
@@ -285,7 +285,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
             deliver([o.id]);
             return;
           }
-          // Multi-select: ctx.toggle, and confirm explicitly — otherwise the first
+          // Multi-select: toggle, and confirm explicitly — otherwise the first
           // click would submit and the user could never pick a second option.
           if (picked.has(o.id)) picked.delete(o.id);
           else picked.add(o.id);
@@ -302,7 +302,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
       const input = el("input", `${PREFIX}-question-input`) as HTMLInputElement;
       input.type = "text";
       input.placeholder = ctx.L("questionPlaceholder");
-      const go = el("button", `${PREFIX}-question-ctx.send`) as HTMLButtonElement;
+      const go = el("button", `${PREFIX}-question-send`) as HTMLButtonElement;
       go.type = "button";
       go.textContent = ctx.L("questionConfirm");
       const submit = (): void => {
@@ -481,7 +481,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
         f.node.classList.remove(`${PREFIX}-field-invalid`);
         const raw = f.read();
         // Post the type the ARG actually is. Every control reads back a string,
-        // and the string "false" is TRUTHY server-ctx.side (`withReadme !== false`
+        // and the string "false" is TRUTHY server-side (`withReadme !== false`
         // passes), so an unticked box used to change nothing at all.
         if (f.type === "checkbox") {
           const on = isTruthyValue(raw);
