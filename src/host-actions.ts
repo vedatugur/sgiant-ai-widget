@@ -348,26 +348,11 @@ export function makePageContext(
 // the backend's prompt builder). Don't rebuild a client catalogue — it drifted
 // from the live one (12 actions vs 5) the whole time it sat unused.
 
-/**
- * Account-relative path each named standard action opens. Single source of truth
- * shared by `createHostActions` (which navigates the parent app there) and the
- * widget's advanced view (which navigates the iframe there via `resolveActionPath`),
- * so the two can't drift.
- */
-export const STANDARD_ACTION_PATHS: Record<string, string> = {
-  "open-dashboards": "/dashboards",
-  "open-dashboard-builder": "/dashboards/new/edit",
-  "open-billing": "/billing",
-  "open-assets": "/assets",
-};
-
-/** Human confirmation text for each named standard action (post-navigation). */
-const STANDARD_ACTION_DONE: Record<string, string> = {
-  "open-dashboards": "Opened dashboards",
-  "open-dashboard-builder": "Opened the dashboard builder",
-  "open-billing": "Opened billing",
-  "open-assets": "Opened assets",
-};
+// The named "open-*" / "show-assets" actions and their paths lived here until
+// 2.0.0 (audit F130). They are sgiant's product, not the widget's: a stranger's
+// widget had no business knowing /billing. They are in @sgiant/ai-contract
+// (the names and paths) and @sgiant/ai-apply (the handlers) now, and a host
+// passes its own through `handlers` and the widget's `navigationActions`.
 
 /**
  * Is this action PURE NAVIGATION — moving the user to a page and nothing else?
@@ -378,44 +363,25 @@ const STANDARD_ACTION_DONE: Record<string, string> = {
  * without one ran instantly and unattended — and a confirm-less action can
  * spend metered credit, so "auto-navigate" could buy things. Navigation is a
  * closed set — enumerate it, and let everything else wait for the user to
- * press the button.
+ * press the button. The widget knows one such action, `navigate`; a host names
+ * its own (only those that buy nothing and change nothing).
  */
-export function isNavigationAction(name: string): boolean {
-  // `show-assets` is navigation too — it opens a folder/file and nothing else,
-  // buys nothing and changes nothing. It is listed explicitly rather than via
-  // STANDARD_ACTION_PATHS because it carries a target, so it has no fixed path.
-  return (
-    name === "navigate" ||
-    name === "show-assets" ||
-    name in STANDARD_ACTION_PATHS
-  );
+export function isNavigationAction(
+  name: string,
+  hostNavigation: readonly string[] = [],
+): boolean {
+  return name === "navigate" || hostNavigation.includes(name);
 }
-
-/** Said instead of "Opened …" when the user is ALREADY on that page. */
-const STANDARD_ACTION_ALREADY: Record<string, string> = {
-  "open-dashboards": "Already on dashboards",
-  "open-dashboard-builder": "Already in the dashboard builder",
-  "open-billing": "Already on billing",
-  "open-assets": "Already on assets",
-};
 
 /**
  * Are we already looking at this route?
  *
  * Navigating to the page you are standing on is not a helpful action, it is
  * noise — and worse, it reads as a broken one, because nothing visibly happens.
- * Compared on pathname only: a query string or hash is a filter or an anchor
- * within the same page, not a different destination.
+ * A hash is an anchor within the same page, not a different destination; the
+ * query counts (below).
  */
-/** Where an account-relative path really lands, mirroring the hosts' own
- *  `orgPath`/`adminPath`: already absolute stays put, anything else is prefixed
- *  with the account. Kept in step with those two by construction — they are
- *  idempotent for a path that already carries the prefix. */
-function resolveTarget(base: string, path: string): string {
-  return path.startsWith("/accounts/") ? path : `${base}${path}`;
-}
-
-function alreadyThere(path: string): boolean {
+export function isCurrentLocation(path: string): boolean {
   if (typeof window === "undefined") return false;
   const strip = (p: string): string =>
     p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
@@ -436,18 +402,17 @@ export type HostActionHandler = (
 ) => Promise<string | void> | string | void;
 
 export interface HostActionsConfig {
-  /** Account scope for the `/accounts/:id/...` standard routes (org/admin). */
-  accountId?: string;
+  /**
+   * Where a path the model wrote really lands — the host's own resolver (an
+   * account prefix, a base path). `navigate` compares the RESOLVED path with
+   * the current location, so "already there" fires on the page the user is
+   * actually on. Defaults to the path unchanged.
+   */
+  resolvePath?: (path: string) => string;
   /** The host's router push (in-app SPA navigation). */
   navigate: (path: string) => void;
-  /** Point a MOUNTED asset library at a folder/asset. Supplied by the host as
-   *  `showAssetsAt` from @sgiant/assets — the router push alone cannot reach a
-   *  library that is already on screen. */
-  showAssets?: (t: {
-    folderId?: string | null;
-    assetId?: string | null;
-  }) => void;
-  /** App-specific actions, merged over the standard set (can override). */
+  /** The host's own actions, by name. The widget runs only `navigate` and the
+   *  UI-control set itself; anything else the model names must be here. */
   handlers?: Record<string, HostActionHandler>;
   /**
    * The page manifest this host declares — the SAME catalogue the model is
@@ -457,22 +422,6 @@ export interface HostActionsConfig {
    * none can navigate nowhere.
    */
   pages?: readonly { path?: string }[];
-  /**
-   * Whether this surface HAS an account plane. Default true.
-   *
-   * The four named actions resolve to account-relative paths — with an
-   * `accountId`, "open-dashboards" is `/accounts/<id>/dashboards`; without one
-   * the base is empty and it becomes `/dashboards`. On a surface that has no
-   * such page the assistant then navigates, confidently, to nothing, and to the
-   * user that reads as the app breaking rather than as an action that does not
-   * apply here.
-   *
-   * Pass false and those names are refused like any other unknown action, which
-   * is the truth: the hub has four hash anchors and no dashboards. The
-   * UI-control half (highlight / scroll-to / focus-field / fill / click) is
-   * unaffected — it never went through this map.
-   */
-  standardActions?: boolean;
   /**
    * Where to look when verifying the widget's own manifest at action time.
    * Defaults to `document`. Injectable so the gate can be tested without a
@@ -500,35 +449,15 @@ export interface HostActionsConfig {
 }
 
 /**
- * Build the `onWidgetAction(name, data)` handler from the standard allow-listed
- * actions + any app-specific handlers. Pass to `createAiChatWidget`.
+ * Build the `onWidgetAction(name, data)` handler from `navigate`, the UI-control
+ * set, and the host's own handlers. Pass to `createAiChatWidget`.
  */
 export function createHostActions(
   cfg: HostActionsConfig,
 ): (action: string, data: Record<string, string>) => Promise<string | void> {
-  const base = cfg.accountId ? `/accounts/${cfg.accountId}` : "";
+  const resolve = cfg.resolvePath ?? ((p: string) => p);
   const tr = cfg.t ?? ((_k: string, d: string) => d);
-  const standard: Record<string, HostActionHandler> = {
-    // Deep-link INTO the library: a folder and/or one file's preview.
-    //
-    // Two steps on purpose. If the user is elsewhere, the host router has to
-    // open /assets first; if they are already there, a same-route push fires no
-    // popstate and does not remount, so the library would never hear it — hence
-    // showAssetsAt, which writes the query AND announces it (#134).
-    "show-assets": (data) => {
-      const folderId = data.folderId || null;
-      const assetId = data.assetId || null;
-      if (!folderId && !assetId) return;
-      const query = new URLSearchParams();
-      if (folderId) query.set("folder", folderId);
-      if (assetId) query.set("asset", assetId);
-      const path = `${STANDARD_ACTION_PATHS["open-assets"]}?${query}`;
-      if (!alreadyThere(resolveTarget(base, path))) cfg.navigate(path);
-      cfg.showAssets?.({ folderId, assetId });
-      return assetId
-        ? tr("aiAssistant.action.actionOpenedFile", "Opened the file")
-        : tr("aiAssistant.action.actionOpenedFolder", "Opened the folder");
-    },
+  const map: Record<string, HostActionHandler> = {
     navigate: (data) => {
       if (data.path) {
         // The manifest decides, not the path's shape. Floating mode hands the
@@ -546,33 +475,12 @@ export function createHostActions(
         // the account before routing. Testing the bare path against the real
         // location never matched, so "you are already here" could not fire on
         // the one action most likely to be aimed at the current page.
-        if (alreadyThere(resolveTarget(base, data.path)))
+        if (isCurrentLocation(resolve(data.path)))
           return tr("aiAssistant.action.actionAlreadyThere", "Already there");
         cfg.navigate(data.path);
         return tr("aiAssistant.action.actionOpened", "Opened");
       }
     },
-  };
-  // The named "open-*" actions all resolve to a fixed account-relative path (see
-  // STANDARD_ACTION_PATHS) — generate their handlers so the paths live in ONE
-  // place the advanced-view resolver also reads.
-  for (const [name, path] of Object.entries(STANDARD_ACTION_PATHS)) {
-    standard[name] = () => {
-      const target = `${base}${path}`;
-      if (alreadyThere(target))
-        return tr(
-          `aiAssistant.action.actionAlready_${name.replace(/-/g, "_")}`,
-          STANDARD_ACTION_ALREADY[name] ?? "Already there",
-        );
-      cfg.navigate(target);
-      return tr(
-        `aiAssistant.action.actionDone_${name.replace(/-/g, "_")}`,
-        STANDARD_ACTION_DONE[name] ?? "Opened",
-      );
-    };
-  }
-  const map: Record<string, HostActionHandler> = {
-    ...(cfg.standardActions === false ? {} : standard),
     ...(cfg.handlers ?? {}),
   };
   const manifestRoot =

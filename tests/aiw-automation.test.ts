@@ -21,7 +21,7 @@ test("the toggle does not read advanced-view state before it is declared", () =>
   // further down — inside its temporal dead zone at that moment. The access
   // threw "Cannot access 'advanced' before initialization" and took the whole
   // widget down on mount: no bubble, no panel, nothing.
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
   const declared = src.indexOf("let advanced = false;");
   const readAt = src.indexOf("const pinned = advanced;");
   assert.ok(declared > 0, "`advanced` must be declared");
@@ -61,7 +61,7 @@ test("opening the explainer closes the menu with the menu's own mechanism", () =
   // THE MENU THAT WOULD NOT CLOSE: the first version removed `-more-open` from
   // the wrapper. The menu is opened by toggling `-menu-open` on the MENU, so the
   // dropdown stayed up on top of the panel it had just opened. Nothing threw.
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
   const from = src.indexOf('helpItem.btn.addEventListener("click"');
   const to = src.indexOf("moreMenu.appendChild(helpItem.btn)", from);
   const handler = from > 0 && to > from ? src.slice(from, to) : "";
@@ -111,7 +111,7 @@ test("auto-apply is never pinned by advanced mode, unlike auto-navigate", () => 
   // Advanced view makes the assistant faster at MOVING AROUND. That is not a
   // reason to let it write without being asked, and conflating the two is how
   // "pilot mode" quietly becomes "publishes without you".
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
   const applyBlock = src.slice(
     src.indexOf("if (opts.autoApplyOption) {"),
     src.indexOf("// \"How automation works\" — the explainer.")

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { widgetSrc } from "./aiw-source.ts";
 import { readApplyRefusal } from "../dist/apply-refusal.js";
 import { WIDGET_LABELS } from "../dist/labels.js";
-import * as entry from "../dist/index.js";
 
 /**
  * A REFUSED APPLY SAYS WHY (sgiant-platform#581).
@@ -121,10 +120,9 @@ test("the reason is not thrown away anywhere in the card any more", () => {
   assert.doesNotMatch(CATCH, /\} catch \{/);
 });
 
-test("the fallback sentence is a label a host can translate, and the helper is public", () => {
+test("the fallback sentence is a label a host can translate", () => {
   assert.ok("applyFailed" in WIDGET_LABELS);
   assert.match(widgetSrc, /L\("applyFailed"\)/);
-  assert.equal(typeof entry.readApplyRefusal, "function");
 });
 
 test("the backend guide says how to refuse with a reason", () => {

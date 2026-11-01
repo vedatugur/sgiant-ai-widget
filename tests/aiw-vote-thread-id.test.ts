@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..", "src");
 const chrome = readFileSync(join(root, "message-chrome.ts"), "utf8");
-const index = readFileSync(join(root, "index.ts"), "utf8");
+const index = readFileSync(join(root, "widget.ts"), "utf8");
 
 /**
  * A vote must be cast against the thread the message is IN, read at click time.

@@ -23,7 +23,7 @@ import { WIDGET_LABELS } from "../dist/labels.js";
  * over the turn the person is in.
  */
 const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "index.ts"),
+  join(import.meta.dirname, "..", "src", "widget.ts"),
   "utf8"
 );
 /** Source with comments removed, for assertions about the code itself. */

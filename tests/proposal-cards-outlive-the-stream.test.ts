@@ -214,7 +214,7 @@ test("an outcome link must be http(s): it is kept and replayed, so a script URL 
 // No DOM here, so these read the code the way frame-contract-documented does.
 
 const src = readFileSync(
-  join(import.meta.dirname, "..", "src", "index.ts"),
+  join(import.meta.dirname, "..", "src", "widget.ts"),
   "utf8"
 );
 const cards = readFileSync(

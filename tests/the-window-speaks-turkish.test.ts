@@ -126,7 +126,7 @@ test("no English word is left written where something is drawn", () => {
   // spoken names, the version arrows, the resize handle, a picture's name.
   // What is drawn there now comes from a table that has both languages.
   for (const file of [
-    "src/index.ts",
+    "src/widget.ts",
     "src/message-chrome.ts",
     "src/decision-cards.ts",
   ]) {

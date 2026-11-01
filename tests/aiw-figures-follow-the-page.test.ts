@@ -79,7 +79,7 @@ test("a language tag the engine refuses falls back instead of throwing", () => {
 });
 
 test("the widget takes the page's language and sends every figure through it", () => {
-  const index = sources.find((s) => s.file === "index.ts")!.text;
+  const index = sources.find((s) => s.file === "widget.ts")!.text;
   assert.match(index, /\n  locale\?: string;/);
   // The host's word first; a silent host on a page that names its language
   // gets that language's figures, as it gets its words (sgiant-platform#617).

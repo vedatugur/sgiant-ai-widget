@@ -27,7 +27,7 @@ import {
   verifySurface,
 } from "sgiant-ai-agent-bridge/manifest";
 
-const SRC = readFileSync("src/index.ts", "utf8");
+const SRC = readFileSync("src/widget.ts", "utf8");
 
 /** Every id the render code actually stamps, read from the source. */
 function stampedIds(): string[] {

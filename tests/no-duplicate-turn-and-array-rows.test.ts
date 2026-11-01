@@ -62,7 +62,7 @@ test("explicit columns/rows win over the payload", () => {
 // ─── #483 item 5: no duplicate turn while one is still running ──────────────
 // The widget has no DOM harness; these pin the two lines that decide it, and
 // the behaviour was checked in a browser against a stub that drops the stream.
-const SRC = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+const SRC = readFileSync(new URL("../src/widget.ts", import.meta.url), "utf8");
 
 test("the stream-lost card offers no 'Try again' — the turn is still running", () => {
   assert.match(SRC, /showError\(L\("streamLostRecovering"\), \{ retry: false \}\)/);

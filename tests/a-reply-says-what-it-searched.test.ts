@@ -15,7 +15,7 @@ import { WIDGET_LABELS_TR } from "../dist/labels-tr.js";
  */
 
 const ROOT = join(import.meta.dirname, "..");
-const src = readFileSync(join(ROOT, "src/index.ts"), "utf8");
+const src = readFileSync(join(ROOT, "src/widget.ts"), "utf8");
 const T = (hms: string) => `2026-10-25T${hms}Z`;
 
 test("a reopened thread draws the searches under the reply they belong to", () => {

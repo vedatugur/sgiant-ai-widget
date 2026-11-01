@@ -85,7 +85,7 @@ function runtimeSgiantDeps(entry: string): Map<string, string> {
 }
 
 test("the widget core reaches no @sgiant package outside the allowlist (#306)", () => {
-  const deps = runtimeSgiantDeps(join(PKG, "src/index.ts"));
+  const deps = runtimeSgiantDeps(join(PKG, "src/global.ts"));
 
   const unexpected = [...deps].filter(([spec]) => !CORE_ALLOWED.has(spec));
   assert.deepEqual(
@@ -153,7 +153,7 @@ test("every entry point in package.json has a source file behind it (#306)", () 
   );
 
   // The global bundle is the one export with no same-named source: esbuild
-  // rolls it up from src/index.ts (scripts/build-global.mjs). It is still
+  // rolls it up from src/global.ts (scripts/build-global.mjs). It is still
   // PRODUCED — which is what this test is about — so it is checked against its
   // real producer rather than against a file that will never exist.
   const GENERATED: Record<string, string> = {

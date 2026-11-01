@@ -106,7 +106,10 @@ test("every label is asked for under chatWidget.<key>", () => {
   );
 });
 
-test("the package entry exports it beside the deprecated helper", () => {
+test("the package entry exports it, and the old every-label helper is gone (2.0.0)", () => {
   assert.equal(typeof entry.widgetLabelOverrides, "function");
-  assert.equal(typeof entry.resolveWidgetLabels, "function");
+  assert.equal(
+    (entry as Record<string, unknown>).resolveWidgetLabels,
+    undefined
+  );
 });

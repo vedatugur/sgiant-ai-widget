@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { widgetSrc } from "./aiw-source.ts";
 import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
 import { readTokenRefusal } from "../dist/token-refusal.js";
-import * as entry from "../dist/index.js";
+import * as entry from "../dist/internal.js";
 
 /**
  * THE TOKEN STEP MAY ANSWER "NOT NOW" (sgiant-platform#620).
@@ -21,7 +21,7 @@ import * as entry from "../dist/index.js";
  * host which says nothing of the kind sees exactly what it saw before.
  */
 const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "index.ts"),
+  join(import.meta.dirname, "..", "src", "widget.ts"),
   "utf8"
 );
 /** Source with comments removed, for assertions about the code itself. */

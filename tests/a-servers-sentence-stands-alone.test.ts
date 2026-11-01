@@ -29,7 +29,7 @@ import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
  * own name for the refusal: it is not shown and nothing branches on it.
  */
 const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "index.ts"),
+  join(import.meta.dirname, "..", "src", "widget.ts"),
   "utf8"
 );
 /** Source with comments removed, for assertions about the code itself. */

@@ -77,7 +77,7 @@ test("the module has no idea which vendors exist", () => {
 });
 
 test("the chosen id rides every turn, after extraBody, and only when there is a picker", () => {
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
   assert.match(
     src,
     /\.\.\.\(opts\.extraBody \?\? \{\}\),\s*\.\.\.\(picker \? \{ model: picker\.value\(\) \} : \{\}\),/
@@ -94,7 +94,7 @@ test("the chosen id rides every turn, after extraBody, and only when there is a 
 });
 
 test("the pill is a declared, conditional control, with words for its chrome", () => {
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
   assert.match(
     src,
     /picker\.button\.setAttribute\("data-ai-target", WIDGET_TARGETS\.model\)/

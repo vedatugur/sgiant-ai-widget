@@ -11,7 +11,7 @@
 /**
  * SINGLE SOURCE for every user-facing string baked into the vanilla-DOM widget,
  * with its English default. The widget can't call i18next, so a host may pass a
- * translated `labels` bag (built by `resolveWidgetLabels`); for any key it does
+ * translated `labels` bag (built by `widgetLabelOverrides`); for any key it does
  * not pass, the widget uses its own words for the page's language: the Turkish
  * in `labels-tr.ts` on a Turkish page, these English ones otherwise. A `{token}` in a value is filled
  * at runtime by the widget (single-brace so a host's i18next leaves it intact).
@@ -323,29 +323,6 @@ export const WIDGET_LABELS = {
 
 /** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */
 export type WidgetLabels = Record<keyof typeof WIDGET_LABELS, string>;
-
-/**
- * Build the widget's `labels` bag from a host translator (react-i18next's `t`).
- * Each label resolves the `chatWidget.<key>` locale key, defaulting to the
- * English string in WIDGET_LABELS. Call once per (re-)mount so the widget picks
- * up the active language.
- *
- * @deprecated Use `widgetLabelOverrides({ t, i18n })` with `locale` (audit F128). This
- * hands the window EVERY label, so a host's copy of a sentence wins over the
- * window's own even when the host never meant to word it differently: when the
- * window rewords a label, the host keeps showing the old words, and a host
- * whose file lacks a key shows English on a Turkish page. Removed in the next
- * major.
- */
-export function resolveWidgetLabels(
-  t: (key: string, defaultValue: string) => string
-): WidgetLabels {
-  const out = {} as WidgetLabels;
-  for (const k of Object.keys(WIDGET_LABELS) as (keyof WidgetLabels)[]) {
-    out[k] = t(`chatWidget.${k}`, WIDGET_LABELS[k]);
-  }
-  return out;
-}
 
 /** A translator: `t(key, defaultValue)`, the shape i18next's `t` answers. */
 export type WidgetLabelTranslate = (key: string, defaultValue: string) => string;

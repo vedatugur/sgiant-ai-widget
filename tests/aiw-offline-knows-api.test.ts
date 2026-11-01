@@ -20,7 +20,7 @@ import { readFileSync } from "node:fs";
  * be answered fine.
  */
 
-const src = readFileSync("src/index.ts", "utf8");
+const src = readFileSync("src/widget.ts", "utf8");
 
 /** Run the real `noteApiResult` verdict logic against a status. */
 function verdict(result: "ok" | "unreachable" | number): boolean {
