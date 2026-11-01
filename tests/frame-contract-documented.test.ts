@@ -20,12 +20,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { widgetSrc } from "./aiw-source.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
 /** Fields a `frame.type === "..."` branch requires before it will render. */
 function requiredFrameFields(): Map<string, Set<string>> {
-  const src = readFileSync(join(ROOT, "src/widget.ts"), "utf8");
+  const src = widgetSrc;
   const out = new Map<string, Set<string>>();
 
   // `frame.type === "question" && frame.questionId && frame.prompt`
@@ -76,7 +77,7 @@ test("every frame field a handler requires is documented in BACKEND.md", () => {
 test("an incomplete question frame warns instead of vanishing", () => {
   // The behaviour, not the wording: there must be a warn path keyed on the
   // question frame, and it must name the field that is missing.
-  const src = readFileSync(join(ROOT, "src/widget.ts"), "utf8");
+  const src = widgetSrc;
   assert.match(
     src,
     /frame\.type === "question" && !\(frame\.questionId && frame\.prompt\)/,
@@ -95,7 +96,7 @@ test("every frame TYPE the widget acts on is named in BACKEND.md", () => {
   // "chart frames carrying spec + rows" — never naming the type. A demo written
   // from that document sent `type: "text"` with a spec and rendered nothing,
   // silently, which is the same failure mode as the missing questionId.
-  const src = readFileSync(join(ROOT, "src/widget.ts"), "utf8");
+  const src = widgetSrc;
   const doc = readFileSync(join(ROOT, "BACKEND.md"), "utf8");
 
   const types = new Set(

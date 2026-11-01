@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * A SENTENCE THE SERVER WROTE FOR THE READER STANDS ALONE.
@@ -28,10 +29,7 @@ import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
  * message never becomes the card's headline. The code's value is the server's
  * own name for the refusal: it is not shown and nothing branches on it.
  */
-const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "widget.ts"),
-  "utf8"
-);
+const INDEX = widgetSrc;
 /** Source with comments removed, for assertions about the code itself. */
 const CODE = INDEX.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 

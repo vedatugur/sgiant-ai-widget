@@ -26,8 +26,9 @@ import {
   canAct,
   verifySurface,
 } from "sgiant-ai-agent-bridge/manifest";
+import { widgetSrc } from "./aiw-source.ts";
 
-const SRC = readFileSync("src/widget.ts", "utf8");
+const SRC = widgetSrc;
 
 /** Every id the render code actually stamps, read from the source. */
 function stampedIds(): string[] {

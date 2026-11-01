@@ -20,10 +20,7 @@ import * as entry from "../dist/internal.js";
  * optionally, a button. These pin what that must and must not do, and that a
  * host which says nothing of the kind sees exactly what it saw before.
  */
-const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "widget.ts"),
-  "utf8"
-);
+const INDEX = widgetSrc;
 /** Source with comments removed, for assertions about the code itself. */
 const CODE = INDEX.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 
@@ -86,7 +83,7 @@ test("only a SEND draws the notice: an upload, and everything else, stays silent
   // drawn from one place. A refused upload falls into the catch it always
   // fell into, which shows nothing and uploads nothing; loading past chats and
   // the live channel never come near either function.
-  assert.equal((CODE.match(/readTokenRefusal\(/g) ?? []).length, 1);
+  assert.equal((CODE.match(/(?<!function )readTokenRefusal\(/g) ?? []).length, 1);
   assert.equal((CODE.match(/showTokenNotice\(/g) ?? []).length, 2); // defined, called once
   const upload = CODE.slice(
     CODE.indexOf("async function uploadFiles("),

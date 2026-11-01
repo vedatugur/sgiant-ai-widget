@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SKIP_WITHOUT_CHROME, withBrowser, type Page } from "./aiw-browser.ts";
 import { WIDGET_LABELS } from "../dist/labels.js";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * A TURN WHOSE CONNECTION DROPPED PROMISES NOTHING, AND LOCKS NOTHING.
@@ -22,10 +23,7 @@ import { WIDGET_LABELS } from "../dist/labels.js";
  * conversation ends the looking, so a reply found afterwards is never drawn
  * over the turn the person is in.
  */
-const INDEX = readFileSync(
-  join(import.meta.dirname, "..", "src", "widget.ts"),
-  "utf8"
-);
+const INDEX = widgetSrc;
 /** Source with comments removed, for assertions about the code itself. */
 const CODE = INDEX.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 const SENTENCE =
@@ -56,7 +54,7 @@ test("looking for a lost answer never marks the conversation as answering", () =
   // The marker a page load reads is cleared only by the search that owns it.
   assert.match(
     looking,
-    /if \(stillMine\(\)\) \{\s*lostSearch\.delete\(turnThread\);\s*if \(inflight\?\.threadId === turnThread\) \{\s*inflight = null;/
+    /if \(stillMine\(\)\) \{\s*lostSearch\.delete\(turnThread\);\s*if \(st\.inflight\?\.threadId === turnThread\) \{\s*st\.inflight = null;/
   );
 });
 
