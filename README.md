@@ -562,13 +562,32 @@ YOUR page (`generateManifest`, `verifySurface`, `canAct`, `hashManifest`) are
   "already there") replaces `accountId`.
 - `isNavigationAction(name)` is true only for `navigate`; name your own with
   the window's `navigationActions`.
-- The main entry carries the API above and nothing else. `scanAiTargets` and
-  the other agent-bridge functions come from `sgiant-ai-agent-bridge`.
-  `resolveWidgetLabels` (use `widgetLabelOverrides`), `subscribeLiveSync`,
-  `readApplyRefusal`, `parseJsonDirective`, the UI-spec helpers, the manifest
-  names on the main entry (they are in `./manifest`), `PREFIX`,
-  `readSiteSettings`, `forgetSiteChats`, and the `fullscreenLabel` /
-  `exitFullscreenLabel` options are removed.
+- `isCurrentLocation(path)` is new: whether the page is already at that path,
+  query included, for a handler's "already there".
+- The main entry carries the API above and nothing else. What sgiant's own
+  hosts wire moved to `sgiant-ai-widget/internal`, which makes no
+  compatibility promise: `OPEN_ASSISTANT_EVENT`, `broadcastAiChange`,
+  `subscribeAiChange`, `genericProposalSummary`, `createSiteChatPreview`,
+  `CHROME_MARK`, `CHROME_LAUNCHER`, `readTokenRefusal`,
+  `gateNavigationTarget`, `WIDGET_LABELS_TR`, `WIDGET_OPTION_WORDS_TR` and
+  `SITE_SETTINGS_TIMEOUT_MS`. The script-tag global carries the main entry and
+  these.
+- `scanAiTargets` and the other agent-bridge functions (`clearHighlight`,
+  `isUiControlAction`, `isOperateAction`, `UI_CONTROL_ACTIONS`,
+  `OPERATE_ACTIONS`) come from `sgiant-ai-agent-bridge`; `./manifest` no longer
+  re-exports the bridge's `generateManifest`, `verifySurface`, `canAct`,
+  `hashManifest` and the rest.
+- The widget's own manifest names (`WIDGET_MANIFEST`, `WIDGET_TARGETS`,
+  `verifyWidgetSurface`, `hostTargetsOnly`, …) are only in `./manifest`, so
+  the script-tag global no longer carries them.
+- Removed: `STANDARD_ACTION_PATHS`, `resolveWidgetLabels` (use
+  `widgetLabelOverrides`), `subscribeLiveSync` and `LiveSyncOptions`,
+  `AiChangeEvent`, `readApplyRefusal` and `ApplyRefusal`, `parseJsonDirective`
+  and `ParsedDirective`, the UI-spec helpers and types (`normalizeUiSpec`,
+  `uiSpecMediaIds`, `KNOWN_UI_STATUSES`, `UI_SAY_ACTION`, `UiSpec`, …),
+  `PREFIX`, `readSiteSettings`, `forgetSiteChats`, `SiteSettings`,
+  `WIDGET_OPTION_WORDS`, `builtInLabels`, `builtInOptionWords`, and the
+  `fullscreenLabel` / `exitFullscreenLabel` options.
 
 ## About the `#123` references in the source
 

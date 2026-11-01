@@ -532,5 +532,3 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     getTransport: (): FrameTransport | null => transport,
   };
 }
-
-export type AdvancedView = ReturnType<typeof createAdvancedView>;
