@@ -3365,7 +3365,9 @@ export function createAiChatWidget(
   // Persistent status structure so the credits number can ANIMATE (a live
   // count-down after a turn / count-up after a top-up) instead of snapping.
   // The standing notice (#661): out of credits, or the assistant unavailable.
-  const noticeEl = el("div", `${PREFIX}-notice`);
+  // Its own class: `-notice` is the token notice in the log, and until 2.0.1
+  // the two wore each other's styles.
+  const noticeEl = el("div", `${PREFIX}-top-notice`);
   noticeEl.hidden = true;
   noticeEl.setAttribute("role", "status");
   async function refreshNotice(): Promise<void> {
@@ -3381,11 +3383,11 @@ export function createAiChatWidget(
       noticeEl.hidden = true;
       return;
     }
-    const title = el("div", `${PREFIX}-notice-title`);
+    const title = el("div", `${PREFIX}-top-notice-title`);
     title.textContent = n.title;
     noticeEl.append(title);
     if (n.body) {
-      const body = el("div", `${PREFIX}-notice-body`);
+      const body = el("div", `${PREFIX}-top-notice-body`);
       body.textContent = n.body;
       noticeEl.append(body);
     }
@@ -3393,7 +3395,7 @@ export function createAiChatWidget(
     const href = n.actionHref;
     const external = typeof href === "string" && /^https?:\/\//i.test(href);
     if (n.actionLabel && typeof href === "string" && (external || isSafeRelPath(href))) {
-      const a = el("a", `${PREFIX}-notice-action`) as HTMLAnchorElement;
+      const a = el("a", `${PREFIX}-top-notice-action`) as HTMLAnchorElement;
       a.href = href;
       a.textContent = n.actionLabel;
       if (external) {
