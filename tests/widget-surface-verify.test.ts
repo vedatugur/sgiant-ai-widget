@@ -27,7 +27,7 @@ import {
   splitSurfaceTargets,
   hostTargetsOnly,
   WIDGET_TARGET_DECLARATIONS,
-} from "../dist/index.js";
+} from "../dist/manifest.js";
 // The manifest nests controls under views, so the ids come from the bridge's
 // own flattener rather than a hand-walk that would drift from the shape.
 import { flattenControls } from "sgiant-ai-agent-bridge/manifest";

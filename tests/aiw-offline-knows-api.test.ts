@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * #346 — the launcher's offline state only knew about the DEVICE.
@@ -20,7 +21,7 @@ import { readFileSync } from "node:fs";
  * be answered fine.
  */
 
-const src = readFileSync("src/index.ts", "utf8");
+const src = widgetSrc;
 
 /** Run the real `noteApiResult` verdict logic against a status. */
 function verdict(result: "ok" | "unreachable" | number): boolean {

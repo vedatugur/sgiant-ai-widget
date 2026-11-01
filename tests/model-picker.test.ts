@@ -13,6 +13,7 @@ import {
   WIDGET_CONDITIONAL_TARGETS,
   WIDGET_TARGETS,
 } from "../dist/widget-manifest.js";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * THE MODEL PICKER SENDS WHAT THE PERSON CHOSE, FROM A LIST THE HOST OWNS
@@ -77,7 +78,7 @@ test("the module has no idea which vendors exist", () => {
 });
 
 test("the chosen id rides every turn, after extraBody, and only when there is a picker", () => {
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = widgetSrc;
   assert.match(
     src,
     /\.\.\.\(opts\.extraBody \?\? \{\}\),\s*\.\.\.\(picker \? \{ model: picker\.value\(\) \} : \{\}\),/
@@ -94,7 +95,7 @@ test("the chosen id rides every turn, after extraBody, and only when there is a 
 });
 
 test("the pill is a declared, conditional control, with words for its chrome", () => {
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = widgetSrc;
   assert.match(
     src,
     /picker\.button\.setAttribute\("data-ai-target", WIDGET_TARGETS\.model\)/

@@ -256,7 +256,7 @@ export function createJobCards(ctx: JobCardContext): JobCards {
       try {
         for (;;) {
           if (Date.now() - started >= JOB_POLL_MAX_MS) {
-            // Give up WATCHING, not on the job: it is still running server-ctx.side,
+            // Give up WATCHING, not on the job: it is still running server-side,
             // and saying so is more honest than a spinner that never resolves.
             const stalled = jobCards.get(key);
             if (stalled) {

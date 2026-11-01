@@ -5,6 +5,7 @@ import { join } from "node:path";
 // From the BUILD: src/ uses extensionless imports node cannot resolve.
 import { buildThreadReplay } from "../dist/replay.js";
 import { isHttpUrl } from "../dist/safe-url.js";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * AN APPLY CARD OUTLIVES ITS STREAM (sgiant-platform#503).
@@ -213,10 +214,7 @@ test("an outcome link must be http(s): it is kept and replayed, so a script URL 
 // ─── the live paths ─────────────────────────────────────────────────────────
 // No DOM here, so these read the code the way frame-contract-documented does.
 
-const src = readFileSync(
-  join(import.meta.dirname, "..", "src", "index.ts"),
-  "utf8"
-);
+const src = widgetSrc;
 const cards = readFileSync(
   join(import.meta.dirname, "..", "src", "decision-cards.ts"),
   "utf8"

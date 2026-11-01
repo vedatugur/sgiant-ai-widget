@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeWidgetSpec, widgetHasContent } from "../dist/specs.js";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * TWO DEFECTS FROM ONE CONVERSATION (sgiant-platform#483, #487).
@@ -62,7 +63,7 @@ test("explicit columns/rows win over the payload", () => {
 // ─── #483 item 5: no duplicate turn while one is still running ──────────────
 // The widget has no DOM harness; these pin the two lines that decide it, and
 // the behaviour was checked in a browser against a stub that drops the stream.
-const SRC = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+const SRC = widgetSrc;
 
 test("the stream-lost card offers no 'Try again' — the turn is still running", () => {
   assert.match(SRC, /showError\(L\("streamLostRecovering"\), \{ retry: false \}\)/);

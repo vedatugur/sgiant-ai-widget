@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
  * is not a dangling reference. So the pairing is what this asserts.
  */
 
-const SRC = "src/index.ts";
+const SRC = "src/widget.ts";
 
 /**
  * WHERE THIS LOOKS CHANGED WITH #320, AND THE TEST CAUGHT IT ITSELF.

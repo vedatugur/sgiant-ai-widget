@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkWidgetTarget, WIDGET_TARGETS } from "../dist/index.js";
+import { checkWidgetTarget, WIDGET_TARGETS } from "../dist/manifest.js";
 import { createHostActions } from "../dist/host-actions.js";
 import type {
   ManifestRoot,

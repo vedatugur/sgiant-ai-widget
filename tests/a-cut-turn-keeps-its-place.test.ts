@@ -313,7 +313,7 @@ test("the saved list ends with the question: it is not drawn a second time", () 
 });
 
 test("the window asks before it adds the question it remembers", () => {
-  const code = readFileSync("src/index.ts", "utf8");
+  const code = readFileSync("src/widget.ts", "utf8");
   const fn = code.slice(code.indexOf("function withPendingQuestion("));
   assert.match(
     fn.slice(0, fn.indexOf("let lastMsg")),

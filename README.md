@@ -351,9 +351,7 @@ own. For a translator that is not i18next, pass `{ t, exists }`, where
 `exists(key)` says whether the current language's file holds the key.
 `widgetLabelOverrides(t)` alone still works, but it cannot tell a key the
 page's language lacks from one it holds when the translator falls back
-(i18next's `fallbackLng: "en"`): it hands that key's English to a Turkish page. `resolveWidgetLabels`
-is deprecated: it hands over every label, defaulted to English, and a copy wins
-over the window's own sentence even after the window rewords it.
+(i18next's `fallbackLng: "en"`): it hands that key's English to a Turkish page.
 
 A label that says `{name}` is given the window's own name (`title`), so a
 sentence about what the assistant does names your assistant.
@@ -517,13 +515,79 @@ flags API (`POST /admin/ai/conversations/:kind/:threadId/flag` for staff
 surfaces, `POST /public/ai/threads/:threadId/flag` for the visitor widget).
 Omit it and the control does not render.
 
+## In-app actions
+
+The assistant can end a reply with `[[navigate:{"path":"/team"}]]` or
+`[[action:{"name":"…"}]]`; the window draws a button, and pressing it calls
+your `onWidgetAction(name, data)`. `createHostActions` builds that function:
+
+```js
+import { createAiChatWidget, createHostActions } from "sgiant-ai-widget";
+
+createAiChatWidget({
+  // …
+  onWidgetAction: createHostActions({
+    navigate: (path) => router.push(path),
+    // Only these pages can be opened: anything else is refused out loud.
+    pages: [{ path: "/team" }, { path: "/settings" }],
+    // Your own named actions.
+    handlers: { "open-orders": () => (router.push("/orders"), "Opened orders") },
+  }),
+  // Actions that only open a view run without a confirm when auto-navigate
+  // is on. Never list one that spends or changes anything.
+  navigationActions: ["open-orders"],
+});
+```
+
+The window runs `navigate` and the on-page controls (highlight, scroll-to,
+focus-field, fill, click) itself. Every other name must be in `handlers`, or
+the button says it could not do it.
+
 ## The surface manifest (`sgiant-ai-widget/manifest`)
 
-An opt-in entry point re-exporting the bridge's `generateManifest`,
-`verifySurface`, `canAct` and `hashManifest`. It is separate on purpose: the
-core is one runtime dependency with no React, and a host that never generates
-or verifies a manifest should pay nothing for the machinery. Importing the
-main entry pulls none of it.
+The window's own half of the manifest contract: its manifest, the ids it
+stamps, a check of both against the live panel, and `hostTargetsOnly` to keep
+its controls apart from your page's in a scan. Separate on purpose: a host that
+never verifies a manifest pays nothing for it. The generator and verifier for
+YOUR page (`generateManifest`, `verifySurface`, `canAct`, `hashManifest`) are
+`sgiant-ai-agent-bridge/manifest`'s; import them from there.
+
+## Upgrading to 2.0
+
+- The window no longer has built-in named actions. `open-dashboards`,
+  `open-dashboard-builder`, `open-billing`, `open-assets` and `show-assets`
+  were one product's pages; pass your own through `handlers`. The
+  `standardActions`, `showAssets` and `accountId` options of
+  `createHostActions` are gone; `resolvePath` (where a path really lands, for
+  "already there") replaces `accountId`.
+- `isNavigationAction(name)` is true only for `navigate`; name your own with
+  the window's `navigationActions`.
+- `isCurrentLocation(path)` is new: whether the page is already at that path,
+  query included, for a handler's "already there".
+- The main entry carries the API above and nothing else. What sgiant's own
+  hosts wire moved to `sgiant-ai-widget/internal`, which makes no
+  compatibility promise: `OPEN_ASSISTANT_EVENT`, `broadcastAiChange`,
+  `subscribeAiChange`, `genericProposalSummary`, `createSiteChatPreview`,
+  `CHROME_MARK`, `CHROME_LAUNCHER`, `readTokenRefusal`,
+  `gateNavigationTarget`, `WIDGET_LABELS_TR`, `WIDGET_OPTION_WORDS_TR` and
+  `SITE_SETTINGS_TIMEOUT_MS`. The script-tag global carries the main entry and
+  these.
+- `scanAiTargets` and the other agent-bridge functions (`clearHighlight`,
+  `isUiControlAction`, `isOperateAction`, `UI_CONTROL_ACTIONS`,
+  `OPERATE_ACTIONS`) come from `sgiant-ai-agent-bridge`; `./manifest` no longer
+  re-exports the bridge's `generateManifest`, `verifySurface`, `canAct`,
+  `hashManifest` and the rest.
+- The widget's own manifest names (`WIDGET_MANIFEST`, `WIDGET_TARGETS`,
+  `verifyWidgetSurface`, `hostTargetsOnly`, …) are only in `./manifest`, so
+  the script-tag global no longer carries them.
+- Removed: `STANDARD_ACTION_PATHS`, `resolveWidgetLabels` (use
+  `widgetLabelOverrides`), `subscribeLiveSync` and `LiveSyncOptions`,
+  `AiChangeEvent`, `readApplyRefusal` and `ApplyRefusal`, `parseJsonDirective`
+  and `ParsedDirective`, the UI-spec helpers and types (`normalizeUiSpec`,
+  `uiSpecMediaIds`, `KNOWN_UI_STATUSES`, `UI_SAY_ACTION`, `UiSpec`, …),
+  `PREFIX`, `readSiteSettings`, `forgetSiteChats`, `SiteSettings`,
+  `WIDGET_OPTION_WORDS`, `builtInLabels`, `builtInOptionWords`, and the
+  `fullscreenLabel` / `exitFullscreenLabel` options.
 
 ## About the `#123` references in the source
 

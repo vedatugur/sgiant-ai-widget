@@ -138,7 +138,7 @@ it("gives every copy of the host's mark unique SVG ids", () => {
   //
   // This asserts the WIRING, because that is the regression — a third place
   // that renders the mark, added later, without the rewrite.
-  const src = readFileSync("src/index.ts", "utf8");
+  const src = readFileSync("src/widget.ts", "utf8");
 
   assert.match(
     src,

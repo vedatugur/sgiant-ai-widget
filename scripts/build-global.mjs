@@ -31,7 +31,7 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url))
  * paying for charts it never draws.
  */
 const TARGETS = [
-  { entry: "src/index.ts", out: `dist/${pkg.name}.global.js`, global: "SgiantAiWidget" },
+  { entry: "src/global.ts", out: `dist/${pkg.name}.global.js`, global: "SgiantAiWidget" },
   {
     entry: "src/charts.ts",
     out: `dist/${pkg.name}-charts.global.js`,

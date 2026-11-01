@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { buildThreadReplay } from "../dist/replay.js";
 import { WIDGET_LABELS } from "../dist/labels.js";
 import { WIDGET_LABELS_TR } from "../dist/labels-tr.js";
+import { widgetSrc } from "./aiw-source.ts";
 
 /**
  * sgiant-platform#661. Web search needs no switch; what it costs is said
@@ -15,7 +16,7 @@ import { WIDGET_LABELS_TR } from "../dist/labels-tr.js";
  */
 
 const ROOT = join(import.meta.dirname, "..");
-const src = readFileSync(join(ROOT, "src/index.ts"), "utf8");
+const src = widgetSrc;
 const T = (hms: string) => `2026-10-25T${hms}Z`;
 
 test("a reopened thread draws the searches under the reply they belong to", () => {
