@@ -178,9 +178,21 @@ async function drawSiteChat(
   // Anything kept under another key is from before this site's key changed.
   forgetSiteChats(opts.siteKey);
   const forms = siteFormAddresses(opts.settingsUrl);
+  // THE LANGUAGE THE WINDOW IS DRAWN IN, sent with every turn
+  // (sgiant-platform#649): the api's own sentences (the site is switched
+  // off, busy, the provider failed) follow it, and not the browser's
+  // language, so an English page never shows one Turkish sentence. Chosen
+  // exactly as the window's words are (`siteWindow`, `builtInLabels`).
+  const language =
+    builtInLabels(
+      site.language ?? opts.locale,
+      typeof document !== "undefined" ? document.documentElement?.lang : null
+    ) === WIDGET_LABELS_TR
+      ? "tr"
+      : "en";
   return createAiChatWidget({
     endpoint: opts.endpoint,
-    extraBody: { siteKey: opts.siteKey },
+    extraBody: { siteKey: opts.siteKey, language },
     siteChat: true,
     // The visitor's conversation follows them from page to page, in the tab
     // only: see `scoped` in createAiChatWidget.

@@ -110,6 +110,7 @@ const RUN = async (
   placeholder: string;
   accent: string;
   sentKey: unknown;
+  sentLanguage: unknown;
   stored: number;
 }> => {
   const g = globalThis as any;
@@ -118,6 +119,7 @@ const RUN = async (
   if (opts.lang) document.documentElement.lang = opts.lang;
   const asked: Array<{ url: string; credentials: string | undefined }> = [];
   let sentKey: unknown = null;
+  let sentLanguage: unknown = null;
   g.fetch = (input: any, init?: any) => {
     const url = typeof input === "string" ? input : input.url;
     if (String(url).includes("/site-settings")) {
@@ -141,6 +143,7 @@ const RUN = async (
       );
     }
     sentKey = JSON.parse(init?.body ?? "{}").siteKey;
+    sentLanguage = JSON.parse(init?.body ?? "{}").language;
     return Promise.resolve(
       new Response(
         JSON.stringify({ type: "text", d: "ok" }) + "\n" + JSON.stringify({ type: "done" }) + "\n",
@@ -211,6 +214,7 @@ const RUN = async (
     placeholder,
     accent,
     sentKey,
+    sentLanguage,
     stored: localStorage.length,
   };
   handle?.destroy();
@@ -942,6 +946,21 @@ test(
         // A page in a language the window has no words for: English.
         for (const lang of ["de", "ru", "fr", "zh-CN"])
           assert.equal(await placeholder(null, { locale: lang, lang }), english);
+      });
+
+      await t.test("each question says the window's language, so the api's own sentences match it (sgiant-platform#649)", async () => {
+        // Blue Bay, 16 Nov 2026: an English page, a browser set to Turkish,
+        // and the api's "not available" sentence came in Turkish.
+        const sent = async (language: unknown, opts: { locale?: string; lang?: string }) =>
+          (await run(page, { ...YES, language }, opts)).sentLanguage;
+        assert.equal(await sent(null, { lang: "en" }), "en");
+        assert.equal(await sent(null, { lang: "tr-TR" }), "tr");
+        // The same order as the window's words: the site, the call, the page.
+        assert.equal(await sent("tr", { locale: "en", lang: "en" }), "tr");
+        assert.equal(await sent("en", { locale: "tr", lang: "tr" }), "en");
+        assert.equal(await sent(null, { locale: "tr", lang: "en" }), "tr");
+        // A page the window has no words for is drawn in English, and says so.
+        assert.equal(await sent(null, { locale: "de", lang: "de" }), "en");
       });
     });
   }
