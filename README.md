@@ -121,7 +121,9 @@ Enter sends. Shift+Enter is a new line. Enter in the middle of composing a
 letter with an input method sends nothing. A picture pasted into the box is
 an attachment, where the host takes attachments.
 
-Nothing here is an option: there is one layout at every width.
+Nothing here is an option: there is one layout at every width. On the
+public lane (`createSiteChat`, or an endpoint of `/public/ai/chat`) the box
+takes at most 4,000 characters, the public chat's own limit.
 
 ## Attachments
 
@@ -561,6 +563,12 @@ the button says it could not do it.
   the dependency on `sgiant-ai-agent-bridge`. The package has no
   dependencies. The `advancedOrigin` option and the `manifestRoot` option of
   `createHostActions` are gone.
+- The public window's box takes at most 4,000 characters
+  (`PUBLIC_CHAT_MESSAGE_MAX_CHARS` in `src/limits.ts`, the public chat's own
+  limit), so a visitor is stopped while typing rather than told after
+  sending (sgiant-platform#709). Only the public lane: a window drawn by
+  `createSiteChat`, or one whose endpoint is `/public/ai/chat`. A signed-in
+  or staff window has no limit in the box.
 
 ## Upgrading to 2.0
 
