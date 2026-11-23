@@ -1,5 +1,9 @@
-import { WIDGET_TARGET_DECLARATIONS as widgetTargets } from "./widget-manifest.js";
 import { parseJsonDirective } from "./directive";
+import {
+  COMPONENTS_PER_REPLY,
+  PARTS_VERSION,
+  partFrameAsTag,
+} from "./parts/window-parts";
 import { PREFIX } from "./prefix";
 import { readTokenRefusal, type TokenRefusal } from "./token-refusal";
 import { addMsg, el, maskMarkdown, parseLine } from "./dom";
@@ -17,7 +21,6 @@ import type { WidgetAtt, Uploads } from "./uploads";
 import type { ModelPicker } from "./model-picker";
 import type { createUiRenderers } from "./ui-render";
 import type { createDecisionCards } from "./decision-cards";
-import type { FrameTransport } from "sgiant-ai-agent-bridge";
 import type {
   AiChatWidgetOptions,
   DirectiveRenderer,
@@ -85,14 +88,6 @@ export interface TurnState {
   inflight: Inflight | null;
   waiting: Waiting | null;
   knownNavTargets: { path?: string; title?: string; action?: string }[];
-  knownUiTargets: {
-    id?: string;
-    label?: string;
-    purpose?: string;
-    mutates?: boolean;
-    severity?: "reversible" | "destructive";
-    undeclared?: boolean;
-  }[];
   lastUserContent: string;
   quotaGranted: number;
   quotaRemaining: number | null;
@@ -127,7 +122,6 @@ export interface TurnStreamContext {
   launcher: Required<LauncherState>;
   picker: ModelPicker | null;
   uploads: Uploads;
-  getTransport: () => FrameTransport | null;
   // The widget's collections, by reference.
   history: StoredMsg[];
   pendingThreads: Set<string>;
@@ -185,6 +179,7 @@ export interface TurnStreamContext {
   renderProposal: DecisionCards["renderProposal"];
   renderWidget: UiRenderers["renderWidget"];
   renderUiCard: UiRenderers["renderUiCard"];
+  renderComponent: UiRenderers["renderComponent"];
   renderPreview: UiRenderers["renderPreview"];
   renderServerWidget: UiRenderers["renderServerWidget"];
 }
@@ -209,7 +204,6 @@ export function createTurnStream(ctx: TurnStreamContext) {
     launcher,
     picker,
     uploads,
-    getTransport,
     history,
     pendingThreads,
     qualityAsked,
@@ -245,6 +239,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     renderProposal,
     renderWidget,
     renderUiCard,
+    renderComponent,
     renderPreview,
     renderServerWidget,
   } = ctx;
@@ -442,6 +437,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
     scrollDown(true);
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
+    // At most four of the app's screens per reply, as a reopened
+    // conversation draws (sgiant-platform#703, QA).
+    let componentsThisTurn = 0;
     let producedAny = false;
     /**
      * Write proposals seen this turn, rendered only AFTER the reply text.
@@ -547,6 +545,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
         tag === "widget" ||
         tag === "ui" ||
         tag === "preview" ||
+        tag === "component" ||
         customRenderers[tag]
       )
         return "now";
@@ -594,6 +593,11 @@ export function createTurnStream(ctx: TurnStreamContext) {
       }
       if (tag === "ui") {
         renderUiCard(spec);
+        return;
+      }
+      if (tag === "component") {
+        if (componentsThisTurn < COMPONENTS_PER_REPLY) renderComponent(spec);
+        componentsThisTurn += 1;
         return;
       }
       const p = spec as PreviewSpec;
@@ -696,51 +700,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
       // The held question is on its way: it is kept for a reload from here.
       saveState();
       const baseCtx = opts.getContext ? await opts.getContext() : undefined;
-      // In advanced view the controllable page is the FRAME, not the parent
-      // shell — so the on-page targets (and the current path) come from the
-      // frame's agent, overriding whatever the host scanned locally.
-      const transport = getTransport();
-      const pageContext =
-        st.advanced && transport && baseCtx && typeof baseCtx === "object"
-          ? {
-              ...(baseCtx as Record<string, unknown>),
-              path: transport.getPath() ?? (baseCtx as { path?: string }).path,
-              uiTargets: transport.getTargets(),
-            }
-          : baseCtx;
-      // THE PANEL DECLARES ITSELF.
-      //
-      // Hosts send the PAGE's controls (`hostTargetsOnly`), because a raw
-      // `scanAiTargets` mixes the panel's own buttons in with them: "close"
-      // then means two things on two surfaces, and the scan's cap lets the
-      // panel push the page's controls out of the list silently.
-      //
-      // But excluding them without offering them elsewhere would leave the
-      // assistant unable to reach its own history, menu or composer at all —
-      // and sgiant-platform#356 exists partly to make that reachable ("it can
-      // open the assets page; it cannot show you your last three
-      // conversations"). Measured before the change: zero calls at a
-      // widget-stamped target in thirty days, so nothing regressed — the
-      // capability never existed.
-      //
-      // So the panel sends its OWN manifest rather than relying on being
-      // scraped off the page. Declared, not derived, which is what lets
-      // `mutates` be true: opening history changes nothing, starting a new chat
-      // abandons what is on screen, and a DOM walk cannot tell those apart.
-      const ctxWithPanel =
-        pageContext && typeof pageContext === "object"
-          ? { ...(pageContext as Record<string, unknown>), widgetTargets }
-          : pageContext;
+      // The page context the host built, as it is (sgiant-platform#703):
+      // no control list and no panel manifest ride on it any more.
+      const pageContext = baseCtx;
+      const ctxWithPanel = pageContext;
       // Cache this turn's navigable pages for the #111 prose-nav fallback below.
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
       if (Array.isArray(ctxTargets)) st.knownNavTargets = ctxTargets;
-      // Same for the controls, and from the SAME context object the turn was
-      // built from — so the confirm card describes the page the model was
-      // actually looking at, not whatever the page has become since.
-      const ctxUi = (pageContext as { uiTargets?: unknown } | undefined)
-        ?.uiTargets;
-      if (Array.isArray(ctxUi)) st.knownUiTargets = ctxUi;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -765,6 +732,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
           ...(atts.length ? { attachments: atts.map((a) => a.mediaId) } : {}),
           ...(fork?.parentId !== undefined ? { parentId: fork.parentId } : {}),
           ...(fork?.regenerate ? { regenerate: true } : {}),
+          // This window draws `part` frames (sgiant-platform#701). Without
+          // it the api sends each part as its tag in the text, as before.
+          partsVersion: PARTS_VERSION,
         }),
       });
       // What this status proves about the api, for the launcher's offline state
@@ -829,6 +799,26 @@ export function createTurnStream(ctx: TurnStreamContext) {
               // real markdown still renders once at the end of each segment.
               processStreamDisplay();
               scrollDown();
+            }
+            // A PART THE ASSISTANT DREW (sgiant-platform#701): checked against
+            // this window's copy of the parts dictionary, then written into
+            // the reply as its tag, so it is drawn by the same path as a tag
+            // an older api sends, here and when the conversation is reopened.
+            if (frame.type === "part" && live()) {
+              const drawn = partFrameAsTag(
+                frame.part,
+                (frame as { spec?: unknown }).spec,
+              );
+              if ("tag" in drawn) {
+                assistantRaw += `\n\n${drawn.tag}\n\n`;
+                producedAny = true;
+                processStreamDisplay();
+                scrollDown();
+              } else
+                warnOnce(
+                  `part-frame-${frame.part ?? ""}`,
+                  `sgiant-ai-widget: a \`part\` frame was not drawn: ${drawn.problems.join("; ")}`,
+                );
             }
             // Inline data widget (render_chart). Flush the current text first so
             // the chart lands AFTER it, in order — not below the whole reply.

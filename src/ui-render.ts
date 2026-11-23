@@ -1,6 +1,6 @@
 import { el, wrapPreviewHtml } from "./dom";
 import { PREFIX } from "./prefix";
-import type { ActionSpec, ChipsSpec, PreviewSpec, WidgetSpec } from "./specs";
+import type { ChipsSpec, PreviewSpec, WidgetSpec } from "./specs";
 import {
   normalizeWidgetSpec,
   widgetHasContent,
@@ -20,6 +20,8 @@ import {
 // nothing changed.
 import type { AiChatWidgetOptions, WidgetJobView } from "./index";
 import type { WidgetLabels } from "./labels";
+import { checkComponent } from "./parts/window-parts";
+import { WIDGET_LABELS_TR, builtInLabels } from "./labels-tr";
 
 /**
  * Rendering for server-driven UI: the `ui` spec and the inline data widgets.
@@ -47,15 +49,6 @@ import type { WidgetLabels } from "./labels";
  * for no reason other than living in the same file, and are now unreachable
  * from it — which is most of what this split is for.
  */
-/** One control as the host described it — see `describeTargets` host-side. */
-export interface TargetDescription {
-  label?: string;
-  purpose?: string;
-  mutates?: boolean;
-  severity?: "reversible" | "irreversible" | "destructive";
-  /** The page carries this id and no manifest describes it. */
-  undeclared?: boolean;
-}
 
 export interface UiRenderCtx {
   /** Label lookup; `L("prev")`. Host translation falling back to English. */
@@ -74,18 +67,11 @@ export interface UiRenderCtx {
   ) => Promise<void>;
   /** Teardown callbacks for renderers holding subscriptions or timers. */
   richDisposers: Array<() => void>;
-  /**
-   * What the host says about one on-page control, by `data-ai-target` id.
-   *
-   * THE CONFIRM CARD IS THE SECURITY BOUNDARY: the user approves the SENTENCE,
-   * not the tool call. So the sentence has to be true and legible, and until
-   * this existed it was neither — a purge that permanently deletes a
-   * connection's whole ingest history asked "Click
-   * admin-gbp-purge-a1b2c3 for you?", which names no consequence and is not
-   * even English. Someone reading that has been shown a slug and asked to
-   * take responsibility for it.
-   */
-  describeTarget?: (id: string) => TargetDescription | undefined;
+  /** Open a page beside the chat (the right pane), or as the host opens
+   *  pages where the window cannot split (sgiant-platform#703). */
+  openOnTheRight: (path: string) => Promise<string | void>;
+  /** Whether the window can show a page beside the chat right now. */
+  canSplit: () => boolean;
   /** Hand an action to the host app. */
   dispatchAction: (
     name: string,
@@ -124,11 +110,12 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     send,
     richDisposers,
     dispatchAction,
+    openOnTheRight,
+    canSplit,
     subscribeJob,
     showPaneWidget,
     input,
     opts,
-    describeTarget,
   } = ctx;
 
   /** Render an inline data widget (stat / kpis / list / table) in the log. */
@@ -766,16 +753,39 @@ export function createUiRenderers(ctx: UiRenderCtx) {
   }
 
   /**
-   * Default confirm copy for a state-changing UI action the model didn't caption.
-   * Thin wrapper: the sentence itself is `confirmSentence`, which is pure and
-   * therefore actually testable.
+   * ONE OF THE APP'S OWN SCREENS (sgiant-platform#703): a short card in
+   * the chat, its title and one button, and the page itself beside it.
+   *
+   * The owner's decision of 2026-11-23: the chat is not where a report is
+   * read. The card names it ("October report", or the component's own name)
+   * and its button opens the page in the window's right pane, where it
+   * fetches its own data with the host's session. A window too narrow to
+   * split opens the page as the host opens pages. Nothing opens by itself
+   * when the card arrives; only the button does. A spec this window does
+   * not know draws nothing.
    */
-  function operateConfirmText(spec: ActionSpec): string {
-    const id = spec.data?.target ?? "";
-    return confirmSentence(
-      spec,
-      id && describeTarget ? describeTarget(id) : undefined,
-    );
+  function renderComponent(raw: unknown): void {
+    const c = checkComponent(raw);
+    if (!c.ok) return;
+    const card = el("div", `${PREFIX}-component`);
+    card.dataset.component = c.spec.name;
+    const title = el("div", `${PREFIX}-component-title`);
+    title.textContent =
+      c.spec.label ??
+      (builtInLabels(opts.locale, document.documentElement?.lang) ===
+      WIDGET_LABELS_TR
+        ? c.title.tr
+        : c.title.en);
+    const open = el("button", `${PREFIX}-component-open`) as HTMLButtonElement;
+    open.type = "button";
+    const beside = canSplit();
+    open.textContent = L(beside ? "componentOpenRight" : "componentOpenPage");
+    open.addEventListener("click", () => {
+      void Promise.resolve(openOnTheRight(c.path)).catch(() => undefined);
+    });
+    card.append(title, open);
+    log.appendChild(card);
+    scrollDown(true);
   }
 
   return {
@@ -784,78 +794,6 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     renderServerWidget,
     renderChips,
     renderPreview,
-    operateConfirmText,
+    renderComponent,
   };
-}
-
-/**
- * THE SENTENCE THE USER APPROVES.
- *
- * The confirm card is the security boundary — a person approves this sentence,
- * not a tool call — so it has to be true and legible. Until #356 it was neither:
- * a purge that permanently deletes a connection's entire ingest history asked
- * "Click admin-gbp-purge-a1b2c3 for you?", which names no consequence and is
- * not even English. Someone reading that has been shown a slug and asked to take
- * responsibility for it.
- *
- * FRICTION IS ONLY EVER ADDED HERE, NEVER REMOVED. A `mutates: false` does not
- * skip the confirm: clicking something on a person's behalf is itself an act,
- * and a manifest describes a page rather than granting permission to use it. So
- * a description can make this louder and can never make it silent — the rule
- * `effectiveMutates` follows one level down.
- *
- * Pure on purpose: it takes the description rather than looking it up, so the
- * wording can be tested without a DOM, a host or a network.
- */
-export function confirmSentence(
-  spec: ActionSpec,
-  info?: TargetDescription,
-): string {
-  const id = spec.data?.target ?? "";
-  // Prefer what the user can actually read on screen over the slug.
-  const name = info?.label ? `\u201c${info.label}\u201d` : id || "this control";
-  const base =
-    spec.name === "fill"
-      ? fillQuestion(name, spec.data?.value ?? "")
-      : `Click ${name} for you?`;
-  if (!info) return base;
-  if (info.undeclared) {
-    // Say the honest thing. A bare "Click X for you?" asks for approval while
-    // quietly implying that someone has vouched for it.
-    return `${base} Nobody has described this control, so I cannot tell you what it does.`;
-  }
-  if (info.severity === "destructive") {
-    // The one case where the purpose is not a nicety: these are written to say
-    // what is LOST, e.g. "PERMANENTLY DELETES everything ingested from that
-    // connection".
-    return info.purpose
-      ? `${base} This deletes something and cannot be undone \u2014 ${lowerFirst(info.purpose)}`
-      : `${base} This deletes something and cannot be undone.`;
-  }
-  if (info.severity === "irreversible") {
-    // DELIBERATELY A DIFFERENT SENTENCE, and that is the entire reason the word
-    // exists. Nothing is removed here — a notification is sent, a link is
-    // opened — so warning that it "deletes something" would be false, and
-    // warning nothing at all would hide the property that matters: it has left,
-    // and we cannot call it back.
-    return info.purpose
-      ? `${base} This cannot be taken back \u2014 ${lowerFirst(info.purpose)}`
-      : `${base} This cannot be taken back.`;
-  }
-  if (info.mutates && info.purpose) return `${base} ${info.purpose}`;
-  return base;
-}
-
-function fillQuestion(name: string, value: string): string {
-  const short = value.length > 40 ? `${value.slice(0, 40)}\u2026` : value;
-  return short
-    ? `Type \u201c${short}\u201d into ${name}?`
-    : `Fill ${name} for you?`;
-}
-
-/** Join a sentence onto a clause without a capital in the middle of it. An
- *  ALL-CAPS opening is deliberate emphasis in these purposes \u2014 leave it. */
-function lowerFirst(s: string): string {
-  if (/^[A-Z]{2,}/.test(s)) return s;
-  return s.charAt(0).toLowerCase() + s.slice(1);
 }

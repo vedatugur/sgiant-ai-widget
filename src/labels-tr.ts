@@ -21,6 +21,8 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   searchedWebFree: "Web'de aradı: {terms}",
   widgetSourceEstimate: "Tahmini — ölçülmüş veri değil",
   widgetSourceProvided: "Sizin verdiğiniz rakamlar",
+  componentOpenRight: "Sağda aç",
+  componentOpenPage: "Sayfayı aç",
   questionConfirm: "Gönder",
   questionPlaceholder: "Cevabınızı yazın…",
   questionSendFailed: "Cevabınız gönderilemedi — mevcut yanıt bitene kadar bekleyin, sonra tekrar deneyin.",

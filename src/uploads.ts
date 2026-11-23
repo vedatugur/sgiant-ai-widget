@@ -6,7 +6,6 @@ import {
   CHAT_ATTACHMENT_MAX_BYTES,
   CHAT_ATTACHMENT_MAX_COUNT,
 } from "./limits";
-import { WIDGET_TARGETS } from "./widget-manifest.js";
 import type { AiChatWidgetOptions } from "./widget";
 import type { WidgetLabels } from "./labels";
 
@@ -182,7 +181,6 @@ export function createUploads(ctx: UploadsContext): Uploads {
     attachBtn.type = "button";
     attachBtn.innerHTML = ICON_ATTACH;
     attachBtn.setAttribute("aria-label", L("attachFile"));
-    attachBtn.setAttribute("data-ai-target", WIDGET_TARGETS.attach);
     attachBtn.title = L("attachFileHint");
     attachBtn.addEventListener("click", () => fileInput!.click());
     // Paste-to-attach: a screenshot (or copied file) pasted into the composer

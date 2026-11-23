@@ -43,7 +43,6 @@
       <a href="./index.html">Quick start</a>
       <a href="./capabilities.html" aria-current="page">Capabilities</a>
       <a href="./charts.html">Charts</a>
-      <a href="./advanced.html">Advanced mode</a>
       <a href="./automation.html">Automation</a>
       <a href="./uploads.html">Attachments</a>
       <a href="./history.html">Past chats</a>
@@ -171,29 +170,17 @@
     </div>
 
     <div class="demo">
-      <h2>Advanced mode — the assistant driving your app</h2>
-      <p>Pass <code>getAdvancedUrl</code> and the header gains a control that
-        opens your own app beside the chat, in an iframe. The assistant can then
-        highlight, scroll to, focus, fill and click things in it — with the user
-        watching each action.</p>
-      <p>That is a separate package,
-        <a href="https://www.npmjs.com/package/sgiant-ai-agent-bridge"><code>sgiant-ai-agent-bridge</code></a>:
-        <code>mountAiAgent()</code> runs <em>inside</em> your page and publishes
-        the controls you mark with <code>data-ai-target</code>; the widget drives
-        them from the parent. Selectors never cross the wire — only ids you
-        opted in.</p>
-      <pre><code>// in the widget host
-createAiChatWidget({ getAdvancedUrl: () =&gt; "/app" });
-
-// in the page being driven
-import { mountAiAgent } from "sgiant-ai-agent-bridge";
-mountAiAgent();                     // no-op unless framed
-
-&lt;button data-ai-target="save-profile"&gt;Save&lt;/button&gt;</code></pre>
-      <p class="note">Not demonstrated live on this page: it needs a second app
-        to drive, and a static example that framed itself would prove less than
-        the four lines above already say. The bridge's own README shows both
-        halves.</p>
+      <h2>The host app's own screens, beside the chat</h2>
+      <p>The assistant can point at one of your app's screens (a report, a
+        dashboard, a list) instead of describing it: it sends a
+        <code>component</code> part with a name, a few ids and a title. The
+        chat shows a short card with one button, <em>Open on the right</em>,
+        which opens that page in the advanced view's right pane, from
+        <code>getAdvancedUrl(path)</code>. On a phone-width window the page
+        opens as your app opens pages.</p>
+      <pre><code>createAiChatWidget({
+  getAdvancedUrl: (path) =&gt; `${path ?? location.pathname}?embed=ai`,
+});</code></pre>
     </div>
 
     <div class="demo">

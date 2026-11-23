@@ -7,9 +7,9 @@
  * labels. The rest moved:
  *   - sgiant's own hosts read the pieces only they use from `./internal`,
  *     which carries no compatibility promise;
- *   - the widget's own surface manifest is in `./manifest`;
- *   - the agent bridge's API (scanAiTargets, generateManifest, …) is imported
- *     from `sgiant-ai-agent-bridge` itself, not re-exported here.
+ *   - the widget's own surface manifest (`./manifest`) and the agent bridge
+ *     are gone since 3.0.0 (sgiant-platform#703): the assistant no longer
+ *     points at, fills in or presses controls on the page.
  */
 
 export {

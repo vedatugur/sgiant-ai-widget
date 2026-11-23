@@ -978,6 +978,13 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-preview-dots i:nth-child(3){background:#28c840}
 .${PREFIX}-preview-title{font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-muted)}
 .${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:var(--aiw-surface)}
+/* A card for one of the app's own screens (sgiant-platform#703): its title
+   and one button that opens the page beside the chat. 44px hit target.
+   flex:none so the log's column never shrinks it. */
+.${PREFIX}-component{flex:none;align-self:stretch;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+.${PREFIX}-component-title{flex:1 1 auto;min-width:0;font-size:var(--aiw-font-xs);font-weight:600;color:var(--aiw-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.${PREFIX}-component-open{flex:none;min-height:44px;padding:0 14px;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-xl);background:var(--aiw-surface-2);color:var(--aiw-text);font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer}
+.${PREFIX}-component-open:focus-visible{outline:2px solid var(--aiw-accent);outline-offset:2px}
 .${PREFIX}-proposal-media{display:block;width:100%;max-height:200px;object-fit:cover;border-radius:var(--aiw-radius-xl);border:1px solid var(--aiw-border);background:var(--aiw-surface-2)}
 .${PREFIX}-proposal-media-holder{position:relative}
 /* NOT --aiw-accent-contrast: this badge sits on 60% black over an image, not on

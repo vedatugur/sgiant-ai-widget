@@ -19,9 +19,18 @@
  * See [[project_unified_managed_ai]].
  */
 
-// The ids the widget stamps on ITSELF, so the manifest and the DOM cannot
-// disagree by typo — see widget-manifest.ts.
-import { WIDGET_TARGETS } from "./widget-manifest.js";
+import { composerMaxLength } from "./message-limit.js";
+
+/** The on-page control actions an api from before sgiant-platform#703 may
+ *  still send; this window draws nothing for them. */
+const CONTROL_ACTIONS_GONE: readonly string[] = [
+  "highlight",
+  "scroll-to",
+  "focus-field",
+  "fill",
+  "click",
+];
+
 import {
   readFlag,
   readItem,
@@ -43,7 +52,6 @@ import { isNavigationAction } from "./host-actions";
 import { parseJsonDirective } from "./directive";
 // The widget subscribes so a finished background job can refresh the transcript.
 import { subscribeAiChange } from "./ai-invalidation";
-import { isOperateAction } from "./ui-control";
 // applyProposal is not here, and is no longer in this PACKAGE at all (#306).
 // It maps ~15 sgiant tool names onto sgiant's own REST endpoints — the
 // opposite of embeddable — and was the only reason this package's import graph
@@ -779,9 +787,9 @@ export interface AiChatWidgetOptions {
   /**
    * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
    * full-screen split: the chat on the left and the app in an <iframe> on the
-   * right that AYCA can DRIVE (highlight / fill / click) via the postMessage
-   * agent bridge (`sgiant-ai-agent-bridge`). The framed page must mount the
-   * agent (`mountAiAgent`). `getAdvancedUrl()` returns the embed URL for the
+   * right (no longer driven: sgiant-platform#703). It is also where a
+   * component card's button opens its page. `getAdvancedUrl()` returns the
+   * embed URL for the
    * CURRENT page; `getAdvancedUrl(path)` returns it for an account-relative path
    * (used to navigate the frame). Omit to disable advanced view.
    */
@@ -803,9 +811,6 @@ export interface AiChatWidgetOptions {
     name: string,
     data: Record<string, string>
   ) => string | null;
-  /** Origin the embedded app is served from, for the agent bridge. Defaults to
-   *  the current origin (same-origin embedding). */
-  advancedOrigin?: string;
   /** Labels for the advanced-view controls (i18n; host supplies translations). */
   advancedLabel?: string;
   exitAdvancedLabel?: string;
@@ -1328,30 +1333,6 @@ export function createAiChatWidget(
     title?: string;
     action?: string;
   }> = [];
-  /**
-   * What the host said about this turn's on-page controls (#356).
-   *
-   * The host joins its live DOM scan against its surface manifests and sends
-   * the result as `uiTargets`; this keeps the last one so the CONFIRM CARD can
-   * name the control and its consequence. Without it the card asked "Click
-   * admin-gbp-purge-a1b2c3 for you?" — a slug, for an act that permanently
-   * deletes a connection's entire ingest history.
-   *
-   * Empty is the honest default: a host that describes nothing gets the old
-   * behaviour, minus any claim that someone vouched for the control.
-   */
-  let knownUiTargets: Array<{
-    id?: string;
-    label?: string;
-    purpose?: string;
-    mutates?: boolean;
-    severity?: "reversible" | "destructive";
-    undeclared?: boolean;
-  }> = [];
-  const describeTarget = (
-    id: string
-  ): (typeof knownUiTargets)[number] | undefined =>
-    knownUiTargets.find((t) => t.id === id);
   /** Read the catalogue straight from the host, for a navigation dispatched
    *  before this session has sent a turn (a chip in a restored transcript). */
   async function refreshNavTargets(): Promise<void> {
@@ -1529,7 +1510,6 @@ export function createAiChatWidget(
 
   const bubble = el("button", `${PREFIX}-bubble`);
   bubble.setAttribute("aria-label", L("openBubble", { name }));
-  bubble.setAttribute("data-ai-target", WIDGET_TARGETS.bubble);
   bubble.innerHTML =
     `<span class="${PREFIX}-bubble-av">${uniquifySvgIds(avatarInner)}</span>` +
     `<span class="${PREFIX}-bubble-label"></span>` +
@@ -1980,7 +1960,6 @@ export function createAiChatWidget(
   // On a visitor's page the button is named for what it does there.
   const newChatLabel = L(opts.siteChat ? "clearChat" : "newChat");
   newChatBtn.setAttribute("aria-label", newChatLabel);
-  newChatBtn.setAttribute("data-ai-target", WIDGET_TARGETS.newChat);
   newChatBtn.title = newChatLabel;
   newChatBtn.innerHTML =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
@@ -1990,7 +1969,6 @@ export function createAiChatWidget(
   if (opts.listThreads) {
     historyBtn = el("button", `${PREFIX}-icon`);
     historyBtn.setAttribute("aria-label", L("pastConversations"));
-    historyBtn.setAttribute("data-ai-target", WIDGET_TARGETS.history);
     historyBtn.title = L("history");
     historyBtn.innerHTML = ICON_HISTORY;
     hActions.appendChild(historyBtn);
@@ -2005,7 +1983,6 @@ export function createAiChatWidget(
   const moreWrap = el("div", `${PREFIX}-morewrap`);
   const moreBtn = el("button", `${PREFIX}-icon`) as HTMLButtonElement;
   moreBtn.setAttribute("aria-label", L("moreOptions"));
-  moreBtn.setAttribute("data-ai-target", WIDGET_TARGETS.more);
   moreBtn.setAttribute("aria-haspopup", "menu");
   moreBtn.setAttribute("aria-expanded", "false");
   moreBtn.title = L("more");
@@ -2331,7 +2308,6 @@ export function createAiChatWidget(
   if (expandable) {
     expandBtn = el("button", `${PREFIX}-icon ${PREFIX}-expand`);
     expandBtn.setAttribute("aria-label", L("expandChat"));
-    expandBtn.setAttribute("data-ai-target", WIDGET_TARGETS.expand);
     expandBtn.title = L("expand");
     expandBtn.innerHTML = ICON_EXPAND;
     hActions.appendChild(expandBtn);
@@ -2354,7 +2330,6 @@ export function createAiChatWidget(
   const closeBtn = el("button", `${PREFIX}-close`);
   closeBtn.innerHTML = "&times;";
   closeBtn.setAttribute("aria-label", L("closeChat"));
-  closeBtn.setAttribute("data-ai-target", WIDGET_TARGETS.close);
   hActions.appendChild(closeBtn);
   header.append(avatar, hName, hActions);
 
@@ -2590,7 +2565,7 @@ export function createAiChatWidget(
   function addAssistantMessage(text: string): HTMLElement {
     // Replay: render clean prose (directives the live turn already handled are
     // stripped) + an inert note per directive — never raw [[…]] code.
-    const { clean, notes, navs, uis, widgets } =
+    const { clean, notes, navs, uis, widgets, components } =
       stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
     applyAssistantRich(bubble, clean);
@@ -2602,6 +2577,10 @@ export function createAiChatWidget(
     // Composed cards are re-drawn in full — see the note in
     // stripDirectivesForReplay for why they are not flattened to a note.
     for (const u of uis) renderUiCard(u);
+    // The app's own screens are drawn again too (sgiant-platform#703): they
+    // fetch their own data, so a reopened conversation shows them as they
+    // are now, and nothing on them runs by itself.
+    for (const c of components) renderComponent(c);
     // …and so are data widgets, for the same reason (#395). Their rows are in
     // the spec, so this draws the table that was there and fetches nothing.
     for (const w of widgets) renderWidget(w);
@@ -3539,6 +3518,9 @@ export function createAiChatWidget(
   // line field could not hold.
   const input = el("textarea", `${PREFIX}-input`) as HTMLTextAreaElement;
   input.rows = 1;
+  // As long as the server takes, on the public window (#709, message-limit.ts).
+  const maxChars = composerMaxLength(opts);
+  if (maxChars) input.maxLength = maxChars;
   /** Lines the box grows to before it scrolls inside. */
   const COMPOSER_MAX_LINES = 5;
   /** The most of the window's height the box may take, when that is less. */
@@ -3614,7 +3596,6 @@ export function createAiChatWidget(
   // "Always ready" cue — an inviting prompt the assistant is waiting for input.
   input.placeholder = L("askAnything", { name });
   input.setAttribute("aria-label", L("messageAria", { name }));
-  input.setAttribute("data-ai-target", WIDGET_TARGETS.composer);
   input.autocomplete = "off";
   // Restore an unsent draft from a prior session; keep it in sync as they type.
   input.value = loadDraft();
@@ -3677,8 +3658,6 @@ export function createAiChatWidget(
           reason: L("modelPickerUnavailable"),
         })
       : null);
-  if (picker)
-    picker.button.setAttribute("data-ai-target", WIDGET_TARGETS.model);
   /**
    * THE REASON IS SHOWN WITHOUT BEING ASKED FOR (sgiant-platform#617).
    *
@@ -4096,7 +4075,7 @@ export function createAiChatWidget(
     autoNavigateFrame,
     showPaneWidget,
     dispatchAction,
-    getTransport,
+    openOnTheRight,
   } = createAdvancedView({
     L,
     ownWords,
@@ -4117,6 +4096,7 @@ export function createAiChatWidget(
     getKnownNavTargets: () => knownNavTargets,
     refreshNavTargets,
     hasUserConfirmed,
+    isNarrow: isSheet,
     opts,
   });
 
@@ -4436,6 +4416,13 @@ export function createAiChatWidget(
       t = u.stripped;
       renderUiCard(u.spec);
     }
+    // The app's own screens (sgiant-platform#703).
+    for (let i = 0; i < 4; i++) {
+      const c = parseJsonDirective<unknown>(t, "component");
+      if (!c) break;
+      t = c.stripped;
+      renderComponent(c.spec);
+    }
     // Dynamic HTML previews — the AI draws a mockup/preview and we paint it in a
     // FULLY sandboxed iframe (no scripts, no same-origin) right in the chat.
     for (let i = 0; i < 3; i++) {
@@ -4466,7 +4453,15 @@ export function createAiChatWidget(
       const act = parseJsonDirective<ActionSpec>(t, "action");
       if (!act) break;
       t = act.stripped;
-      if (opts.onWidgetAction && act.spec.name) renderAction(act.spec);
+      // Pointing at, filling in and pressing controls on the page are gone
+      // (sgiant-platform#703): an older api that still sends one gets it
+      // stripped, with no button that could only fail.
+      if (
+        opts.onWidgetAction &&
+        act.spec.name &&
+        !CONTROL_ACTIONS_GONE.includes(act.spec.name)
+      )
+        renderAction(act.spec);
     }
     // Quick-reply chips — tappable answer options for a choice question.
     const chips = parseJsonDirective<ChipsSpec>(t, "chips");
@@ -4627,12 +4622,6 @@ export function createAiChatWidget(
       set knownNavTargets(v) {
         knownNavTargets = v;
       },
-      get knownUiTargets() {
-        return knownUiTargets;
-      },
-      set knownUiTargets(v) {
-        knownUiTargets = v;
-      },
       get lastUserContent() {
         return lastUserContent;
       },
@@ -4684,7 +4673,6 @@ export function createAiChatWidget(
     launcher,
     picker,
     uploads,
-    getTransport,
     history,
     pendingThreads,
     qualityAsked,
@@ -4722,6 +4710,7 @@ export function createAiChatWidget(
     renderProposal,
     renderWidget: (raw) => renderWidget(raw),
     renderUiCard: (raw) => renderUiCard(raw),
+    renderComponent: (raw) => renderComponent(raw),
     renderPreview: (spec) => renderPreview(spec),
     renderServerWidget: (spec, rows, comparisonRows) =>
       renderServerWidget(spec, rows, comparisonRows),
@@ -4947,7 +4936,7 @@ export function createAiChatWidget(
     renderServerWidget,
     renderChips,
     renderPreview,
-    operateConfirmText,
+    renderComponent,
   } = createUiRenderers({
     L,
     log,
@@ -4955,11 +4944,12 @@ export function createAiChatWidget(
     send,
     richDisposers,
     dispatchAction,
+    openOnTheRight,
+    canSplit: () => Boolean(opts.getAdvancedUrl) && !isSheet(),
     subscribeJob,
     showPaneWidget,
     input,
     opts,
-    describeTarget,
   });
 
   /** Render a navigation suggestion. With auto-navigate ON it follows the link
@@ -5033,13 +5023,6 @@ export function createAiChatWidget(
     // → Analytics); plain navigation stays Talk.
     if (ACTION_ROLE[spec.name]) setRole(ACTION_ROLE[spec.name]);
     const wrap = el("div", `${PREFIX}-nav`);
-    // State-changing UI control (fill / click) is ALWAYS confirm-gated: force a
-    // confirm prompt even if the model forgot one, and never auto-run it — the
-    // user must approve typing/clicking on their behalf. Read-only nudges
-    // (highlight/scroll/focus) never reach renderAction (they carry no button).
-    if (isOperateAction(spec.name) && !spec.confirm) {
-      spec = { ...spec, confirm: operateConfirmText(spec) };
-    }
     // Auto-navigate: a confirm-LESS action the host lists as pure navigation
     // (`navigationActions`) — run it immediately. Anything with `confirm` (changes
     // state / costs credits) ALWAYS asks, even in auto mode. Advanced mode

@@ -35,7 +35,7 @@ describe("sgiant-ai-widget stays embeddable", () => {
 
   it("does not depend on the React component library", () => {
     assert.ok(
-      !widget.dependencies["@sgiant/ui"],
+      !(widget.dependencies ?? {})["@sgiant/ui"],
       "@sgiant/ui carries React, three.js, recharts and Clerk — take tokens from @sgiant/tokens"
     );
   });
@@ -58,7 +58,7 @@ describe("sgiant-ai-widget stays embeddable", () => {
     // cannot resolve any `@sgiant/*` name. So the vars are inlined in
     // `limits.ts`, bound to the originals by `ai-widget-limits.test.ts`.
     assert.ok(
-      !widget.dependencies["@sgiant/tokens"],
+      !(widget.dependencies ?? {})["@sgiant/tokens"],
       "drop the dependency too"
     );
   });
@@ -115,7 +115,7 @@ describe("sgiant-ai-widget stays embeddable", () => {
     // The `@sgiant/ui` entry outlived its last use by a whole refactor. Nothing
     // fails when that happens — the package just gets heavier for consumers who
     // are not in this repo and cannot see why.
-    const declared = Object.keys(widget.dependencies).filter((d) =>
+    const declared = Object.keys(widget.dependencies ?? {}).filter((d) =>
       d.startsWith("@sgiant/")
     );
     const joined = srcFiles.join("\n");

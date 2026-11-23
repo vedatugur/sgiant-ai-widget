@@ -31,6 +31,9 @@ export interface StreamFrame {
   code?: string;
   /** error frame — `false`: asking again will not help, offer no "Try again". */
   retry?: boolean;
+  /** part frame (sgiant-platform#701): the part's name; its fields ride in
+   *  `spec`. See `parts/window-parts.ts`. */
+  part?: string;
   /** render_chart widget frame (analytics lane): spec = model args, rows = data. */
   spec?: { title?: string; chartType?: string };
   rows?: unknown;
