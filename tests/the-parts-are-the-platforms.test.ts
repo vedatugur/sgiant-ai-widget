@@ -165,3 +165,29 @@ test("the card's words are the window's own, in both languages", async () => {
   assert.equal(WIDGET_LABELS.componentOpenPage, "Open the page");
   assert.equal(WIDGET_LABELS_TR.componentOpenPage, "Sayfayı aç");
 });
+
+test("QA: a page a card opens is a plain app path, and the window still asks the host's page list", () => {
+  for (const path of [
+    "/accounts/OTHER/billing",
+    "/../../admin",
+    "/billing?x=1",
+    "/\\evil.com",
+    "//evil.com",
+  ]) {
+    assert.equal(checkComponent({ name: "page", params: { path } }).ok, false, path);
+    assert.ok("problems" in partFrameAsTag("navigate", { path }), path);
+  }
+  assert.equal(checkComponent({ name: "page", params: { path: "/billing" } }).ok, true);
+  // Extra fields are refused, as the api refuses them.
+  assert.ok("problems" in partFrameAsTag("navigate", { path: "/billing", onclick: "x" }));
+  // The pane and the same-tab door both go through the navigation gate.
+  const adv = read("src/advanced-view.ts");
+  assert.match(adv, /const openOnTheRight[\s\S]*?await gateNavigationTarget\(path/);
+  assert.match(adv, /if \(name === "navigate"\)\s*await gateNavigationTarget\(/);
+});
+
+test("QA: at most four of the app's screens per reply, live as on replay", () => {
+  const stream = read("src/stream.ts");
+  assert.match(stream, /if \(componentsThisTurn < COMPONENTS_PER_REPLY\) renderComponent\(spec\);/);
+  assert.match(read("src/specs.ts"), /for \(let i = 0; i < 4; i\+\+\) \{\n\s*const c = parseJsonDirective<unknown>\(t, "component"\);/);
+});

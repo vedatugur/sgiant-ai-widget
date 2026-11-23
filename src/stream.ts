@@ -1,5 +1,9 @@
 import { parseJsonDirective } from "./directive";
-import { PARTS_VERSION, partFrameAsTag } from "./parts/window-parts";
+import {
+  COMPONENTS_PER_REPLY,
+  PARTS_VERSION,
+  partFrameAsTag,
+} from "./parts/window-parts";
 import { PREFIX } from "./prefix";
 import { readTokenRefusal, type TokenRefusal } from "./token-refusal";
 import { addMsg, el, maskMarkdown, parseLine } from "./dom";
@@ -433,6 +437,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
     scrollDown(true);
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
+    // At most four of the app's screens per reply, as a reopened
+    // conversation draws (sgiant-platform#703, QA).
+    let componentsThisTurn = 0;
     let producedAny = false;
     /**
      * Write proposals seen this turn, rendered only AFTER the reply text.
@@ -589,7 +596,8 @@ export function createTurnStream(ctx: TurnStreamContext) {
         return;
       }
       if (tag === "component") {
-        renderComponent(spec);
+        if (componentsThisTurn < COMPONENTS_PER_REPLY) renderComponent(spec);
+        componentsThisTurn += 1;
         return;
       }
       const p = spec as PreviewSpec;

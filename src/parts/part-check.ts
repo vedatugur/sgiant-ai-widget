@@ -12,7 +12,8 @@
  * The schemas are the small part of JSON Schema the parts use: `type` (one
  * name or several), `enum`, `properties`, `required`, `items`, `minItems`,
  * `maxItems`, `maxLength`, `pattern` and `additionalProperties` (a schema
- * every other key must meet). Anything else in a schema is a description for
+ * every other key must meet, or `false` for none). Anything else in a schema
+ * is a description for
  * the model and is not checked. A key a schema does not name is allowed, as
  * the window has always allowed it, unless `additionalProperties` is a schema.
  */
@@ -28,7 +29,8 @@ export interface PartSchema {
   maxItems?: number;
   maxLength?: number;
   pattern?: string;
-  additionalProperties?: PartSchema;
+  /** A schema every other key must meet, or `false`: no other key. */
+  additionalProperties?: PartSchema | false;
 }
 
 function typeOf(v: unknown): string {
@@ -96,6 +98,8 @@ export function checkAgainstSchema(
       if (v === undefined) continue;
       const own = schema.properties?.[key];
       if (own) out.push(...checkAgainstSchema(v, own, `${at}.${key}`));
+      else if (schema.additionalProperties === false)
+        out.push(`${at}.${key} is not a field of this part`);
       else if (schema.additionalProperties)
         out.push(
           ...checkAgainstSchema(v, schema.additionalProperties, `${at}.${key}`)
@@ -165,3 +169,13 @@ export function fillPagePath(
   });
   return missing ? null : path;
 }
+
+/**
+ * A PATH A PART MAY OPEN (#703, QA M2): an app page relative to the person's
+ * own account, written as plain segments. No `/accounts/…` (the host puts
+ * the person's own account in front), no `..`, no `//`, no `\`, no query or
+ * fragment. The window still checks it against the host's page list before
+ * it opens anything.
+ */
+export const APP_PATH_PATTERN =
+  "^/(?!accounts(?:/|$))(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$";

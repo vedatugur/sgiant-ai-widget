@@ -18,6 +18,9 @@
 import { checkAgainstSchema, fillPagePath, tagJson } from "./part-check";
 import { WINDOW_PARTS } from "./generated/parts-dictionary";
 
+/** The most of the app's screens one reply shows, live and on replay. */
+export const COMPONENTS_PER_REPLY = 4;
+
 /** The dictionary this window reads, sent with every turn. */
 export const PARTS_VERSION: number = WINDOW_PARTS.version;
 

@@ -19,6 +19,7 @@ export const WINDOW_PARTS: {
   parts: {
     ui: {
       type: "object",
+      additionalProperties: false,
       properties: {
         title: {
           type: "string",
@@ -44,6 +45,7 @@ export const WINDOW_PARTS: {
           maxItems: 24,
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               id: {
                 type: "string",
@@ -90,6 +92,7 @@ export const WINDOW_PARTS: {
                 maxItems: 4,
                 items: {
                   type: "object",
+                  additionalProperties: false,
                   properties: {
                     name: {
                       type: "string",
@@ -128,6 +131,7 @@ export const WINDOW_PARTS: {
           maxItems: 4,
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               name: {
                 type: "string",
@@ -162,11 +166,13 @@ export const WINDOW_PARTS: {
     },
     navigate: {
       type: "object",
+      additionalProperties: false,
       properties: {
         path: {
           type: "string",
           maxLength: 200,
-          pattern: "^/(?!/)[^\\s]*$",
+          pattern:
+            "^/(?!accounts(?:/|$))(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$",
           description: "A path from describe_surface, never invented.",
         },
         label: {
@@ -178,6 +184,7 @@ export const WINDOW_PARTS: {
     },
     action: {
       type: "object",
+      additionalProperties: false,
       properties: {
         name: {
           type: "string",
@@ -209,6 +216,7 @@ export const WINDOW_PARTS: {
     },
     preview: {
       type: "object",
+      additionalProperties: false,
       properties: {
         html: {
           type: "string",
@@ -223,6 +231,7 @@ export const WINDOW_PARTS: {
     },
     component: {
       type: "object",
+      additionalProperties: false,
       properties: {
         name: {
           type: "string",
@@ -490,7 +499,8 @@ export const WINDOW_PARTS: {
           path: {
             type: "string",
             maxLength: 200,
-            pattern: "^/(?!/)[^\\s]*$",
+            pattern:
+              "^/(?!accounts(?:/|$))(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$",
             description:
               "The page's path from describe_surface, relative to the account, e.g. /billing.",
           },
