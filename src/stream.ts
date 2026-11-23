@@ -126,9 +126,10 @@ export interface TurnStreamContext {
   pendingThreads: Set<string>;
   /**
    * The way to stop each turn in flight, by the same key as `pendingThreads`
-   * (sgiant-platform#702). Stopping ends the READING: the api runs a turn to
-   * its end whatever the browser does, so the full answer may still be kept
-   * on the server.
+   * (sgiant-platform#702). When the server named the turn (a `turn` frame),
+   * Stop asks it to cut the turn (`<endpoint>/turns/:turnId/cancel`) and the
+   * window reads on to the turn's `done`, so it shows what the server kept.
+   * Otherwise, or when the server says no, Stop ends the reading.
    */
   turnStops: Map<string, AbortController>;
   qualityAsked: Set<string>;
@@ -192,6 +193,42 @@ export interface TurnStreamContext {
   renderComponent: UiRenderers["renderComponent"];
   renderPreview: UiRenderers["renderPreview"];
   renderServerWidget: UiRenderers["renderServerWidget"];
+}
+
+/** How long the window reads on after Stop, waiting for the server's cut
+ *  turn to end, before it stops reading anyway. */
+export const STOP_READS_ON_MS = 10_000;
+
+/**
+ * Ask the server to cut the turn it named (sgiant-platform, 2026-11-23):
+ * `POST <endpoint>/turns/:turnId/cancel`, with the turn's own credentials.
+ * True only when it answers that it is stopping; anything else (no such
+ * route, a turn it cannot cut, no answer) is false, and the window stops
+ * reading instead.
+ */
+export async function cancelTurn(
+  opts: Pick<
+    AiChatWidgetOptions,
+    "endpoint" | "getToken" | "token" | "withCredentials"
+  >,
+  turnId: string
+): Promise<boolean> {
+  try {
+    const token = opts.getToken ? await opts.getToken() : opts.token;
+    const res = await fetch(
+      `${opts.endpoint.replace(/\/+$/, "")}/turns/${encodeURIComponent(turnId)}/cancel`,
+      {
+        method: "POST",
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        credentials: opts.withCredentials ? "include" : "same-origin",
+      }
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { state?: unknown } | null;
+    return body?.state === "stopping";
+  } catch {
+    return false;
+  }
 }
 
 export function createTurnStream(ctx: TurnStreamContext) {
@@ -405,7 +442,23 @@ export function createTurnStream(ctx: TurnStreamContext) {
     const ends = new AbortController();
     const endRequest = (): void => ends.abort();
     alive.signal.addEventListener("abort", endRequest, { once: true });
-    stopper.signal.addEventListener("abort", endRequest, { once: true });
+    // STOP ON THE SERVER (2026-11-23). The turn's name, from its `turn`
+    // frame; whether its `done` said the server cut it.
+    let turnId: string | null = null;
+    let cutOnServer = false;
+    let stopCap: ReturnType<typeof setTimeout> | null = null;
+    const stopOnTheServer = async (): Promise<void> => {
+      if (!turnId) return endRequest();
+      // Never longer than this: a tool already running finishes first.
+      stopCap = setTimeout(endRequest, STOP_READS_ON_MS);
+      if (!(await cancelTurn(opts, turnId))) {
+        clearTimeout(stopCap);
+        endRequest();
+      }
+    };
+    stopper.signal.addEventListener("abort", () => void stopOnTheServer(), {
+      once: true,
+    });
     const turnKey = (): string => turnThread ?? NEW_TURN_KEY;
     pendingThreads.add(turnKey());
     turnStops.set(turnKey(), stopper);
@@ -980,6 +1033,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
                   typeof frame.credits === "number" ? frame.credits : null,
               };
             }
+            // The turn's name, for Stop (sgiant-platform, 2026-11-23).
+            if (frame.type === "turn" && typeof frame.turnId === "string")
+              turnId = frame.turnId;
             if (frame.type === "meta" && frame.isStaff && frame.modelLabel) {
               metaChip.textContent = frame.modelLabel;
               metaChip.hidden = false;
@@ -991,6 +1047,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
             if (frame.type === "done") {
               if (frame.messageId) liveMessageId = frame.messageId;
               if (frame.model) liveModel = frame.model;
+              // Stopped, and the server cut the turn: it kept what was read
+              // here. A turn that ended before the cut is an answer like any.
+              if (stopped) {
+                cutOnServer = frame.stopped === true;
+                if (!cutOnServer) stopped = false;
+              }
             }
             if (frame.type === "error" && frame.message) {
               failure = frame.message;
@@ -1027,6 +1089,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
         failure = (err as Error).message || "Network error.";
       }
     } finally {
+      if (stopCap) clearTimeout(stopCap);
       alive.signal.removeEventListener("abort", endRequest);
       pendingThreads.delete(turnKey());
       turnStops.delete(turnKey());
@@ -1125,8 +1188,10 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // directives). Earlier segments were already flushed around widgets/chips.
     typing.remove();
     // A stopped answer keeps what was on screen, and no more: a part still
-    // arriving when it stopped is not drawn half.
-    if (stopped) assistantRaw = assistantRaw.slice(0, shownLen);
+    // arriving when it stopped is not drawn half. Cut on the server, the
+    // whole of what was read is what the server kept.
+    if (stopped && !cutOnServer)
+      assistantRaw = assistantRaw.slice(0, shownLen);
     const lastBubble = flushSegment(true);
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
@@ -1193,13 +1258,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // Reload THIS TURN's thread (never whatever the view has become) — and only
     // while the user is still on it; the fence above already handled the
     // switched-away cases.
-    // Nor after a stop: the server keeps the exchange only at its end, so a
-    // reload now would take the person's own question off the screen.
+    // Nor after a stop the server did not make: it keeps the exchange only at
+    // the turn's end, so a reload now would take the person's own question
+    // off the screen. A turn it cut is kept, with its note.
     if (
       turnThread &&
       opts.loadThread &&
       opts.setActiveLeaf &&
-      !stopped &&
+      (!stopped || cutOnServer) &&
       !hasLiveProposal &&
       !hasErrorCard
     ) {

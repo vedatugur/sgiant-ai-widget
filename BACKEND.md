@@ -47,7 +47,9 @@ it against its own list, the same way it checks anything else a browser sends.
 Credentials follow `withCredentials`: `include` when set, `same-origin`
 otherwise. The request carries an `AbortSignal` tied to the widget's lifetime —
 if the user closes or the host destroys the widget mid-turn, the fetch is
-aborted, and your server should treat a dropped connection as a cancelled turn.
+aborted. A dropped connection is not the person stopping the turn: a phone
+losing its signal drops it too. When the person presses Stop, the widget says
+so explicitly (see "Stop that stops the turn").
 
 ## The response
 
@@ -136,6 +138,7 @@ is the list:
 | `tool_proposal` | `name`, plus a host that passes `onApplyProposal` |
 | `meta` | `isStaff` **and** `modelLabel` |
 | `searches` | `queries` (a list; terms with no text draw nothing) |
+| `turn` | `turnId` (a string; see "Stop that stops the turn") |
 
 The **type name** matters as much as the fields. A chart is `type: "widget"`; sent as `type: "text"` with a `spec` it renders nothing, silently. Every type the widget acts on is named in this document, and a test asserts that.
 
@@ -151,6 +154,28 @@ answer so your backend knows *which* question was answered, and without it the
 frame is ignored. A frame that is missing one of these now logs a specific
 console warning once per page — it used to be dropped in silence, which is how
 this table came to exist.
+
+### Stop that stops the turn
+
+In the app's own windows (the advanced view, `advancedView`), Send becomes
+Stop while an answer comes. With nothing more from your server, Stop ends the
+widget's reading and keeps what was on screen; your server goes on with the
+turn.
+
+To let Stop end the turn itself:
+
+1. **Name the turn** with a `turn` frame as it starts:
+   `{"type":"turn","turnId":"…"}`.
+2. **Answer `POST <endpoint>/turns/:turnId/cancel`**, which the widget sends
+   with the turn's own `authorization` and credentials, with
+   `{"state":"stopping"}` once you are cutting the turn. Any other answer
+   (a 409, `{"state":"not_running"}`, an error) makes the widget stop reading
+   at once, as above.
+3. **End the stream** after the cut with whatever the turn had streamed and
+   `{"type":"done","stopped":true}`. The widget reads on until then (at most
+   ten seconds), so what it shows is what you kept, and says "You stopped this
+   answer." A `done` without `stopped` means the turn ended before the cut, and
+   it is drawn as an ordinary answer.
 
 ### A proposal card that outlives its stream
 

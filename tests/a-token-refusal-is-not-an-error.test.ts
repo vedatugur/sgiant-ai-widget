@@ -77,8 +77,16 @@ test("half a button is no button, and the sentence still shows", () => {
 });
 
 test("only a SEND draws the notice: an upload, and everything else, stays silent", () => {
-  // The widget asks for a token in two places, a send and an upload.
-  assert.equal((CODE.match(/opts\.getToken\(\)/g) ?? []).length, 2);
+  // The widget asks for a token in three places: a send, an upload, and
+  // Stop's cancel (stream.ts `cancelTurn`, whose refusal is only a no: the
+  // window then stops reading, and draws no notice).
+  assert.equal((CODE.match(/opts\.getToken\(\)/g) ?? []).length, 3);
+  const cancel = CODE.slice(
+    CODE.indexOf("export async function cancelTurn("),
+    CODE.indexOf("export function createTurnStream(")
+  );
+  assert.ok(cancel.length > 200, "could not find cancelTurn");
+  assert.doesNotMatch(cancel, /TokenNotice|readTokenRefusal/);
   // The rejection is read for a sentence in one of them, and the notice is
   // drawn from one place. A refused upload falls into the catch it always
   // fell into, which shows nothing and uploads nothing; loading past chats and

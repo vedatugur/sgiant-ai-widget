@@ -141,8 +141,11 @@ test("a stop ends the reading, keeps what was shown, and does not reload the con
   assert.match(stream, /const stopEnds = \(e: unknown\): null => \{\s*if \(stopped\) return null;\s*throw e;/);
   assert.match(stream, /\}\)\.catch\(stopEnds\);/);
   assert.match(stream, /await reader\.read\(\)\.catch\(stopEnds\)/);
-  assert.match(stream, /if \(stopped\) assistantRaw = assistantRaw\.slice\(0, shownLen\);/);
-  assert.match(stream, /!stopped &&\s*!hasLiveProposal/);
+  // A stop the server did not make keeps what was on screen and no more,
+  // and reloads nothing over it (the-server-cuts-a-stopped-turn.test.ts
+  // holds the stop the server makes).
+  assert.match(stream, /if \(stopped && !cutOnServer\)\s*assistantRaw = assistantRaw\.slice\(0, shownLen\);/);
+  assert.match(stream, /\(!stopped \|\| cutOnServer\) &&\s*!hasLiveProposal/);
 });
 
 test("the assistant opens the page itself, but never over a phone's conversation", () => {

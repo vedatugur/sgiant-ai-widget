@@ -3690,7 +3690,8 @@ export function createAiChatWidget(
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
-  // Stop, when Send is Stop: the answer on screen stops being read.
+  // Stop, when Send is Stop: the server is asked to cut the turn, or the
+  // answer on screen stops being read (stream.ts, `stopOnTheServer`).
   sendBtn.addEventListener("click", (e) => {
     const stop = turnStops.get(threadId ?? NEW_TURN_KEY);
     if (!sendBtn.classList.contains(`${PREFIX}-send-stop`) || !stop) return;

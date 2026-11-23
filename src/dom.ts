@@ -79,6 +79,11 @@ export interface StreamFrame {
    *  the model that wrote it. Absent when the turn persisted nothing. */
   messageId?: string;
   model?: string;
+  /** done frame — the server cut the turn because the person pressed Stop;
+   *  what it kept is what streamed (sgiant-platform, 2026-11-23). */
+  stopped?: boolean;
+  /** turn frame — the turn's name, which Stop asks the server to cancel. */
+  turnId?: string;
   /** activity frame — a web search's terms, on its step (sgiant-platform#661). */
   query?: string;
   /** searches frame — the web searches a reply ran, sent once the turn is

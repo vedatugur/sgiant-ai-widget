@@ -589,6 +589,17 @@ The window runs `navigate` and the on-page controls (highlight, scroll-to,
 focus-field, fill, click) itself. Every other name must be in `handlers`, or
 the button says it could not do it.
 
+## Upgrading to 3.2
+
+Nothing is removed; Stop does more when the server lets it.
+
+- When the server names the turn (a `turn` frame), Stop asks it to cut the
+  turn, `POST <endpoint>/turns/:turnId/cancel`, and reads on to the turn's
+  `done`, so the window shows exactly what the server kept, then "You
+  stopped this answer." A server that names no turn, or answers anything but
+  `{"state":"stopping"}`, gets 3.1's Stop: the reading ends at once. See
+  BACKEND.md, "Stop that stops the turn". No new option and no new words.
+
 ## Upgrading to 3.1
 
 Nothing is removed; three things behave differently.
