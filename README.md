@@ -265,7 +265,12 @@ a colour.
 ## The advanced view
 
 A window whose host passes `getAdvancedUrl` (or `advancedView: true`, for a
-host with no app to frame) offers a whole-screen view from the header:
+host with no app to frame) offers a whole-screen view from the header. With
+`openIn: "advanced"` as well, the window opens straight in it every time
+(the launcher, the host's open event, `open()`, a reload that finds it open),
+and its way back to the app closes the window: the small window is never
+shown. On a phone that is the view's phone layout below. A `preview`
+ignores it.
 
 - **On the left, past conversations** (`listThreads` / `loadThread`): a search
   over their titles, a star, a spinner on one being answered and a dot on one
@@ -285,9 +290,10 @@ host with no app to frame) offers a whole-screen view from the header:
   On a phone it is a sheet over the chat with a way back, and it opens only
   when asked.
 
-**Stop ends the reading, not the turn.** The api finishes a turn whatever the
-browser does, so the whole answer may still be kept with the conversation and
-shown when it is opened again.
+**Stop stops the turn when the server can.** A server that names the turn
+(a `turn` frame) is asked to cut it, and the window shows what it kept; with
+one that does not, Stop ends only the reading, and the whole answer may still
+be kept with the conversation (BACKEND.md, "Stop that stops the turn").
 
 **What lives in this browser.** The star is the host's (`starThread`, the api's
 shared star) when it is wired, else it is kept in this browser
@@ -591,26 +597,32 @@ the button says it could not do it.
 
 ## Upgrading to 3.2
 
-Nothing is removed; Stop does more when the server lets it.
+From 3.0 (3.1 was never published). Nothing is removed; these behave
+differently or are new.
 
-- When the server names the turn (a `turn` frame), Stop asks it to cut the
-  turn, `POST <endpoint>/turns/:turnId/cancel`, and reads on to the turn's
-  `done`, so the window shows exactly what the server kept, then "You
-  stopped this answer." A server that names no turn, or answers anything but
-  `{"state":"stopping"}`, gets 3.1's Stop: the reading ends at once. See
-  BACKEND.md, "Stop that stops the turn". No new option and no new words.
-
-## Upgrading to 3.1
-
-Nothing is removed; three things behave differently.
-
-- The advanced view is the layout above. Its divider now sizes the PAGE on
-  the right (`--aiw-pane-w`), not the chat; `--aiw-chatw` is no longer read,
-  and a width saved by 3.0 is not reused.
-- In a window that offers the advanced view, Send is Stop while the answer on
-  screen is coming. A visitor's window is as it was.
-- Reopening a past conversation takes the suggestions away, as a conversation
-  with questions in it never had them.
+- The advanced view is the layout above: past conversations on the left,
+  the chat in the middle, the page on the right. Its divider now sizes the
+  PAGE (`--aiw-pane-w`), not the chat; `--aiw-chatw` is no longer read, and
+  a width saved by 3.0 is not reused.
+- New options: `advancedView: true` (the view without a page beside the
+  chat), `advancedLogo` (the host's logo at its top left),
+  `renderAdvancedFooter` (the host's corner at its bottom left) and
+  `openIn: "advanced"` (open straight in the view; the way back closes the
+  window). A host that passes none of them gets 3.0's window and toggle.
+- In a window that offers the advanced view, Send is Stop while the answer
+  on screen is coming. When the server names the turn (a `turn` frame), Stop
+  asks it to cut the turn, `POST <endpoint>/turns/:turnId/cancel`, and reads
+  on to the turn's `done`, so the window shows exactly what the server kept,
+  then "You stopped this answer." A server that names no turn, or answers
+  anything but `{"state":"stopping"}`, gets a Stop that ends the reading at
+  once. See BACKEND.md, "Stop that stops the turn".
+- Reopening a past conversation takes the suggestions away, as a
+  conversation with questions in it never had them.
+- New words, in English and Turkish, for the view's controls and the status
+  line (`advBack`, `sideLabel`, `stop`, `stopped`, …: `WIDGET_LABELS`). A
+  host that translates the window through `labels` should add them.
+- A visitor's small window (`createSiteChat`, or any window with neither
+  `getAdvancedUrl` nor `advancedView`) is pixel-identical to 3.0.
 
 ## Upgrading to 3.0
 

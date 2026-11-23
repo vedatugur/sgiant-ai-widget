@@ -71,7 +71,11 @@ import { createDecisionCards } from "./decision-cards";
 import type { TokenRefusal } from "./token-refusal";
 import { createJobCards } from "./job-cards";
 import { createUploads, type WidgetAtt } from "./uploads";
-import { createAdvancedView, offersAdvancedView } from "./advanced-view";
+import {
+  createAdvancedView,
+  offersAdvancedView,
+  opensInAdvancedView,
+} from "./advanced-view";
 import { createAdvancedShell } from "./advanced-shell";
 import {
   createTurnStream,
@@ -804,6 +808,17 @@ export interface AiChatWidgetOptions {
    */
   advancedView?: boolean;
   /**
+   * Where the window opens (sgiant-platform#702, the owner's decision of
+   * 2026-11-23). `"advanced"`: straight in the advanced view, every time it
+   * opens (the launcher, the host's open event, `open()`, a reload that finds
+   * it open), on a phone in the view's phone layout; its way back to the app
+   * closes the window, so the small window is never shown. Needs the advanced
+   * view (`getAdvancedUrl` or `advancedView`) and is ignored in a `preview`.
+   * Default `"window"`: the small window, with the header's toggle to the
+   * advanced view as before.
+   */
+  openIn?: "window" | "advanced";
+  /**
    * The host software's logo, top left in the advanced view
    * (sgiant-platform#702). `src` is drawn on a light ground and `srcDark`, when
    * given, on a dark one; `symbol` is the small mark for the folded list.
@@ -1342,6 +1357,8 @@ export function createAiChatWidget(
   /** Windows that offer the advanced view are the app's own (the panel, the
    *  hub): Send becomes Stop there. A visitor's window is as it was. */
   const inApp = offersAdvancedView(opts);
+  /** This window opens straight in the advanced view (`openIn`). */
+  const opensAdvanced = opensInAdvancedView(opts);
   /** The line under the conversation that says what the turn is doing. */
   let turnLine: HTMLElement | null = null;
   /** The advanced view's list and frame (./advanced-shell), once built. */
@@ -2243,6 +2260,9 @@ export function createAiChatWidget(
   // toggle. Caught by opening the examples page; no test asserted the widget
   // mounts with these options set, which is the more useful gap.
   let advanced = false;
+  /** Enters the advanced view; set once it is built, read by `open()` for a
+   *  window that opens there (`openIn: "advanced"`). */
+  let enterAdvancedOnOpen: (() => void) | null = null;
   const AUTONAV_KEY = `${ns}:autonav`;
   let autoNav = readFlag(AUTONAV_KEY);
   // Auto-apply: proposals the host has classified as safe are applied without
@@ -4008,6 +4028,9 @@ export function createAiChatWidget(
     // Refresh shortcuts for the page the user opened the widget on.
     void renderSuggestions();
     rememberOpen(true);
+    // A window that opens in the advanced view goes there now, before the
+    // browser draws the small window (sgiant-platform#702).
+    if (opensAdvanced) enterAdvancedOnOpen?.();
   };
   const close = (): void => {
     unbindKeyboard();
@@ -4195,6 +4218,7 @@ export function createAiChatWidget(
     hasPaneContent,
     closeAdvanced,
   } = advancedApi;
+  if (opensAdvanced) enterAdvancedOnOpen = () => openAdvanced();
   if (advancedOffered) {
     shell = createAdvancedShell({
       L,
@@ -4217,7 +4241,12 @@ export function createAiChatWidget(
         startNewChat();
         input.focus();
       },
-      exitAdvanced: () => closeAdvanced(),
+      // The way back to the app. A window that opens in the advanced view has
+      // no small window to go back to: it closes (sgiant-platform#702).
+      exitAdvanced: () => {
+        closeAdvanced();
+        if (opensAdvanced) close();
+      },
       isPaneOpen,
       setPaneOpen,
       hasPaneContent,

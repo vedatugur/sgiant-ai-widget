@@ -64,6 +64,12 @@ export function offersAdvancedView(opts: AiChatWidgetOptions): boolean {
   return Boolean(opts.getAdvancedUrl) || opts.advancedView === true;
 }
 
+/** Whether a window opens straight in the advanced view (`openIn:
+ *  "advanced"`): only one that offers it, and never a preview. */
+export function opensInAdvancedView(opts: AiChatWidgetOptions): boolean {
+  return opts.openIn === "advanced" && offersAdvancedView(opts) && !opts.preview;
+}
+
 export function createAdvancedView(ctx: AdvancedViewContext) {
   const {
     L,

@@ -7,7 +7,7 @@ import { widgetSrc } from "./aiw-source.ts";
 import { WIDGET_LABELS } from "../dist/labels.js";
 import { WIDGET_LABELS_TR } from "../dist/labels-tr.js";
 import { advancedCss } from "../dist/advanced-styles.js";
-import { offersAdvancedView } from "../dist/advanced-view.js";
+import { offersAdvancedView, opensInAdvancedView } from "../dist/advanced-view.js";
 import {
   newAnswerIds,
   shellGroups,
@@ -58,6 +58,17 @@ test("who gets the advanced view: a page beside the chat, or a host that asks; n
   // Send becomes Stop only in those windows.
   assert.match(widgetSrc, /const inApp = offersAdvancedView\(opts\);/);
   assert.match(widgetSrc, /const canStop =\s*inApp && !opts\.preview && turnStops\.has/);
+});
+
+test("who opens straight in the advanced view: a host that asks and offers it; never a visitor or a preview", () => {
+  assert.equal(opensInAdvancedView({ endpoint: "/x", advancedView: true }), false, "the default is the small window");
+  assert.equal(opensInAdvancedView({ endpoint: "/x", advancedView: true, openIn: "window" }), false);
+  assert.equal(opensInAdvancedView({ endpoint: "/x", advancedView: true, openIn: "advanced" }), true);
+  assert.equal(opensInAdvancedView({ endpoint: "/x", getAdvancedUrl: () => "/a", openIn: "advanced" }), true);
+  // Without the view there is nothing to open in.
+  assert.equal(opensInAdvancedView({ endpoint: "/x", openIn: "advanced" }), false);
+  // A preview sits in the host's box: always the small window.
+  assert.equal(opensInAdvancedView({ endpoint: "/x", advancedView: true, openIn: "advanced", preview: true }), false);
 });
 
 test("three layouts from the window's size, at the prototype's breakpoints", () => {
@@ -235,6 +246,25 @@ const LOOK = `(() => {
   };
 })()`;
 
+/** A window that opens in the advanced view (sgiant-platform#702, the owner's
+ *  decision of 2026-11-23: the panel, Backoffice and the hub). Not opened
+ *  here: the launcher, the event or open() does it. */
+const OPEN_IN_MOUNT = `(() => {
+  window.T = { w: SgiantAiWidget.createAiChatWidget({
+    endpoint: "/chat",
+    greeting: "Hello",
+    storageNamespace: "t702o",
+    layoutKey: "t702o",
+    persistKey: "t702o",
+    openEventName: "t702:open",
+    advancedView: true,
+    openIn: "advanced",
+    listThreads: async () => [],
+    loadThread: async () => [],
+  }) };
+})()`;
+const SHOWN = `getComputedStyle(document.querySelector(".${P}-panel")).display === "none" ? "closed" : "open"`;
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const look = (page: Page) => page.evaluate<Record<string, any>>(LOOK);
 const ask = (page: Page, q: string) =>
@@ -312,6 +342,72 @@ test("in a browser: the advanced view and the visitor's window", { skip: SKIP_WI
       assert.equal(scrim, true);
       await page.evaluate(`document.querySelector(".${P}-scrim").click()`);
       assert.equal((await look(page)).listOpen, false);
+    });
+
+    await t.test("openIn advanced, desk: the launcher opens the advanced view; back to the app closes the window", async () => {
+      await page.open([1440, 900]);
+      await page.evaluate(OPEN_IN_MOUNT);
+      await wait(200);
+      assert.equal(await page.evaluate(SHOWN), "closed");
+      await page.evaluate(`document.querySelector(".${P}-bubble").click()`);
+      await wait(200);
+      let s = await look(page);
+      assert.equal(await page.evaluate(SHOWN), "open");
+      assert.equal(s.advanced, true, "the small window opened first");
+      assert.equal(s.mode, "desk");
+      assert.equal(s.header, "none");
+      // The way back to the app: no small window in between.
+      await page.evaluate(`document.querySelector(".${P}-side .${P}-adv-back").click()`);
+      await wait(100);
+      assert.equal(await page.evaluate(SHOWN), "closed");
+      assert.equal((await look(page)).advanced, false);
+      // The host's open event and the handle's open() both land in it again.
+      await page.evaluate(`window.dispatchEvent(new CustomEvent("t702:open"))`);
+      await wait(100);
+      assert.equal((await look(page)).advanced, true);
+      await page.evaluate(`T.w.close(); T.w.open()`);
+      await wait(100);
+      assert.equal((await look(page)).advanced, true);
+    });
+
+    await t.test("openIn advanced: a reload that finds it open finds it in the advanced view", async () => {
+      await page.next();
+      await page.evaluate(OPEN_IN_MOUNT);
+      await wait(200);
+      assert.equal(await page.evaluate(SHOWN), "open");
+      assert.equal((await look(page)).advanced, true);
+    });
+
+    await t.test("openIn advanced, phone: the view's phone layout, with the way back over the chat", async () => {
+      await page.open([390, 844]);
+      await page.evaluate(OPEN_IN_MOUNT);
+      await page.evaluate(`document.querySelector(".${P}-bubble").click()`);
+      await wait(200);
+      const s = await look(page);
+      assert.equal(s.advanced, true);
+      assert.equal(s.mode, "phone");
+      assert.equal(s.listOpen, false, "a phone opens on the conversation, not the list");
+      const back = await page.evaluate<boolean>(`(() => { const b = document.querySelector(".${P}-ctop-back"); return !!b && getComputedStyle(b).display !== "none" && b.getBoundingClientRect().width > 0; })()`);
+      assert.equal(back, true, "no way back on a phone");
+      await page.evaluate(`document.querySelector(".${P}-ctop-back").click()`);
+      await wait(100);
+      assert.equal(await page.evaluate(SHOWN), "closed");
+    });
+
+    await t.test("without openIn the advanced host still opens the small window, and its toggle works", async () => {
+      await page.open([1440, 900]);
+      await page.evaluate(OPEN_IN_MOUNT.replace('openIn: "advanced",', ""));
+      await page.evaluate(`document.querySelector(".${P}-bubble").click()`);
+      await wait(150);
+      assert.equal((await look(page)).advanced, false);
+      await page.evaluate(`document.querySelector(".${P}-advbtn").click()`);
+      await wait(150);
+      assert.equal((await look(page)).advanced, true);
+      // Its way back goes to the small window, not away.
+      await page.evaluate(`document.querySelector(".${P}-side .${P}-adv-back").click()`);
+      await wait(100);
+      assert.equal(await page.evaluate(SHOWN), "open");
+      assert.equal((await look(page)).advanced, false);
     });
 
     await t.test("a visitor's window: no list, no row, and Send never becomes Stop", async () => {
