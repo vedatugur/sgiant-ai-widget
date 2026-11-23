@@ -9,17 +9,6 @@
  * mapping below. The model never receives a raw URL or endpoint.
  */
 
-import {
-  isUiControlAction,
-  runUiControl,
-  isOperateAction,
-  runOperateAction,
-} from "./ui-control";
-// The manifest gate for the widget's OWN controls. Kept separate from
-// `./ui-control` because that module answers "is this element here?" and this
-// one answers "does what we PUBLISHED about ourselves still hold?" — the second
-// question is the one #356 is about, and it had no caller until now.
-import { checkWidgetTarget } from "./widget-manifest.js";
 // Type-only: erased at build, so this stays a zero-runtime-dependency module.
 import type { Locale } from "./limits";
 
@@ -76,10 +65,6 @@ export interface PageContext {
   /** The catalog of pages AYCA may open (from the manifest) — the single source
    *  of truth for navigation, so the prompt never hardcodes a path list. */
   navTargets?: NavTarget[];
-  /** On-page controls the AYCA may point at (highlight/scroll-to/focus-field)
-   *  — scanned from the live DOM via `scanAiTargets()`. Ids the host owns, never
-   *  selectors. Fed into the turn so the model knows what's on THIS page. */
-  uiTargets?: Array<{ id: string; label: string }>;
 }
 
 /**
@@ -411,8 +396,8 @@ export interface HostActionsConfig {
   resolvePath?: (path: string) => string;
   /** The host's router push (in-app SPA navigation). */
   navigate: (path: string) => void;
-  /** The host's own actions, by name. The widget runs only `navigate` and the
-   *  UI-control set itself; anything else the model names must be here. */
+  /** The host's own actions, by name. The widget runs only `navigate`
+   *  itself; anything else the model names must be here. */
   handlers?: Record<string, HostActionHandler>;
   /**
    * The page manifest this host declares — the SAME catalogue the model is
@@ -422,19 +407,6 @@ export interface HostActionsConfig {
    * none can navigate nowhere.
    */
   pages?: readonly { path?: string }[];
-  /**
-   * Where to look when verifying the widget's own manifest at action time.
-   * Defaults to `document`. Injectable so the gate can be tested without a
-   * browser — the same reason the bridge's `ManifestRoot` is two methods.
-   */
-  manifestRoot?: {
-    querySelectorAll(selector: string): ArrayLike<{
-      getAttribute(name: string): string | null;
-    }>;
-    querySelector(
-      selector: string,
-    ): { getAttribute(name: string): string | null } | null;
-  };
   /**
    * The host's translator, for the CHIP OUTCOMES below.
    *
@@ -483,47 +455,11 @@ export function createHostActions(
     },
     ...(cfg.handlers ?? {}),
   };
-  const manifestRoot =
-    cfg.manifestRoot ??
-    (typeof document === "undefined" ? undefined : document);
   return async (action, data) => {
-    // BEFORE ANYTHING: if the target is one the WIDGET declares about itself,
-    // check the declaration against the panel. `verifySurface` has existed since
-    // the contract was written and nothing called it, so "the manifest verifies
-    // at action time" was a sentence in an issue rather than a thing that ran.
-    //
-    // The distinction it buys is not pedantic. Without it, every failure came
-    // back as "no such control on this page" — which blames the model for
-    // guessing an id. Half those cases are OUR manifest being wrong, and the
-    // other half are a control this host never wired, which is not a failure at
-    // all. Three outcomes deserve three sentences.
-    if (
-      manifestRoot &&
-      (isUiControlAction(action) || isOperateAction(action))
-    ) {
-      const refusal = checkWidgetTarget(data.target ?? "", manifestRoot);
-      if (refusal) throw new Error(refusal);
-    }
-    // Read-only UI control (highlight / scroll-to / focus-field) works on EVERY
-    // surface via the pure-DOM twin — no per-app wiring, no confirm (reversible).
-    if (isUiControlAction(action)) {
-      const ok = runUiControl(action, data.target ?? "");
-      // A target that isn't on this page is a FAILURE. Returning undefined
-      // resolved the widget's promise and rendered a tick, so "show me where"
-      // ticked green while nothing was highlighted.
-      if (!ok) throw new Error(`no such control on this page: ${data.target}`);
-      return tr("aiAssistant.action.actionShownOnPage", "Shown on the page");
-    }
-    // State-changing UI control (fill / click). The widget has already forced a
-    // Confirm step before we get here (renderAction), so this runs post-approval.
-    if (isOperateAction(action)) {
-      const ok = runOperateAction(action, data.target ?? "", data.value);
-      // Same as above, and worse here: the user APPROVED this one. Telling them
-      // a fill or a click succeeded when the control was never found means they
-      // walk away believing a value was entered.
-      if (!ok) throw new Error(`no such control on this page: ${data.target}`);
-      return tr("aiAssistant.action.actionDoneOnPage", "Done on the page");
-    }
+    // Pointing at, filling in and pressing a control on the page
+    // (highlight, scroll-to, focus-field, fill, click) are gone
+    // (sgiant-platform#703): an old api that still sends one is told plainly
+    // that this app does not do that, below.
     const fn = map[action];
     // THROW, don't shrug. Returning undefined here resolved the widget's
     // promise, and a resolved promise is rendered as "<label> ✓" — so an action

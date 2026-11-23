@@ -1,4 +1,3 @@
-import { WIDGET_TARGET_DECLARATIONS as widgetTargets } from "./widget-manifest.js";
 import { parseJsonDirective } from "./directive";
 import { PARTS_VERSION, partFrameAsTag } from "./parts/window-parts";
 import { PREFIX } from "./prefix";
@@ -18,7 +17,6 @@ import type { WidgetAtt, Uploads } from "./uploads";
 import type { ModelPicker } from "./model-picker";
 import type { createUiRenderers } from "./ui-render";
 import type { createDecisionCards } from "./decision-cards";
-import type { FrameTransport } from "sgiant-ai-agent-bridge";
 import type {
   AiChatWidgetOptions,
   DirectiveRenderer,
@@ -86,14 +84,6 @@ export interface TurnState {
   inflight: Inflight | null;
   waiting: Waiting | null;
   knownNavTargets: { path?: string; title?: string; action?: string }[];
-  knownUiTargets: {
-    id?: string;
-    label?: string;
-    purpose?: string;
-    mutates?: boolean;
-    severity?: "reversible" | "destructive";
-    undeclared?: boolean;
-  }[];
   lastUserContent: string;
   quotaGranted: number;
   quotaRemaining: number | null;
@@ -128,7 +118,6 @@ export interface TurnStreamContext {
   launcher: Required<LauncherState>;
   picker: ModelPicker | null;
   uploads: Uploads;
-  getTransport: () => FrameTransport | null;
   // The widget's collections, by reference.
   history: StoredMsg[];
   pendingThreads: Set<string>;
@@ -211,7 +200,6 @@ export function createTurnStream(ctx: TurnStreamContext) {
     launcher,
     picker,
     uploads,
-    getTransport,
     history,
     pendingThreads,
     qualityAsked,
@@ -704,51 +692,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
       // The held question is on its way: it is kept for a reload from here.
       saveState();
       const baseCtx = opts.getContext ? await opts.getContext() : undefined;
-      // In advanced view the controllable page is the FRAME, not the parent
-      // shell — so the on-page targets (and the current path) come from the
-      // frame's agent, overriding whatever the host scanned locally.
-      const transport = getTransport();
-      const pageContext =
-        st.advanced && transport && baseCtx && typeof baseCtx === "object"
-          ? {
-              ...(baseCtx as Record<string, unknown>),
-              path: transport.getPath() ?? (baseCtx as { path?: string }).path,
-              uiTargets: transport.getTargets(),
-            }
-          : baseCtx;
-      // THE PANEL DECLARES ITSELF.
-      //
-      // Hosts send the PAGE's controls (`hostTargetsOnly`), because a raw
-      // `scanAiTargets` mixes the panel's own buttons in with them: "close"
-      // then means two things on two surfaces, and the scan's cap lets the
-      // panel push the page's controls out of the list silently.
-      //
-      // But excluding them without offering them elsewhere would leave the
-      // assistant unable to reach its own history, menu or composer at all —
-      // and sgiant-platform#356 exists partly to make that reachable ("it can
-      // open the assets page; it cannot show you your last three
-      // conversations"). Measured before the change: zero calls at a
-      // widget-stamped target in thirty days, so nothing regressed — the
-      // capability never existed.
-      //
-      // So the panel sends its OWN manifest rather than relying on being
-      // scraped off the page. Declared, not derived, which is what lets
-      // `mutates` be true: opening history changes nothing, starting a new chat
-      // abandons what is on screen, and a DOM walk cannot tell those apart.
-      const ctxWithPanel =
-        pageContext && typeof pageContext === "object"
-          ? { ...(pageContext as Record<string, unknown>), widgetTargets }
-          : pageContext;
+      // The page context the host built, as it is (sgiant-platform#703):
+      // no control list and no panel manifest ride on it any more.
+      const pageContext = baseCtx;
+      const ctxWithPanel = pageContext;
       // Cache this turn's navigable pages for the #111 prose-nav fallback below.
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
       if (Array.isArray(ctxTargets)) st.knownNavTargets = ctxTargets;
-      // Same for the controls, and from the SAME context object the turn was
-      // built from — so the confirm card describes the page the model was
-      // actually looking at, not whatever the page has become since.
-      const ctxUi = (pageContext as { uiTargets?: unknown } | undefined)
-        ?.uiTargets;
-      if (Array.isArray(ctxUi)) st.knownUiTargets = ctxUi;
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {

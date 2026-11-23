@@ -92,10 +92,8 @@ test("every example is reachable from every other one", () => {
   // A page nothing links to is a page nobody opens. uploads.html was added to
   // eight navs by hand; this is what catches the ninth.
   //
-  // "Every example" means every page that CARRIES the nav. app.html is not one:
-  // it is the demo app the agent bridge drives, linked from advanced.html as
-  // the thing being driven, and it would be wrong in a list of documents to
-  // read. Membership is the nav itself, not the file extension.
+  // "Every example" means every page that CARRIES the nav. Membership is the
+  // nav itself, not the file extension.
   const pages = readdirSync("examples")
     .filter((f) => f.endsWith(".html"))
     .filter((f) => readFileSync(`examples/${f}`, "utf8").includes('class="exnav"'));

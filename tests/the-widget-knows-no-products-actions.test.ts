@@ -58,14 +58,13 @@ test("only navigate is navigation unless the host names more", () => {
   assert.ok(!isNavigationAction("click"));
 });
 
-test("the UI-control half needs no handler — it is the widget's own", async () => {
+test("pointing at, filling in and pressing controls are gone: an old api's request fails plainly (sgiant-platform#703)", async () => {
   const { act } = dispatcher();
-  // No `document` here, so the DOM layer is what refuses. Reaching ITS message
-  // proves the control path is wired without any host handler.
-  await assert.rejects(
-    () => act("highlight", { target: "some-page-control" }),
-    /no such control on this page/,
-  );
+  for (const name of ["highlight", "scroll-to", "focus-field", "fill", "click"])
+    await assert.rejects(
+      () => act(name, { target: "some-page-control" }),
+      new RegExp(`unsupported action: ${name}`),
+    );
 });
 
 test("no sgiant route is written anywhere in the widget's source", () => {

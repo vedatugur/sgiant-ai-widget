@@ -4,12 +4,6 @@ import { ICON_CHEVRON_R } from "./icons";
 import { readItem, writeFlag, writeItem } from "./storage";
 import { isSafeFrameUrl, isSafeRelPath, gateNavigationTarget } from "./safe-url";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
-import { isOperateAction, isUiControlAction } from "./ui-control";
-import {
-  createFrameTransport,
-  type FrameTransport,
-  type BridgeAction,
-} from "sgiant-ai-agent-bridge";
 import type { AiChatWidgetOptions } from "./widget";
 import type { WidgetLabels } from "./labels";
 import type { WidgetOptionWords } from "./labels-tr";
@@ -17,10 +11,10 @@ import type { WidgetOptionWords } from "./labels-tr";
 /**
  * Advanced view (audit F133: moved out of `createAiChatWidget` unchanged).
  *
- * A full-screen split: chat on the left, the app in an <iframe> on the right
- * that AYCA drives via the agent bridge. Navigation moves the FRAME; on-page
- * actions (highlight/fill/click) run INSIDE the frame over postMessage, so they
- * hit the app the user is watching — not the parent shell behind the overlay.
+ * A full-screen split: chat on the left, the app in an <iframe> on the right.
+ * Navigation moves the FRAME. Nothing on the page is pointed at, filled in or
+ * pressed any more (sgiant-platform#703): the agent bridge that did it over
+ * postMessage is no longer a dependency.
  *
  * WHAT STAYS IN THE WIDGET, and why. `advanced` itself: the automation menu,
  * `send` and the action cards read it too, and they are built before this.
@@ -79,7 +73,6 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
   } = ctx;
   let advancedFull = false;
   let paneCollapsed = false;
-  let transport: FrameTransport | null = null;
   let advFrame: HTMLIFrameElement | null = null;
   let frameUrlLabel: HTMLElement | null = null;
   let collapseBtnEl: HTMLButtonElement | null = null;
@@ -259,14 +252,9 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     body.append(frame);
     pane.append(bar, body);
     advFrame = frame;
-    transport = createFrameTransport(frame, {
-      targetOrigin: opts.advancedOrigin || location.origin,
-    });
   };
 
   const teardownFrame = (): void => {
-    transport?.destroy();
-    transport = null;
     advFrame = null;
     frameUrlLabel = null;
     collapseBtnEl = null;
@@ -495,16 +483,7 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
         getKnownNavTargets,
         refreshNavTargets
       );
-    if (getAdvanced() && transport) {
-      if (isUiControlAction(name) || isOperateAction(name)) {
-        const r = await transport.act(name as BridgeAction, {
-          target: data.target ?? "",
-          ...(data.value !== undefined ? { value: data.value } : {}),
-        });
-        return r.ok
-          ? L("actionShownOnPage")
-          : r.message || L("actionPageFailed");
-      }
+    if (getAdvanced() && advFrame) {
       const candidate =
         name === "navigate"
           ? (data.path ?? null)
@@ -528,7 +507,5 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     autoNavigateFrame,
     showPaneWidget,
     dispatchAction,
-    /** The frame's agent while advanced view is open, else null. */
-    getTransport: (): FrameTransport | null => transport,
   };
 }

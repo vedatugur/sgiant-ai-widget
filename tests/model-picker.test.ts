@@ -9,10 +9,6 @@ import {
   type ModelOption,
 } from "../dist/model-picker.js";
 import { WIDGET_LABELS } from "../dist/labels.js";
-import {
-  WIDGET_CONDITIONAL_TARGETS,
-  WIDGET_TARGETS,
-} from "../dist/widget-manifest.js";
 import { widgetSrc } from "./aiw-source.ts";
 
 /**
@@ -94,13 +90,7 @@ test("the chosen id rides every turn, after extraBody, and only when there is a 
   assert.match(src, /opts\.onModelChange\?\.\(id\)/);
 });
 
-test("the pill is a declared, conditional control, with words for its chrome", () => {
-  const src = widgetSrc;
-  assert.match(
-    src,
-    /picker\.button\.setAttribute\("data-ai-target", WIDGET_TARGETS\.model\)/
-  );
-  assert.ok(WIDGET_CONDITIONAL_TARGETS.includes(WIDGET_TARGETS.model));
+test("the pill has words for its chrome", () => {
   assert.ok(WIDGET_LABELS.modelPicker);
   assert.match(WIDGET_LABELS.modelPickerAria, /\{model\}/);
 });

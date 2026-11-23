@@ -23,12 +23,6 @@ npm install sgiant-ai-widget
   launcher states (`resting`, `unread`, `working`, `offline`, `parked`) driven
   live, what the user can do to the panel, and an animated robot avatar that is
   one inline SVG with its own `prefers-reduced-motion` guard.
-- **[Advanced mode →](https://vedatugur.github.io/sgiant-ai-widget/advanced.html)**
-  — the assistant highlighting, filling and clicking inside a real app in an
-  iframe, driven over
-  [`sgiant-ai-agent-bridge`](https://www.npmjs.com/package/sgiant-ai-agent-bridge).
-  Selectors never cross the wire; only ids the page opted in with
-  `data-ai-target`.
 - **[Real charts →](https://vedatugur.github.io/sgiant-ai-widget/charts.html)**
   — animated bars, an animated line with a comparison overlay, and a donut,
   drawn with no chart library at all.
@@ -543,14 +537,29 @@ The window runs `navigate` and the on-page controls (highlight, scroll-to,
 focus-field, fill, click) itself. Every other name must be in `handlers`, or
 the button says it could not do it.
 
-## The surface manifest (`sgiant-ai-widget/manifest`)
+## Upgrading to 3.0
 
-The window's own half of the manifest contract: its manifest, the ids it
-stamps, a check of both against the live panel, and `hostTargetsOnly` to keep
-its controls apart from your page's in a scan. Separate on purpose: a host that
-never verifies a manifest pays nothing for it. The generator and verifier for
-YOUR page (`generateManifest`, `verifySurface`, `canAct`, `hashManifest`) are
-`sgiant-ai-agent-bridge/manifest`'s; import them from there.
+- Parts come as a frame. The window sends `partsVersion` with every turn and
+  draws a `part` frame (`part` + `spec`) after checking it against its copy
+  of the parts dictionary (`src/parts/`, copied from the platform by
+  `scripts/sync-parts.mjs`). The same part sent as a `[[tag:{…}]]` in the
+  text, as a server that ignores `partsVersion` does, is drawn the same way,
+  so a 2.x backend keeps working.
+- New option `renderComponent(host, name, params)`: one of your app's own
+  screens drawn in the chat (`report_view`, `dashboard_view`, `report_list`,
+  `dashboard_list`, `page`). Return `false` for one you have no renderer
+  for; the window then opens its page inside the chat from
+  `getAdvancedUrl(path)`, or offers a button to it.
+- The window no longer points at, fills in or presses controls on the page.
+  `highlight`, `scroll-to`, `focus-field`, `fill` and `click` actions draw
+  nothing, the advanced view's frame is no longer driven, and the window
+  stamps no `data-ai-target` on its own controls and sends no
+  `widgetTargets`.
+- `sgiant-ai-widget/manifest` is removed (`WIDGET_MANIFEST`, `WIDGET_TARGETS`,
+  `verifyWidgetSurface`, `checkWidgetTarget`, `hostTargetsOnly`, …), and so is
+  the dependency on `sgiant-ai-agent-bridge`. The package has no
+  dependencies. The `advancedOrigin` option and the `manifestRoot` option of
+  `createHostActions` are gone.
 
 ## Upgrading to 2.0
 

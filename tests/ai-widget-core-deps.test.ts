@@ -41,19 +41,13 @@ const PKG = join(ROOT, ".");
 /**
  * `@sgiant/*` packages the core entry may reach at runtime.
  *
- * `sgiant-ai-agent-bridge` — two sites, both real:
- *   - `createFrameTransport`, the advanced pane's iframe transport
- *   - the UI-control primitives (`runUiControl`, `runOperateAction`, …) that
- *     `host-actions.ts` calls, re-exported through the `ui-control.ts` shim
- *
- * It is allowed PERMANENTLY, not pending removal. Since 2026-09-02 it is public
- * MIT on GitHub and publishes to public npm, so a consumer who has never heard
- * of sgiant can install it — which is the whole of what this test protects.
- * Vendoring it instead would have forked 732 lines of a postMessage protocol
- * whose two halves must agree byte for byte, in order to satisfy a checkbox
- * whose purpose was already met.
+ * None. `sgiant-ai-agent-bridge` was allowed here until 3.0.0, for the
+ * advanced pane's iframe transport and the UI-control primitives; both went
+ * with pointing at, filling in and pressing controls (sgiant-platform#703).
  */
-const CORE_ALLOWED = new Set(["sgiant-ai-agent-bridge"]);
+// None since 3.0.0: sgiant-ai-agent-bridge went with pointing at, filling in
+// and pressing controls on the page (sgiant-platform#703).
+const CORE_ALLOWED = new Set<string>([]);
 
 /** Walk relative imports from an entry, collecting runtime @sgiant specifiers. */
 function runtimeSgiantDeps(entry: string): Map<string, string> {
