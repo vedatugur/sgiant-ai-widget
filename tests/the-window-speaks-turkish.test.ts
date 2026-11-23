@@ -161,7 +161,7 @@ const SAYS = (
   const P = "sgiant-aiw";
   const panel = document.querySelector(`.${P}-panel`)!;
   const input = panel.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLInputElement;
   const said = {
     send: panel.querySelector(`.${P}-send`)!.textContent ?? "",

@@ -190,7 +190,7 @@ test(
         }) as typeof fetch;
         const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
         const ask = async (q: string) => {
-          const box = document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement;
+          const box = document.querySelector('.sgiant-aiw-input') as HTMLTextAreaElement;
           box.value = q;
           box.closest("form")!.requestSubmit();
           await wait(700);
@@ -366,7 +366,7 @@ test(
         }) as typeof fetch;
         const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
         const ask = async (q: string) => {
-          const box = document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement;
+          const box = document.querySelector('.sgiant-aiw-input') as HTMLTextAreaElement;
           box.value = q;
           box.closest("form")!.requestSubmit();
           await wait(700);

@@ -96,7 +96,7 @@ test(
           });
           await new Promise((r) => setTimeout(r, 300));
           const panel = box.querySelector(`.${P}-panel`) as HTMLElement;
-          const input = panel.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement;
+          const input = panel.querySelector('.sgiant-aiw-input') as HTMLTextAreaElement;
           const chips = [...panel.querySelectorAll(`.${P}-suggestions button`)].map((b) => b.textContent ?? "");
           // Try every way of sending: a suggested question, Enter, the form.
           (panel.querySelector(`.${P}-suggestions button`) as HTMLButtonElement | null)?.click();

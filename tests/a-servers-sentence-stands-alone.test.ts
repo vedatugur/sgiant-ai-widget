@@ -110,7 +110,7 @@ const MOUNT = (): void => {
 /** Runs in the page: type a question and submit it, as the composer does. */
 const ASK = (q: string): void => {
   const input = document.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLInputElement;
   input.value = q;
   input.closest("form")!.requestSubmit();

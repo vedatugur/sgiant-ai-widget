@@ -69,7 +69,7 @@ const LOOK = async (
   const panel = document.querySelector(`.${P}-panel`) as HTMLElement;
   const form = panel.querySelector(`.${P}-form`) as HTMLElement;
   const box = panel.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLTextAreaElement;
   const cs = getComputedStyle(box);
   const line = parseFloat(cs.lineHeight);
@@ -226,7 +226,7 @@ test(
           w.open();
           await new Promise((r) => setTimeout(r, 300));
           const box = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           box.focus();
           box.value = Array.from({ length: 12 }, (_, i) => "satır " + (i + 1)).join("\n");
@@ -285,7 +285,7 @@ test(
             w.open();
             await new Promise((r) => setTimeout(r, 300));
             const box = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             const h = () => Math.round(box.getBoundingClientRect().height);
             const set = (v: string) => {
@@ -321,7 +321,7 @@ test(
           w.open();
           await new Promise((r) => setTimeout(r, 300));
           const box = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           box.focus();
           const seen: number[] = [];
@@ -355,7 +355,7 @@ test(
             await new Promise((r) => setTimeout(r, 300));
             const panel = document.querySelector(`.${P}-panel`) as HTMLElement;
             const box = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             box.value = Array.from({ length: 9 }, (_, i) => "satır " + (i + 1)).join("\n");
             box.dispatchEvent(new Event("input", { bubbles: true }));
@@ -419,7 +419,7 @@ test(
           w.open();
           await new Promise((r) => setTimeout(r, 250));
           const box = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           const key = (init: KeyboardEventInit & { keyCode?: number }) => {
             const e = new KeyboardEvent("keydown", {
@@ -497,7 +497,7 @@ test(
             w.open();
             await new Promise((r) => setTimeout(r, 250));
             const box = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             const paste = (fill: (d: DataTransfer) => void) => {
               const data = new DataTransfer();
@@ -527,7 +527,7 @@ test(
           g.fetch = async () => new Response("{}", { status: 200 });
           const measure = () => {
             const box = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             const cs = getComputedStyle(box);
             const chrome =
@@ -539,7 +539,7 @@ test(
           first.open();
           await new Promise((r) => setTimeout(r, 200));
           const box = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           box.value = text;
           box.dispatchEvent(new Event("input", { bubbles: true }));

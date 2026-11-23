@@ -63,7 +63,7 @@ const LOOK = async (
   const panel = document.querySelector(`.${P}-panel`)!;
   const form = panel.querySelector("form")!;
   const input = form.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLInputElement;
   const pill = form.querySelector(`.${P}-model-btn`) as HTMLButtonElement | null;
   // The sentence fades; wait for frames, not for a guess at the clock.
@@ -265,7 +265,9 @@ test(
         assert.equal(s.pill!.text, "One");
         assert.equal(s.pill!.ariaDisabled, null);
         assert.equal(s.pill!.hasPopup, "menu");
-        assert.equal(s.pill!.target, "widget-model");
+        // 3.0.0 offers the assistant no control of the window at all
+        // (sgiant-platform#703): no element carries a data-ai-target.
+        assert.equal(s.pill!.target, null);
       });
 
       await t.test("a host that says nothing gets no pill, as before", async () => {

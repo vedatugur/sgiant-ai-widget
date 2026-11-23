@@ -86,7 +86,7 @@ const MEASURE = async (
   // Before a question: the suggested question, where the accent is ink.
   read("a suggested question", `.${P}-suggestions button`);
   const input = document.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLTextAreaElement;
   input.value = "Çalışma saatleriniz nedir?";
   read("the send button", `.${P}-send`);
