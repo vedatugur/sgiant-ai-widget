@@ -1,5 +1,6 @@
 import { WIDGET_TARGET_DECLARATIONS as widgetTargets } from "./widget-manifest.js";
 import { parseJsonDirective } from "./directive";
+import { PARTS_VERSION, partFrameAsTag } from "./parts/window-parts";
 import { PREFIX } from "./prefix";
 import { readTokenRefusal, type TokenRefusal } from "./token-refusal";
 import { addMsg, el, maskMarkdown, parseLine } from "./dom";
@@ -185,6 +186,7 @@ export interface TurnStreamContext {
   renderProposal: DecisionCards["renderProposal"];
   renderWidget: UiRenderers["renderWidget"];
   renderUiCard: UiRenderers["renderUiCard"];
+  renderComponent: UiRenderers["renderComponent"];
   renderPreview: UiRenderers["renderPreview"];
   renderServerWidget: UiRenderers["renderServerWidget"];
 }
@@ -245,6 +247,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     renderProposal,
     renderWidget,
     renderUiCard,
+    renderComponent,
     renderPreview,
     renderServerWidget,
   } = ctx;
@@ -547,6 +550,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
         tag === "widget" ||
         tag === "ui" ||
         tag === "preview" ||
+        tag === "component" ||
         customRenderers[tag]
       )
         return "now";
@@ -594,6 +598,10 @@ export function createTurnStream(ctx: TurnStreamContext) {
       }
       if (tag === "ui") {
         renderUiCard(spec);
+        return;
+      }
+      if (tag === "component") {
+        renderComponent(spec);
         return;
       }
       const p = spec as PreviewSpec;
@@ -765,6 +773,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
           ...(atts.length ? { attachments: atts.map((a) => a.mediaId) } : {}),
           ...(fork?.parentId !== undefined ? { parentId: fork.parentId } : {}),
           ...(fork?.regenerate ? { regenerate: true } : {}),
+          // This window draws `part` frames (sgiant-platform#701). Without
+          // it the api sends each part as its tag in the text, as before.
+          partsVersion: PARTS_VERSION,
         }),
       });
       // What this status proves about the api, for the launcher's offline state
@@ -829,6 +840,26 @@ export function createTurnStream(ctx: TurnStreamContext) {
               // real markdown still renders once at the end of each segment.
               processStreamDisplay();
               scrollDown();
+            }
+            // A PART THE ASSISTANT DREW (sgiant-platform#701): checked against
+            // this window's copy of the parts dictionary, then written into
+            // the reply as its tag, so it is drawn by the same path as a tag
+            // an older api sends, here and when the conversation is reopened.
+            if (frame.type === "part" && live()) {
+              const drawn = partFrameAsTag(
+                frame.part,
+                (frame as { spec?: unknown }).spec,
+              );
+              if ("tag" in drawn) {
+                assistantRaw += `\n\n${drawn.tag}\n\n`;
+                producedAny = true;
+                processStreamDisplay();
+                scrollDown();
+              } else
+                warnOnce(
+                  `part-frame-${frame.part ?? ""}`,
+                  `sgiant-ai-widget: a \`part\` frame was not drawn: ${drawn.problems.join("; ")}`,
+                );
             }
             // Inline data widget (render_chart). Flush the current text first so
             // the chart lands AFTER it, in order — not below the whole reply.

@@ -609,6 +609,21 @@ export interface AiChatWidgetOptions {
    */
   renderers?: Record<string, DirectiveRenderer>;
   /**
+   * ONE OF THE APP'S OWN SCREENS, DRAWN IN THE CHAT (sgiant-platform#703).
+   *
+   * The assistant names a component (`report_view`, `dashboard_view`,
+   * `report_list`, `dashboard_list`, `page`) and gives it small `params`
+   * (an id); draw that screen into `host`, fetching its own data with your
+   * own session. Return a disposer (or nothing) when drawn, or `false` when
+   * you have no renderer for `name`: the window then opens the screen's page
+   * inside the chat, from `getAdvancedUrl(path)`, or offers a button to it.
+   */
+  renderComponent?: (
+    host: HTMLElement,
+    name: string,
+    params: Record<string, unknown>
+  ) => (() => void) | void | false;
+  /**
    * Fallback chart renderer for embeds WITHOUT `renderDataWidget` (no React
    * host). When the assistant streams a `render_chart` frame and no host
    * renderer is wired, this is consulted before the built-in degrade
@@ -2590,7 +2605,7 @@ export function createAiChatWidget(
   function addAssistantMessage(text: string): HTMLElement {
     // Replay: render clean prose (directives the live turn already handled are
     // stripped) + an inert note per directive — never raw [[…]] code.
-    const { clean, notes, navs, uis, widgets } =
+    const { clean, notes, navs, uis, widgets, components } =
       stripDirectivesForReplay(text);
     const bubble = addMsg(log, "assistant", "");
     applyAssistantRich(bubble, clean);
@@ -2602,6 +2617,10 @@ export function createAiChatWidget(
     // Composed cards are re-drawn in full — see the note in
     // stripDirectivesForReplay for why they are not flattened to a note.
     for (const u of uis) renderUiCard(u);
+    // The app's own screens are drawn again too (sgiant-platform#703): they
+    // fetch their own data, so a reopened conversation shows them as they
+    // are now, and nothing on them runs by itself.
+    for (const c of components) renderComponent(c);
     // …and so are data widgets, for the same reason (#395). Their rows are in
     // the spec, so this draws the table that was there and fetches nothing.
     for (const w of widgets) renderWidget(w);
@@ -4436,6 +4455,13 @@ export function createAiChatWidget(
       t = u.stripped;
       renderUiCard(u.spec);
     }
+    // The app's own screens (sgiant-platform#703).
+    for (let i = 0; i < 4; i++) {
+      const c = parseJsonDirective<unknown>(t, "component");
+      if (!c) break;
+      t = c.stripped;
+      renderComponent(c.spec);
+    }
     // Dynamic HTML previews — the AI draws a mockup/preview and we paint it in a
     // FULLY sandboxed iframe (no scripts, no same-origin) right in the chat.
     for (let i = 0; i < 3; i++) {
@@ -4722,6 +4748,7 @@ export function createAiChatWidget(
     renderProposal,
     renderWidget: (raw) => renderWidget(raw),
     renderUiCard: (raw) => renderUiCard(raw),
+    renderComponent: (raw) => renderComponent(raw),
     renderPreview: (spec) => renderPreview(spec),
     renderServerWidget: (spec, rows, comparisonRows) =>
       renderServerWidget(spec, rows, comparisonRows),
@@ -4947,6 +4974,7 @@ export function createAiChatWidget(
     renderServerWidget,
     renderChips,
     renderPreview,
+    renderComponent,
     operateConfirmText,
   } = createUiRenderers({
     L,

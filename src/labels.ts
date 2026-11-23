@@ -26,6 +26,11 @@ export const WIDGET_LABELS = {
   // carry none; these two are the exceptions a reader must not mistake for data.
   widgetSourceEstimate: "Estimate — not measured",
   widgetSourceProvided: "Figures you provided",
+  // One of the app's own screens in the chat (sgiant-platform#703), when it
+  // opens as its page: the frame's name for a screen reader, and the button
+  // that opens the page itself.
+  componentFrameTitle: "The page, inside the chat",
+  componentOpenPage: "Open the page",
   // Question cards — the assistant asking the human to decide.
   questionConfirm: "Send",
   questionPlaceholder: "Type your answer…",

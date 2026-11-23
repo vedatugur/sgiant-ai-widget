@@ -28,7 +28,8 @@ authorization: Bearer <token>        # only when `token` / `getToken` is set
   "pageContext": { … },                      // only if the host supplies one
   "attachments": ["mediaId", …],             // only if files were attached
   "parentId": "…",                           // only when editing/branching
-  "regenerate": true                         // only when re-running a turn
+  "regenerate": true,                        // only when re-running a turn
+  "partsVersion": 1                          // always: this window reads `part` frames
 }
 ```
 
@@ -115,7 +116,12 @@ allowance), `activity` (live "running → ok" steps for a long turn), `question`
 write), **`widget`** (a chart: `spec` + `rows`, plus optional `comparisonRows` for a prior-period overlay — note the type is `widget`, not `chart`), and `meta` (which model wrote the
 turn), and `searches` (the web searches a reply ran, sent once the turn is
 charged: `queries`, `count` and `credits`, drawn under the reply; `credits: null`
-draws no credits part). Their exact fields are the `StreamFrame` interface in
+draws no credits part), and **`part`** (a card, a button, a preview or one of the
+host app's own screens: `part` names it and `spec` holds its fields, checked
+against the parts dictionary in `src/parts/` before anything is drawn; a part
+that does not fit is left out with a console warning). The same part sent as a
+`[[part:{…}]]` tag inside the text, as a server that ignores `partsVersion`
+does, is drawn the same way. Their exact fields are the `StreamFrame` interface in
 `src/dom.ts`, which is the only place they are defined.
 
 **Optional in the type does not mean optional in practice.** `StreamFrame` marks

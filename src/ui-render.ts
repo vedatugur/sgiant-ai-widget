@@ -20,6 +20,8 @@ import {
 // nothing changed.
 import type { AiChatWidgetOptions, WidgetJobView } from "./index";
 import type { WidgetLabels } from "./labels";
+import { checkComponent } from "./parts/window-parts";
+import { isSafeFrameUrl } from "./safe-url";
 
 /**
  * Rendering for server-driven UI: the `ui` spec and the inline data widgets.
@@ -766,6 +768,60 @@ export function createUiRenderers(ctx: UiRenderCtx) {
   }
 
   /**
+   * ONE OF THE APP'S OWN SCREENS, IN THE CHAT (sgiant-platform#703): a
+   * report, a dashboard, a list. The assistant names it and gives it an id;
+   * the HOST draws it (`renderComponent`) and it fetches its own data with
+   * the host's session, so the figures are the screen's, never the model's.
+   *
+   * A host that has no renderer for it (no option, or `false` back) gets the
+   * page opened INSIDE the chat instead, from `getAdvancedUrl(path)`, the
+   * embed URL the host already builds; with neither, a button that opens the
+   * page. A spec this window does not know draws nothing.
+   */
+  function renderComponent(raw: unknown): void {
+    const c = checkComponent(raw);
+    if (!c.ok) return;
+    const wrap = el("div", `${PREFIX}-component`);
+    wrap.dataset.component = c.spec.name;
+    log.appendChild(wrap);
+    let drawn: (() => void) | void | false = false;
+    if (opts.renderComponent) {
+      try {
+        drawn = opts.renderComponent(wrap, c.spec.name, c.spec.params ?? {});
+      } catch {
+        drawn = false;
+      }
+    }
+    if (drawn !== false) {
+      if (typeof drawn === "function") richDisposers.push(drawn);
+      scrollDown(true);
+      return;
+    }
+    wrap.replaceChildren();
+    const open = el("button", `${PREFIX}-component-open`) as HTMLButtonElement;
+    open.type = "button";
+    open.textContent = L("componentOpenPage");
+    open.addEventListener("click", () => {
+      void Promise.resolve(dispatchAction("navigate", { path: c.path })).catch(
+        () => undefined,
+      );
+    });
+    const url = opts.getAdvancedUrl?.(c.path);
+    if (url && isSafeFrameUrl(url)) {
+      wrap.classList.add(`${PREFIX}-component-page`);
+      const frame = el(
+        "iframe",
+        `${PREFIX}-component-frame`,
+      ) as HTMLIFrameElement;
+      frame.setAttribute("title", L("componentFrameTitle"));
+      frame.setAttribute("loading", "lazy");
+      frame.src = url;
+      wrap.append(frame, open);
+    } else wrap.append(open);
+    scrollDown(true);
+  }
+
+  /**
    * Default confirm copy for a state-changing UI action the model didn't caption.
    * Thin wrapper: the sentence itself is `confirmSentence`, which is pure and
    * therefore actually testable.
@@ -784,6 +840,7 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     renderServerWidget,
     renderChips,
     renderPreview,
+    renderComponent,
     operateConfirmText,
   };
 }

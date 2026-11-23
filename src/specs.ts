@@ -317,10 +317,13 @@ export function stripDirectivesForReplay(text: string): {
   navs: NavigateSpec[];
   uis: unknown[];
   widgets: WidgetSpec[];
+  /** The app's own screens (sgiant-platform#703), drawn again on replay. */
+  components: unknown[];
 } {
   let t = text;
   const notes: string[] = [];
   const uis: unknown[] = [];
+  const components: unknown[] = [];
   const widgets: WidgetSpec[] = [];
   // Navigation is idempotent and side-effect-free, so on replay we hand it back
   // to be re-rendered as a REAL clickable chip rather than flattened to an inert
@@ -371,6 +374,14 @@ export function stripDirectivesForReplay(text: string): {
     t = u.stripped;
     uis.push(u.spec);
   }
+  // The app's own screens (sgiant-platform#703) are drawn again, like the
+  // cards above: they fetch their own data and nothing on them runs alone.
+  for (let i = 0; i < 4; i++) {
+    const c = parseJsonDirective<unknown>(t, "component");
+    if (!c) break;
+    t = c.stripped;
+    components.push(c.spec);
+  }
   for (let i = 0; i < 3; i++) {
     const p = parseJsonDirective<PreviewSpec>(t, "preview");
     if (!p) break;
@@ -397,7 +408,7 @@ export function stripDirectivesForReplay(text: string): {
     t = t.replace(LEAD_TOKEN, "").trim();
     notes.push("📝 Form — submitted");
   }
-  return { clean: t, notes, navs, uis, widgets };
+  return { clean: t, notes, navs, uis, widgets, components };
 }
 
 /**
