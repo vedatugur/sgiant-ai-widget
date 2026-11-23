@@ -324,6 +324,29 @@ export const WIDGET_LABELS = {
   actionOpened: "Opened",
   /** A thread the transcript endpoint would not return. */
   threadOpenFailed: "Couldn't open that conversation.",
+  /**
+   * THE ADVANCED VIEW (sgiant-platform#702): the conversation list on the
+   * left, the chat in the middle and the page on the right.
+   */
+  advBack: "Back to the app",
+  sideLabel: "Conversations",
+  sideOpen: "Open the conversation list",
+  sideCollapse: "Collapse the conversation list",
+  sideClose: "Close the conversation list",
+  searchConversations: "Search conversations",
+  searchNoMatch: "No conversation matches this search.",
+  starredBucket: "Starred",
+  /** The dot on a conversation whose answer arrived while it was not open. */
+  newAnswer: "New answer",
+  /** The phone's way back from the page to the chat. */
+  paneBackToChat: "Back to the conversation",
+  paneChat: "Chat",
+  /** Under the box while an answer is coming, before its first word. */
+  statusThinking: "Thinking…",
+  /** Send becomes Stop while the answer on screen is being written. */
+  stop: "Stop",
+  stopAnswer: "Stop the answer",
+  stopped: "You stopped this answer.",
 } as const;
 
 /** The widget's label bag — same keys as WIDGET_LABELS, all resolved to strings. */

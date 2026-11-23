@@ -78,7 +78,7 @@ const SETUP = (): void => {
     g.W = null;
   };
   g.field = () =>
-    document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement;
+    document.querySelector('.sgiant-aiw-input') as HTMLTextAreaElement;
   g.ask = async (q: string) => {
     g.field().value = q;
     g.field().closest("form")!.requestSubmit();

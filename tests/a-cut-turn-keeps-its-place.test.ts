@@ -368,7 +368,7 @@ const MOUNT = (again: boolean): void => {
 
 const ASK = (q: string): void => {
   const input = document.querySelector(
-    '[data-ai-target="widget-composer"]'
+    '.sgiant-aiw-input'
   ) as HTMLInputElement;
   input.value = q;
   input.closest("form")!.requestSubmit();

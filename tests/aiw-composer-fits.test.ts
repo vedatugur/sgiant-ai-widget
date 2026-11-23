@@ -144,20 +144,21 @@ const MEASURE = async (o: {
     ...(o.send ? { labels: { send: o.send } } : {}),
   });
   w.open();
-  const q = (t: string) =>
-    document.querySelector(`[data-ai-target="${t}"]`) as HTMLElement | null;
-  if (o.expanded) q("widget-expand")!.click();
+  // By class: 3.0.0 took the data-ai-target names away with the page driving
+  // (sgiant-platform#703).
+  const q = (c: string) => document.querySelector(`.sgiant-aiw-${c}`) as HTMLElement | null;
+  if (o.expanded) q("expand")!.click();
   // The panel animates in and its width transitions; measure the settled row.
   await new Promise((r) => setTimeout(r, 450));
   const box = (e: Element): Box => {
     const r = e.getBoundingClientRect();
     return { left: r.left, right: r.right, width: r.width };
   };
-  const input = q("widget-composer")!;
+  const input = q("input")!;
   const form = input.closest("form")!;
-  const pill = q("widget-model")!;
+  const pill = q("model-btn")!;
   const name = pill.firstElementChild as HTMLElement;
-  const attach = q("widget-attach");
+  const attach = q("attach");
   const row = {
     input: box(input),
     send: box(form.querySelector('button[type="submit"]')!),

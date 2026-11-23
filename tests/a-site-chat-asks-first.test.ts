@@ -189,7 +189,7 @@ const RUN = async (
       (b) => b.textContent ?? ""
     );
     const input = panel.querySelector(
-      '[data-ai-target="widget-composer"]'
+      '.sgiant-aiw-input'
     ) as HTMLTextAreaElement;
     placeholder = input.placeholder;
     accent = getComputedStyle(panel).getPropertyValue("--aiw-accent").trim();
@@ -350,7 +350,7 @@ test(
             await new Promise((r) => setTimeout(r, 200));
             const ask = async (q: string) => {
               const input = document.querySelector(
-                '[data-ai-target="widget-composer"]'
+                '.sgiant-aiw-input'
               ) as HTMLTextAreaElement;
               input.value = q;
               input.closest("form")!.requestSubmit();
@@ -444,7 +444,7 @@ test(
             w.open();
             await new Promise((r) => setTimeout(r, 200));
             const input = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             input.value = "Is breakfast included?";
             input.closest("form")!.requestSubmit();
@@ -498,7 +498,7 @@ test(
             w.open();
             await new Promise((r) => setTimeout(r, 200));
             const input = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             input.value = "Is breakfast included?";
             input.closest("form")!.requestSubmit();
@@ -526,7 +526,7 @@ test(
           w.open();
           await new Promise((r) => setTimeout(r, 200));
           const input = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           input.value = "Is breakfast included?";
           input.closest("form")!.requestSubmit();
@@ -651,7 +651,7 @@ test(
           a.open();
           await new Promise((r) => setTimeout(r, 200));
           const input = document.querySelector(
-            '[data-ai-target="widget-composer"]'
+            '.sgiant-aiw-input'
           ) as HTMLTextAreaElement;
           input.value = "hello";
           input.closest("form")!.requestSubmit();
@@ -852,7 +852,7 @@ test(
             await new Promise((r) => setTimeout(r, 300));
             listen();
             const input = document.querySelector(
-              '[data-ai-target="widget-composer"]'
+              '.sgiant-aiw-input'
             ) as HTMLTextAreaElement;
             input.value = "hello";
             input.closest("form")!.requestSubmit();
@@ -906,7 +906,7 @@ test(
             document.querySelector(`.${P}-title`)?.textContent ?? "",
             document.querySelector(`.${P}-bubble`)?.getAttribute("aria-label") ?? "",
             (
-              document.querySelector('[data-ai-target="widget-composer"]') as HTMLTextAreaElement
+              document.querySelector('.sgiant-aiw-input') as HTMLTextAreaElement
             ).placeholder,
           ];
           const w = await g.SgiantAiWidget.createSiteChat({

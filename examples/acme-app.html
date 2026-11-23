@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Hotel — a page in the right pane</title>
+    <style>
+      /* A stand-in for the host's own app, framed by examples/advanced.html.
+         It reads ?page= and draws that page. Nothing here is the widget. */
+      :root { color-scheme: light dark; --ink: #141413; --muted: #6e6e6a; --line: #e4e2dc; --card: #fff; --bar: #0f766e; }
+      @media (prefers-color-scheme: dark) { :root { --ink: #f0efea; --muted: #a09f99; --line: #343432; --card: #1a1a19; --bar: #5eead4; } }
+      body { margin: 0; padding: 18px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: transparent; }
+      h1 { font-size: 17px; margin: 0 0 12px; }
+      .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+      .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+      .kpi small { color: var(--muted); font-size: 12px; }
+      .kpi div { font-size: 21px; font-weight: 600; margin-top: 2px; }
+      .bars { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 14px 0; display: flex; align-items: flex-end; gap: 8px; height: 190px; }
+      .bars i { flex: 1; background: color-mix(in srgb, var(--bar) 55%, var(--card)); border-radius: 4px 4px 0 0; }
+      .bars i.hl { background: var(--bar); }
+    </style>
+  </head>
+  <body>
+    <h1 id="t"></h1>
+    <div class="kpis" id="k"></div>
+    <div class="bars" id="b"></div>
+    <script>
+      const PAGES = {
+        "/reports/season": { n: "Season report", k: [["Revenue", "€616.7k"], ["Occupancy", "95.8%"], ["Avg. rate", "€165"]], b: [30, 48, 70, 86, 95, 97, 92, 71, 40], hl: 7 },
+        "/pricing": { n: "Prices", k: [["June", "€159"], ["Last year", "€177"], ["Change", "−10%"]], b: [60, 62, 70, 64, 90, 96, 94, 80, 66] },
+        "/reviews": { n: "Reviews", k: [["Rating", "4.75"], ["Unanswered", "34"], ["This month", "12"]], b: [80, 82, 78, 76, 74, 70, 72, 68, 70] },
+        "/ads": { n: "Ads", k: [["Return", "13.1×"], ["Spend", "€12.4k"], ["Clicks", "61k"]], b: [10, 40, 70, 82, 90, 92, 86, 50, 12] },
+      };
+      const path = new URLSearchParams(location.search).get("page") || "/reports/season";
+      const p = PAGES[path] || PAGES["/reports/season"];
+      document.title = p.n;
+      document.getElementById("t").textContent = p.n;
+      for (const [label, value] of p.k) {
+        const k = document.createElement("div");
+        k.className = "kpi";
+        const s = document.createElement("small");
+        s.textContent = label;
+        const v = document.createElement("div");
+        v.textContent = value;
+        k.append(s, v);
+        document.getElementById("k").append(k);
+      }
+      p.b.forEach((h, i) => {
+        const bar = document.createElement("i");
+        bar.style.height = h + "%";
+        if (i === p.hl) bar.className = "hl";
+        document.getElementById("b").append(bar);
+      });
+    </script>
+  </body>
+</html>

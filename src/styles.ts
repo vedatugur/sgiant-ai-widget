@@ -12,6 +12,7 @@
 import { motionCssVars } from "./limits";
 
 import { PREFIX } from "./prefix";
+import { advancedCss } from "./advanced-styles";
 
 let stylesInjected = false;
 /**
@@ -107,8 +108,9 @@ ${panel} .${PREFIX}-assistant table.md-table th{color:#aaa;border-bottom-color:#
 ${panel} .${PREFIX}-assistant table.md-table td{border-bottom-color:#222}
 ${panel} .${PREFIX}-assistant hr{border-top-color:#2a2a2a}
 ${panel} .${PREFIX}-pane-frame{box-shadow:0 1px 4px rgba(0,0,0,.4)}
-${panel}.${PREFIX}-advanced .${PREFIX}-chatcol{border-right-color:#262626}
-${panel}.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{border-right:0}
+${panel}{--aiw-bubble:#2e2e2c;--aiw-scrim:rgba(0,0,0,.55)}
+${panel} .${PREFIX}-logo-light:not(:only-child){display:none}
+${panel}.${PREFIX}-advanced .${PREFIX}-logo-dark{display:block!important}
 `;
 
 export function injectStyles(): void {
@@ -134,6 +136,9 @@ export function injectStyles(): void {
     `.${PREFIX}-bubble:not(.${PREFIX}-host-tokens)`,
     `.${PREFIX}-panel:not(.${PREFIX}-host-tokens)`,
   );
+  // The advanced view's rules (sgiant-platform#702), computed here for the
+  // same reason as the two above.
+  const advancedRules = advancedCss();
   const css = `
 /* Theme tokens — every color in this sheet reads from these. Light defaults
    here; the dark media block below only REDEFINES tokens; explicit host
@@ -193,7 +198,9 @@ export function injectStyles(): void {
      doing a job the mark is already doing, and the two shapes compete. Set
      these three to transparent / none / inherit and the mark becomes the
      launcher, with no other change. Defaults keep the disc, because most
-     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:28px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#FCF7E3;--aiw-header-fg:#151D2F;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-caution-bg:#fffbeb;--aiw-caution-border:#f5d38a;--aiw-caution-text:#92400e;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43}
+     marks are not built to stand alone. */--aiw-launcher-bg:#151D2F;--aiw-launcher-fg:#FCF7E3;--aiw-launcher-shadow:0 6px 20px rgba(21,29,47,.22);--aiw-launcher-pill-height:48px;--aiw-launcher-pill-icon:28px;--aiw-launcher-parked-size:40px;--aiw-launcher-parked-icon:20px;--aiw-launcher-dot:18px;--aiw-launcher-dot-sm:10px;--aiw-accent:#6d28d9;--aiw-accent-contrast:#fff;--aiw-accent-ink:var(--aiw-accent-ink-light,var(--aiw-accent));--aiw-header-bg:#FCF7E3;--aiw-header-fg:#151D2F;--aiw-avatar-bg:#FCF7E3;--aiw-gradient:linear-gradient(135deg,var(--aiw-accent),var(--aiw-accent));--aiw-surface:#fff;--aiw-surface-raised:#fff;--aiw-surface-2:#f7f7f8;--aiw-bg:#fafafa;--aiw-text:#111;--aiw-text-2:#555;--aiw-muted:#6e6e6e;--aiw-border:#e6e6e6;--aiw-border-strong:#ddd;--aiw-border-soft:#f0f0f0;--aiw-danger-bg:#fff6f2;--aiw-danger-border:#f3c5b6;--aiw-danger-text:#b23b18;--aiw-caution-bg:#fffbeb;--aiw-caution-border:#f5d38a;--aiw-caution-text:#92400e;--aiw-danger-text-2:#8a5648;--aiw-ok-bg:#f2fbf5;--aiw-ok-border:#bfe3c8;--aiw-ok-text:#2f7d43;/* The advanced view's own (sgiant-platform#702): its fonts, its durations,
+     the list's and the page's widths, the touch target, the user's bubble,
+     the star and the phone's backdrop. */--aiw-font-family:system-ui,-apple-system,sans-serif;--aiw-font-answer:ui-serif,Georgia,"Times New Roman",serif;--aiw-dur-in:var(--duration-base);--aiw-dur-out:var(--duration-fast);--aiw-dur-slow:var(--duration-slow);--aiw-ease:var(--ease-out);--aiw-side-w:272px;--aiw-rail-w:56px;--aiw-pane-w:clamp(360px,42vw,640px);--aiw-chat-max:720px;--aiw-hit:34px;--aiw-bubble:#efeeea;--aiw-mark:#f59e0b;--aiw-scrim:rgba(20,20,19,.32);--aiw-side-shadow:10px 0 30px rgba(0,0,0,.16);--aiw-drawer-shadow:10px 0 30px rgba(0,0,0,.22)}
 @keyframes ${PREFIX}-spin{to{transform:rotate(360deg)}}
 @keyframes ${PREFIX}-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes ${PREFIX}-blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
@@ -375,7 +382,7 @@ export function injectStyles(): void {
    keyed to different selectors. Measured: 44px applied, translate did not. */
 .${PREFIX}-bubble svg{width:var(--aiw-launcher-icon);height:var(--aiw-launcher-icon);flex:0 0 auto;max-width:none;transform:translateY(var(--aiw-launcher-lift));transition:transform var(--duration-base,300ms) var(--ease-out)}
 .${PREFIX}-bubble:hover svg{transform:translateY(calc(var(--aiw-launcher-lift) - 6%))}
-.${PREFIX}-panel{position:fixed;bottom:20px;right:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
+.${PREFIX}-panel{position:fixed;bottom:20px;right:20px;z-index:48;width:368px;max-width:calc(100vw - 32px);height:540px;max-height:calc(100vh - 40px);background:var(--aiw-surface);color:var(--aiw-text);border-radius:var(--aiw-radius-3xl);box-shadow:0 18px 52px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;font-family:var(--aiw-font-family);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out);}
 /* EACH WINDOW ITS OWN CORNER (sgiant-platform#592). The stylesheet is
    written once per page, so a corner baked into it was the FIRST window's
    for every window after it: a site's preview drawn first in the app moved
@@ -829,40 +836,17 @@ transform-origin:top right;transform:translateY(-4px) scale(.98);opacity:0;visib
 /* Fullscreen: drop the inset margins, width cap and radius so advanced view
    fills the whole viewport edge-to-edge. Two classes → wins over .advanced. */
 .${PREFIX}-advanced.${PREFIX}-advanced-full{inset:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;border-radius:0}
-.${PREFIX}-advanced .${PREFIX}-chatcol{flex:0 0 var(--aiw-chatw,400px);min-width:320px;border-right:1px solid var(--aiw-border)}
-.${PREFIX}-advanced .${PREFIX}-pane{display:flex;flex:1 1 auto}
-.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0}
-/* Draggable divider between chat + app pane. Hidden unless advanced & expanded.
-   A thin bar with a wider invisible hit-area; brightens on hover/drag. */
+/* The draggable edge of the page on the right: see advanced-styles.ts. */
 .${PREFIX}-resizer{display:none}
-.${PREFIX}-advanced .${PREFIX}-resizer{display:block;flex:0 0 6px;align-self:stretch;cursor:col-resize;background:var(--aiw-border);touch-action:none;position:relative;transition:background .15s}
-.${PREFIX}-advanced .${PREFIX}-resizer::after{content:"";position:absolute;top:0;bottom:0;left:-4px;right:-4px}
-.${PREFIX}-advanced .${PREFIX}-resizer:hover,.${PREFIX}-resizing .${PREFIX}-resizer{background:var(--aiw-accent,#6366f1)}
-.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-resizer{display:none}
 /* While dragging: kill text selection + let pointer events pass over the iframe
    (an iframe would otherwise swallow the drag and drop the pointer). */
 .${PREFIX}-resizing{user-select:none}
 .${PREFIX}-resizing .${PREFIX}-pane-frame{pointer-events:none}
-/* Collapsed: the pane shrinks to a thin strip that still shows the toggle (so it
-   can be re-opened), and its url + framed body hide. */
-.${PREFIX}-advanced.${PREFIX}-pane-collapsed .${PREFIX}-pane{flex:0 0 40px;min-height:0}
-.${PREFIX}-pane-collapsed .${PREFIX}-pane-body{display:none}
-.${PREFIX}-pane-collapsed .${PREFIX}-pane-url{display:none}
-.${PREFIX}-pane-collapsed .${PREFIX}-pane-bar{padding:6px 5px}
-.${PREFIX}-pane-collapsed .${PREFIX}-pane-collapse{transform:rotate(180deg)}
 .${PREFIX}-pane-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--aiw-border);background:var(--aiw-surface-2);flex:0 0 auto}
 .${PREFIX}-pane-url{font-size:var(--aiw-font-2xs);color:var(--aiw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 /* Padded gutter around the driven app so it reads as an inset "screen". */
 .${PREFIX}-pane-body{flex:1 1 auto;min-width:0;min-height:0;display:flex;padding:12px}
 .${PREFIX}-pane-frame{flex:1 1 auto;width:100%;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-xl);background:var(--aiw-surface);min-height:0;box-shadow:0 1px 4px rgba(15,23,42,.07)}
-/* Narrow: stack the app pane on top and the chat (with composer) below. */
-@media (max-width:820px){
-  .${PREFIX}-advanced{flex-direction:column-reverse}
-  .${PREFIX}-advanced .${PREFIX}-chatcol{flex:1 1 auto;min-width:0;max-width:none;border-right:0;border-top:1px solid var(--aiw-border)}
-  .${PREFIX}-advanced .${PREFIX}-pane{flex:1 1 auto;min-height:38%}
-  /* Stacked layout: the horizontal divider doesn't apply. */
-  .${PREFIX}-advanced .${PREFIX}-resizer{display:none}
-  .${PREFIX}-pane-body{padding:8px}
 }
 
 .${PREFIX}-history{position:absolute;inset:0;background:var(--aiw-surface);display:flex;flex-direction:column;z-index:5;animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
@@ -1094,6 +1078,7 @@ ${darkWhenHostSaysSo}
   /* Expand/restore is meaningless once the sheet is full-screen — hide it. */
   .${PREFIX}-expand{display:none}
 }
+${advancedRules}
 /* ── Reduced motion, gated at the KEYFRAME (#308) ────────────────────────────
    This used to name eleven selectors. Twenty-two were animated, four of the
    eleven carried no animation at all, and the list could only ever fall further
@@ -1128,6 +1113,15 @@ ${darkWhenHostSaysSo}
    shallowed rather than stopped: it still reads as alive, at a fraction of the
    amplitude. */
 @keyframes ${PREFIX}-breathe{0%,100%{opacity:1}50%{opacity:.88}}
+/* The advanced view (sgiant-platform#702): the page and the list fade in
+   where they would slide, the ring is a fade, the status line's sheen is
+   still, and the phone's list moves at once. */
+@keyframes ${PREFIX}-panein{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-sidein{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-sheetin{from{opacity:0}to{opacity:1}}
+@keyframes ${PREFIX}-ring{0%{opacity:.9}100%{opacity:0}}
+@keyframes ${PREFIX}-shim{0%,100%{background-position:50% 0}}
+.${PREFIX}-side,.${PREFIX}-scrim{transition:none!important}
 .${PREFIX}-log{scroll-behavior:auto}
 }
 `;

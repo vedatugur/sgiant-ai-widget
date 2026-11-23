@@ -77,8 +77,16 @@ test("half a button is no button, and the sentence still shows", () => {
 });
 
 test("only a SEND draws the notice: an upload, and everything else, stays silent", () => {
-  // The widget asks for a token in two places, a send and an upload.
-  assert.equal((CODE.match(/opts\.getToken\(\)/g) ?? []).length, 2);
+  // The widget asks for a token in three places: a send, an upload, and
+  // Stop's cancel (stream.ts `cancelTurn`, whose refusal is only a no: the
+  // window then stops reading, and draws no notice).
+  assert.equal((CODE.match(/opts\.getToken\(\)/g) ?? []).length, 3);
+  const cancel = CODE.slice(
+    CODE.indexOf("export async function cancelTurn("),
+    CODE.indexOf("export function createTurnStream(")
+  );
+  assert.ok(cancel.length > 200, "could not find cancelTurn");
+  assert.doesNotMatch(cancel, /TokenNotice|readTokenRefusal/);
   // The rejection is read for a sentence in one of them, and the notice is
   // drawn from one place. A refused upload falls into the catch it always
   // fell into, which shows nothing and uploads nothing; loading past chats and
@@ -237,13 +245,13 @@ const LOOK = async (): Promise<{
     fetches: (globalThis as any).T.fetches,
     clicks: (globalThis as any).T.clicks,
     button: r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null,
-    focus: active?.getAttribute("data-ai-target") ?? active?.tagName ?? "",
+    focus: active?.classList.contains(`${P}-input`) ? "composer" : (active?.tagName ?? ""),
   };
 };
 
 /** Runs in the page: type a question and submit it, as the composer does. */
 const ASK = (q: string): void => {
-  const input = document.querySelector('[data-ai-target="widget-composer"]') as HTMLInputElement;
+  const input = document.querySelector('.sgiant-aiw-input') as HTMLInputElement;
   input.value = q;
   input.closest("form")!.requestSubmit();
 };
@@ -347,7 +355,7 @@ test("in a browser: the whole of it, from the refusal to the question being sent
       assert.equal(after.asked, 1, "the question was drawn a second time");
       assert.deepEqual(after.notices, []);
       assert.ok(after.panelText.includes("Merhaba."));
-      assert.equal(after.focus, "widget-composer", "focus was lost with the button");
+      assert.equal(after.focus, "composer", "focus was lost with the button");
       assert.equal(after.sendDisabled, false);
     });
 

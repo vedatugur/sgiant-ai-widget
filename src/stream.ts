@@ -116,7 +116,6 @@ export interface TurnStreamContext {
   log: HTMLElement;
   panel: HTMLElement;
   input: HTMLTextAreaElement;
-  sendBtn: HTMLButtonElement;
   suggestionsEl: HTMLElement;
   metaChip: HTMLElement;
   launcher: Required<LauncherState>;
@@ -125,6 +124,14 @@ export interface TurnStreamContext {
   // The widget's collections, by reference.
   history: StoredMsg[];
   pendingThreads: Set<string>;
+  /**
+   * The way to stop each turn in flight, by the same key as `pendingThreads`
+   * (sgiant-platform#702). When the server named the turn (a `turn` frame),
+   * Stop asks it to cut the turn (`<endpoint>/turns/:turnId/cancel`) and the
+   * window reads on to the turn's `done`, so it shows what the server kept.
+   * Otherwise, or when the server says no, Stop ends the reading.
+   */
+  turnStops: Map<string, AbortController>;
   qualityAsked: Set<string>;
   threadTurns: Map<string, number>;
   richDisposers: (() => void)[];
@@ -162,6 +169,10 @@ export interface TurnStreamContext {
   showError: (raw: string, show?: { retry?: boolean; alone?: boolean }) => void;
   noteApiResult: (result: "ok" | "unreachable" | number) => void;
   maybeDing: (force?: boolean) => void;
+  /** What the turn is doing now, for the line under the conversation, by
+   *  the turn's key; null when there is nothing to say (its words are
+   *  arriving, or it ended). */
+  onTurnStatus: (key: string, text: string | null) => void;
   usageBadge: (inTok: number, outTok: number) => HTMLElement;
   searchLine: (
     queries: readonly string[],
@@ -184,6 +195,42 @@ export interface TurnStreamContext {
   renderServerWidget: UiRenderers["renderServerWidget"];
 }
 
+/** How long the window reads on after Stop, waiting for the server's cut
+ *  turn to end, before it stops reading anyway. */
+export const STOP_READS_ON_MS = 10_000;
+
+/**
+ * Ask the server to cut the turn it named (sgiant-platform, 2026-11-23):
+ * `POST <endpoint>/turns/:turnId/cancel`, with the turn's own credentials.
+ * True only when it answers that it is stopping; anything else (no such
+ * route, a turn it cannot cut, no answer) is false, and the window stops
+ * reading instead.
+ */
+export async function cancelTurn(
+  opts: Pick<
+    AiChatWidgetOptions,
+    "endpoint" | "getToken" | "token" | "withCredentials"
+  >,
+  turnId: string
+): Promise<boolean> {
+  try {
+    const token = opts.getToken ? await opts.getToken() : opts.token;
+    const res = await fetch(
+      `${opts.endpoint.replace(/\/+$/, "")}/turns/${encodeURIComponent(turnId)}/cancel`,
+      {
+        method: "POST",
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        credentials: opts.withCredentials ? "include" : "same-origin",
+      }
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { state?: unknown } | null;
+    return body?.state === "stopping";
+  } catch {
+    return false;
+  }
+}
+
 export function createTurnStream(ctx: TurnStreamContext) {
   const {
     st,
@@ -198,7 +245,6 @@ export function createTurnStream(ctx: TurnStreamContext) {
     log,
     panel,
     input,
-    sendBtn,
     suggestionsEl,
     metaChip,
     launcher,
@@ -206,6 +252,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     uploads,
     history,
     pendingThreads,
+    turnStops,
     qualityAsked,
     threadTurns,
     richDisposers,
@@ -229,6 +276,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     showError,
     noteApiResult,
     maybeDing,
+    onTurnStatus,
     usageBadge,
     searchLine,
     loadThreadItems,
@@ -384,7 +432,36 @@ export function createTurnStream(ctx: TurnStreamContext) {
     const myGen = st.viewGen;
     let turnThread: string | undefined = st.threadId;
     const live = (): boolean => st.viewGen === myGen && !alive.signal.aborted;
-    pendingThreads.add(turnThread ?? NEW_TURN_KEY);
+    // STOP (sgiant-platform#702): this turn's own switch, beside the
+    // widget's lifetime. Either one ends the request.
+    const stopper = new AbortController();
+    let stopped = false;
+    stopper.signal.addEventListener("abort", () => (stopped = true), {
+      once: true,
+    });
+    const ends = new AbortController();
+    const endRequest = (): void => ends.abort();
+    alive.signal.addEventListener("abort", endRequest, { once: true });
+    // STOP ON THE SERVER (2026-11-23). The turn's name, from its `turn`
+    // frame; whether its `done` said the server cut it.
+    let turnId: string | null = null;
+    let cutOnServer = false;
+    let stopCap: ReturnType<typeof setTimeout> | null = null;
+    const stopOnTheServer = async (): Promise<void> => {
+      if (!turnId) return endRequest();
+      // Never longer than this: a tool already running finishes first.
+      stopCap = setTimeout(endRequest, STOP_READS_ON_MS);
+      if (!(await cancelTurn(opts, turnId))) {
+        clearTimeout(stopCap);
+        endRequest();
+      }
+    };
+    stopper.signal.addEventListener("abort", () => void stopOnTheServer(), {
+      once: true,
+    });
+    const turnKey = (): string => turnThread ?? NEW_TURN_KEY;
+    pendingThreads.add(turnKey());
+    turnStops.set(turnKey(), stopper);
     syncBusy();
     // The person has written again in a conversation whose last answer was
     // being looked for: stop looking (#639, see `recoverLostTurn`).
@@ -396,7 +473,8 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // The conversation is starting — page shortcuts give way to the thread.
     suggestionsEl.style.display = "none";
     suggestionsEl.innerHTML = "";
-    sendBtn.disabled = true;
+    // Busy, so Send is off, or it is Stop (see syncBusy).
+    syncBusy();
     setRole("talk"); // each turn starts as the conversational copilot
     // What this send drew of the person's own, in case the token step says
     // "not now" and the question has to wait: see `waiting` below.
@@ -435,6 +513,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     typing.innerHTML = "<span></span><span></span><span></span>";
     log.appendChild(typing);
     scrollDown(true);
+    onTurnStatus(turnKey(), L("statusThinking"));
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
     // At most four of the app's screens per reply, as a reopened
@@ -708,6 +787,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
       if (Array.isArray(ctxTargets)) st.knownNavTargets = ctxTargets;
+      // A STOP is not a failure (sgiant-platform#702): the request ends, and
+      // reading stops where it is, with nothing learned about the api.
+      const stopEnds = (e: unknown): null => {
+        if (stopped) return null;
+        throw e;
+      };
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -721,7 +806,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
         // widget was already writing. Admin re-keys the widget on account and
         // language change, so a mid-stream account switch could clobber the new
         // account's transcript with the old one's.
-        signal: alive.signal,
+        signal: ends.signal,
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
           ...(picker ? { model: picker.value() } : {}),
@@ -736,12 +821,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
           // it the api sends each part as its tag in the text, as before.
           partsVersion: PARTS_VERSION,
         }),
-      });
+      }).catch(stopEnds);
       // What this status proves about the api, for the launcher's offline state
       // (#346). A 5xx/429 means asking again now will not work either; any
       // other 4xx is a REACHABLE api refusing this particular request.
-      noteApiResult(res.ok ? "ok" : res.status);
-      if (opts.siteChat && (res.status === 403 || res.status === 404)) {
+      if (res) noteApiResult(res.ok ? "ok" : res.status);
+      if (!res) {
+        // Stopped before the answer began: there is nothing to read.
+      } else if (opts.siteChat && (res.status === 403 || res.status === 404)) {
         // NOTHING FROM THE BODY, here or below. What a refused request
         // carries is the server's text for its own log, or a stranger's
         // page if the address is wrong; neither is for a guest.
@@ -755,8 +842,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
         const decoder = new TextDecoder();
         let buf = "";
         for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          const read = await reader.read().catch(stopEnds);
+          if (!read || read.done) break;
+          const value = read.value;
           buf += decoder.decode(value, { stream: true });
           let idx: number;
           while ((idx = buf.indexOf("\n")) >= 0) {
@@ -770,9 +858,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
               // after a switch it must not clobber the view they moved to.
               const named = turnThread !== frame.threadId;
               if (named) {
-                pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+                pendingThreads.delete(turnKey());
+                turnStops.delete(turnKey());
+                onTurnStatus(turnKey(), null);
                 turnThread = frame.threadId;
                 pendingThreads.add(turnThread);
+                turnStops.set(turnThread, stopper);
                 st.inflight = {
                   threadId: turnThread,
                   content: isRegen ? null : content,
@@ -793,6 +884,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
             if (piece && live()) {
               assistantRaw += piece;
               producedAny = true;
+              onTurnStatus(turnKey(), null);
               // Stream MASKED plain text (markdown marks hidden) with a
               // per-token fade+blur reveal — directive bytes are withheld and
               // visual cards paint mid-stream (see processStreamDisplay). The
@@ -840,6 +932,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
               typing.remove();
               if (frame.status === "running") {
                 flushSegment(false);
+                onTurnStatus(turnKey(), frame.label);
                 if (frame.name && TOOL_ROLE[frame.name])
                   setRole(TOOL_ROLE[frame.name]);
               }
@@ -940,6 +1033,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
                   typeof frame.credits === "number" ? frame.credits : null,
               };
             }
+            // The turn's name, for Stop (sgiant-platform, 2026-11-23).
+            if (frame.type === "turn" && typeof frame.turnId === "string")
+              turnId = frame.turnId;
             if (frame.type === "meta" && frame.isStaff && frame.modelLabel) {
               metaChip.textContent = frame.modelLabel;
               metaChip.hidden = false;
@@ -951,6 +1047,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
             if (frame.type === "done") {
               if (frame.messageId) liveMessageId = frame.messageId;
               if (frame.model) liveModel = frame.model;
+              // Stopped, and the server cut the turn: it kept what was read
+              // here. A turn that ended before the cut is an answer like any.
+              if (stopped) {
+                cutOnServer = frame.stopped === true;
+                if (!cutOnServer) stopped = false;
+              }
             }
             if (frame.type === "error" && frame.message) {
               failure = frame.message;
@@ -987,7 +1089,11 @@ export function createTurnStream(ctx: TurnStreamContext) {
         failure = (err as Error).message || "Network error.";
       }
     } finally {
-      pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+      if (stopCap) clearTimeout(stopCap);
+      alive.signal.removeEventListener("abort", endRequest);
+      pendingThreads.delete(turnKey());
+      turnStops.delete(turnKey());
+      onTurnStatus(turnKey(), null);
       syncBusy();
       if (live()) input.focus();
       // A turn just consumed credits — refresh the remaining-credits readout.
@@ -1081,12 +1187,22 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // Clear the typing indicator + render the FINAL text segment (with
     // directives). Earlier segments were already flushed around widgets/chips.
     typing.remove();
+    // A stopped answer keeps what was on screen, and no more: a part still
+    // arriving when it stopped is not drawn half. Cut on the server, the
+    // whole of what was read is what the server kept.
+    if (stopped && !cutOnServer)
+      assistantRaw = assistantRaw.slice(0, shownLen);
     const lastBubble = flushSegment(true);
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
     drawDeferred();
     if (deferredProposals.length) scrollDown();
-    if (!producedAny) {
+    if (stopped) {
+      const note = el("div", `${PREFIX}-stopped`);
+      note.textContent = L("stopped");
+      log.appendChild(note);
+      scrollDown(true);
+    } else if (!producedAny) {
       if (failure) showError(failure, failureIs);
       else {
         addMsg(log, "assistant", "(no response)");
@@ -1142,10 +1258,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // Reload THIS TURN's thread (never whatever the view has become) — and only
     // while the user is still on it; the fence above already handled the
     // switched-away cases.
+    // Nor after a stop the server did not make: it keeps the exchange only at
+    // the turn's end, so a reload now would take the person's own question
+    // off the screen. A turn it cut is kept, with its note.
     if (
       turnThread &&
       opts.loadThread &&
       opts.setActiveLeaf &&
+      (!stopped || cutOnServer) &&
       !hasLiveProposal &&
       !hasErrorCard
     ) {
