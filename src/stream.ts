@@ -116,7 +116,6 @@ export interface TurnStreamContext {
   log: HTMLElement;
   panel: HTMLElement;
   input: HTMLTextAreaElement;
-  sendBtn: HTMLButtonElement;
   suggestionsEl: HTMLElement;
   metaChip: HTMLElement;
   launcher: Required<LauncherState>;
@@ -125,6 +124,13 @@ export interface TurnStreamContext {
   // The widget's collections, by reference.
   history: StoredMsg[];
   pendingThreads: Set<string>;
+  /**
+   * The way to stop each turn in flight, by the same key as `pendingThreads`
+   * (sgiant-platform#702). Stopping ends the READING: the api runs a turn to
+   * its end whatever the browser does, so the full answer may still be kept
+   * on the server.
+   */
+  turnStops: Map<string, AbortController>;
   qualityAsked: Set<string>;
   threadTurns: Map<string, number>;
   richDisposers: (() => void)[];
@@ -162,6 +168,10 @@ export interface TurnStreamContext {
   showError: (raw: string, show?: { retry?: boolean; alone?: boolean }) => void;
   noteApiResult: (result: "ok" | "unreachable" | number) => void;
   maybeDing: (force?: boolean) => void;
+  /** What the turn is doing now, for the line under the conversation, by
+   *  the turn's key; null when there is nothing to say (its words are
+   *  arriving, or it ended). */
+  onTurnStatus: (key: string, text: string | null) => void;
   usageBadge: (inTok: number, outTok: number) => HTMLElement;
   searchLine: (
     queries: readonly string[],
@@ -198,7 +208,6 @@ export function createTurnStream(ctx: TurnStreamContext) {
     log,
     panel,
     input,
-    sendBtn,
     suggestionsEl,
     metaChip,
     launcher,
@@ -206,6 +215,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     uploads,
     history,
     pendingThreads,
+    turnStops,
     qualityAsked,
     threadTurns,
     richDisposers,
@@ -229,6 +239,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     showError,
     noteApiResult,
     maybeDing,
+    onTurnStatus,
     usageBadge,
     searchLine,
     loadThreadItems,
@@ -384,7 +395,20 @@ export function createTurnStream(ctx: TurnStreamContext) {
     const myGen = st.viewGen;
     let turnThread: string | undefined = st.threadId;
     const live = (): boolean => st.viewGen === myGen && !alive.signal.aborted;
-    pendingThreads.add(turnThread ?? NEW_TURN_KEY);
+    // STOP (sgiant-platform#702): this turn's own switch, beside the
+    // widget's lifetime. Either one ends the request.
+    const stopper = new AbortController();
+    let stopped = false;
+    stopper.signal.addEventListener("abort", () => (stopped = true), {
+      once: true,
+    });
+    const ends = new AbortController();
+    const endRequest = (): void => ends.abort();
+    alive.signal.addEventListener("abort", endRequest, { once: true });
+    stopper.signal.addEventListener("abort", endRequest, { once: true });
+    const turnKey = (): string => turnThread ?? NEW_TURN_KEY;
+    pendingThreads.add(turnKey());
+    turnStops.set(turnKey(), stopper);
     syncBusy();
     // The person has written again in a conversation whose last answer was
     // being looked for: stop looking (#639, see `recoverLostTurn`).
@@ -396,7 +420,8 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // The conversation is starting — page shortcuts give way to the thread.
     suggestionsEl.style.display = "none";
     suggestionsEl.innerHTML = "";
-    sendBtn.disabled = true;
+    // Busy, so Send is off, or it is Stop (see syncBusy).
+    syncBusy();
     setRole("talk"); // each turn starts as the conversational copilot
     // What this send drew of the person's own, in case the token step says
     // "not now" and the question has to wait: see `waiting` below.
@@ -435,6 +460,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
     typing.innerHTML = "<span></span><span></span><span></span>";
     log.appendChild(typing);
     scrollDown(true);
+    onTurnStatus(turnKey(), L("statusThinking"));
     let assistant: HTMLElement | null = null;
     let assistantRaw = "";
     // At most four of the app's screens per reply, as a reopened
@@ -708,6 +734,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
       const ctxTargets = (pageContext as { navTargets?: unknown } | undefined)
         ?.navTargets;
       if (Array.isArray(ctxTargets)) st.knownNavTargets = ctxTargets;
+      // A STOP is not a failure (sgiant-platform#702): the request ends, and
+      // reading stops where it is, with nothing learned about the api.
+      const stopEnds = (e: unknown): null => {
+        if (stopped) return null;
+        throw e;
+      };
       const res = await fetch(opts.endpoint, {
         method: "POST",
         headers: {
@@ -721,7 +753,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
         // widget was already writing. Admin re-keys the widget on account and
         // language change, so a mid-stream account switch could clobber the new
         // account's transcript with the old one's.
-        signal: alive.signal,
+        signal: ends.signal,
         body: JSON.stringify({
           ...(opts.extraBody ?? {}),
           ...(picker ? { model: picker.value() } : {}),
@@ -736,12 +768,14 @@ export function createTurnStream(ctx: TurnStreamContext) {
           // it the api sends each part as its tag in the text, as before.
           partsVersion: PARTS_VERSION,
         }),
-      });
+      }).catch(stopEnds);
       // What this status proves about the api, for the launcher's offline state
       // (#346). A 5xx/429 means asking again now will not work either; any
       // other 4xx is a REACHABLE api refusing this particular request.
-      noteApiResult(res.ok ? "ok" : res.status);
-      if (opts.siteChat && (res.status === 403 || res.status === 404)) {
+      if (res) noteApiResult(res.ok ? "ok" : res.status);
+      if (!res) {
+        // Stopped before the answer began: there is nothing to read.
+      } else if (opts.siteChat && (res.status === 403 || res.status === 404)) {
         // NOTHING FROM THE BODY, here or below. What a refused request
         // carries is the server's text for its own log, or a stranger's
         // page if the address is wrong; neither is for a guest.
@@ -755,8 +789,9 @@ export function createTurnStream(ctx: TurnStreamContext) {
         const decoder = new TextDecoder();
         let buf = "";
         for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          const read = await reader.read().catch(stopEnds);
+          if (!read || read.done) break;
+          const value = read.value;
           buf += decoder.decode(value, { stream: true });
           let idx: number;
           while ((idx = buf.indexOf("\n")) >= 0) {
@@ -770,9 +805,12 @@ export function createTurnStream(ctx: TurnStreamContext) {
               // after a switch it must not clobber the view they moved to.
               const named = turnThread !== frame.threadId;
               if (named) {
-                pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+                pendingThreads.delete(turnKey());
+                turnStops.delete(turnKey());
+                onTurnStatus(turnKey(), null);
                 turnThread = frame.threadId;
                 pendingThreads.add(turnThread);
+                turnStops.set(turnThread, stopper);
                 st.inflight = {
                   threadId: turnThread,
                   content: isRegen ? null : content,
@@ -793,6 +831,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
             if (piece && live()) {
               assistantRaw += piece;
               producedAny = true;
+              onTurnStatus(turnKey(), null);
               // Stream MASKED plain text (markdown marks hidden) with a
               // per-token fade+blur reveal — directive bytes are withheld and
               // visual cards paint mid-stream (see processStreamDisplay). The
@@ -840,6 +879,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
               typing.remove();
               if (frame.status === "running") {
                 flushSegment(false);
+                onTurnStatus(turnKey(), frame.label);
                 if (frame.name && TOOL_ROLE[frame.name])
                   setRole(TOOL_ROLE[frame.name]);
               }
@@ -987,7 +1027,10 @@ export function createTurnStream(ctx: TurnStreamContext) {
         failure = (err as Error).message || "Network error.";
       }
     } finally {
-      pendingThreads.delete(turnThread ?? NEW_TURN_KEY);
+      alive.signal.removeEventListener("abort", endRequest);
+      pendingThreads.delete(turnKey());
+      turnStops.delete(turnKey());
+      onTurnStatus(turnKey(), null);
       syncBusy();
       if (live()) input.focus();
       // A turn just consumed credits — refresh the remaining-credits readout.
@@ -1081,12 +1124,20 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // Clear the typing indicator + render the FINAL text segment (with
     // directives). Earlier segments were already flushed around widgets/chips.
     typing.remove();
+    // A stopped answer keeps what was on screen, and no more: a part still
+    // arriving when it stopped is not drawn half.
+    if (stopped) assistantRaw = assistantRaw.slice(0, shownLen);
     const lastBubble = flushSegment(true);
     // The reply is on screen; NOW ask for the decisions, in the order the model
     // proposed them.
     drawDeferred();
     if (deferredProposals.length) scrollDown();
-    if (!producedAny) {
+    if (stopped) {
+      const note = el("div", `${PREFIX}-stopped`);
+      note.textContent = L("stopped");
+      log.appendChild(note);
+      scrollDown(true);
+    } else if (!producedAny) {
       if (failure) showError(failure, failureIs);
       else {
         addMsg(log, "assistant", "(no response)");
@@ -1142,10 +1193,13 @@ export function createTurnStream(ctx: TurnStreamContext) {
     // Reload THIS TURN's thread (never whatever the view has become) — and only
     // while the user is still on it; the fence above already handled the
     // switched-away cases.
+    // Nor after a stop: the server keeps the exchange only at its end, so a
+    // reload now would take the person's own question off the screen.
     if (
       turnThread &&
       opts.loadThread &&
       opts.setActiveLeaf &&
+      !stopped &&
       !hasLiveProposal &&
       !hasErrorCard
     ) {

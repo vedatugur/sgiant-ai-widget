@@ -197,6 +197,21 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   actionPageFailed: "Bu işlem sayfada yapılamadı",
   actionOpened: "Açıldı",
   threadOpenFailed: "Bu konuşma açılamadı.",
+  advBack: "Uygulamaya dön",
+  sideLabel: "Sohbetler",
+  sideOpen: "Sohbet listesini aç",
+  sideCollapse: "Sohbet listesini daralt",
+  sideClose: "Sohbet listesini kapat",
+  searchConversations: "Sohbetlerde ara",
+  searchNoMatch: "Bu aramayla eşleşen sohbet yok.",
+  starredBucket: "Yıldızlı",
+  newAnswer: "Yeni cevap",
+  paneBackToChat: "Sohbete dön",
+  paneChat: "Sohbet",
+  statusThinking: "Düşünüyor…",
+  stop: "Durdur",
+  stopAnswer: "Cevabı durdur",
+  stopped: "Bu cevabı durdurdunuz.",
 };
 
 /**

@@ -28,6 +28,11 @@ npm install sgiant-ai-widget
   drawn with no chart library at all.
 - **[Theming →](https://vedatugur.github.io/sgiant-ai-widget/theming.html)** —
   launcher geometry as custom properties, and an inline SVG brand mark.
+- **[The advanced view →](https://vedatugur.github.io/sgiant-ai-widget/advanced.html)**
+  — the window as a whole screen: past conversations, the chat, the app's
+  page on the right, and an "Acme Hotel" account menu in the host's corner.
+  The approved picture it was built from is
+  [advanced-view-prototype/](./examples/advanced-view-prototype/index.html).
 
 ## Two ways in
 
@@ -248,6 +253,51 @@ createAiChatWidget({
 
 Tokens: `accent`, `accent-contrast`, `gradient`, `surface`, `surface-2`, `bg`,
 `text`, `text-2`, `muted`, `border`, `border-strong`, `border-soft`.
+
+The advanced view reads these too, and its own: `font-family`, `font-answer`
+(the assistant's answers there), `dur-in`, `dur-out`, `dur-slow`, `ease`,
+`side-w` (the open list), `rail-w` (the folded list), `pane-w` (the page on
+the right), `chat-max` (the chat's measure), `hit` (34px, 44px on a touch
+screen), `bubble` (the person's own messages there), `mark` (the star),
+`scrim`, `side-shadow`, `drawer-shadow`. Each has a dark reading where it is
+a colour.
+
+## The advanced view
+
+A window whose host passes `getAdvancedUrl` (or `advancedView: true`, for a
+host with no app to frame) offers a whole-screen view from the header:
+
+- **On the left, past conversations** (`listThreads` / `loadThread`): a search
+  over their titles, a star, a spinner on one being answered and a dot on one
+  whose answer arrived while another was open. From 1200px wide the list sits
+  beside the chat and folds to a rail of icons (remembered in this browser);
+  from 820px it is the rail, and opens over the chat; narrower, or lower than
+  500px, it is a drawer. At the top, a way back to the app and the host's logo
+  (`advancedLogo`, else the window's own mark and name); at the bottom, the
+  host's own corner (`renderAdvancedFooter`).
+- **In the middle, the chat**, with no bar over it: the conversation's title
+  and the More menu. A new conversation shows the greeting large, the box,
+  and the suggestions under it. While an answer comes a status line says what
+  it is doing, and Send is **Stop**.
+- **On the right, the page** (`getAdvancedUrl(path)`) at a fixed width the
+  person can drag. It closes and opens again from the row over the chat; the
+  assistant opens it itself when it goes to a page or draws a result there.
+  On a phone it is a sheet over the chat with a way back, and it opens only
+  when asked.
+
+**Stop ends the reading, not the turn.** The api finishes a turn whatever the
+browser does, so the whole answer may still be kept with the conversation and
+shown when it is opened again.
+
+**What lives in this browser.** The star is the host's (`starThread`, the api's
+shared star) when it is wired, else it is kept in this browser
+(`<storageNamespace>:stars:<layoutKey>`). The dot is always this browser's
+own: the last time of each conversation it has shown
+(`<storageNamespace>:seen:<layoutKey>`). Both are read and written under
+try/catch; a browser that refuses storage draws the list without them.
+
+A visitor's small window on a customer's site (`createSiteChat`, or any window
+with neither option) is unchanged: no list, no Stop.
 
 ## Custom renderers (extension point)
 
@@ -538,6 +588,18 @@ createAiChatWidget({
 The window runs `navigate` and the on-page controls (highlight, scroll-to,
 focus-field, fill, click) itself. Every other name must be in `handlers`, or
 the button says it could not do it.
+
+## Upgrading to 3.1
+
+Nothing is removed; three things behave differently.
+
+- The advanced view is the layout above. Its divider now sizes the PAGE on
+  the right (`--aiw-pane-w`), not the chat; `--aiw-chatw` is no longer read,
+  and a width saved by 3.0 is not reused.
+- In a window that offers the advanced view, Send is Stop while the answer on
+  screen is coming. A visitor's window is as it was.
+- Reopening a past conversation takes the suggestions away, as a conversation
+  with questions in it never had them.
 
 ## Upgrading to 3.0
 

@@ -71,7 +71,8 @@ import { createDecisionCards } from "./decision-cards";
 import type { TokenRefusal } from "./token-refusal";
 import { createJobCards } from "./job-cards";
 import { createUploads, type WidgetAtt } from "./uploads";
-import { createAdvancedView } from "./advanced-view";
+import { createAdvancedView, offersAdvancedView } from "./advanced-view";
+import { createAdvancedShell } from "./advanced-shell";
 import {
   createTurnStream,
   type Inflight,
@@ -795,6 +796,31 @@ export interface AiChatWidgetOptions {
    */
   getAdvancedUrl?: (path?: string) => string;
   /**
+   * Offer the advanced view WITHOUT a page to show beside the chat
+   * (sgiant-platform#702): the conversation list on the left and the chat in
+   * the middle; the right side opens only for a result (`renderDataWidget`).
+   * For a host with no app to frame, such as a page of anchors. Implied by
+   * `getAdvancedUrl`.
+   */
+  advancedView?: boolean;
+  /**
+   * The host software's logo, top left in the advanced view
+   * (sgiant-platform#702). `src` is drawn on a light ground and `srcDark`, when
+   * given, on a dark one; `symbol` is the small mark for the folded list.
+   * Without it the window's own mark and name are drawn there.
+   */
+  advancedLogo?: { src: string; srcDark?: string; symbol?: string; alt: string };
+  /**
+   * The bottom-left corner of the advanced view, the host's own
+   * (sgiant-platform#702): an account menu, a name. Called once with an empty
+   * element; return a function to clean it up. When the list folds to its
+   * rail the same element is shown 56px wide, so put the part that should
+   * stay visible (an avatar) first; folded, the element also carries the
+   * class `sgiant-aiw-slot-compact`, so the host can hide the rest. Omit and
+   * the corner is not drawn.
+   */
+  renderAdvancedFooter?: (host: HTMLElement) => void | (() => void);
+  /**
    * The host's own actions that ONLY open a view — buy nothing, change nothing.
    * Auto-navigate and advanced view run these (and `navigate`) without a
    * confirm; every other action waits for the button. Never list one that
@@ -1309,12 +1335,49 @@ export function createAiChatWidget(
   const pendingThreads = new Set<string>();
   const isThreadPending = (key: string | undefined): boolean =>
     pendingThreads.has(key ?? NEW_TURN_KEY);
+  /** The way to stop each turn in flight, by the same key (./stream). */
+  const turnStops = new Map<string, AbortController>();
+  /** What each turn in flight is doing, by the same key: the status line. */
+  const turnStatus = new Map<string, string>();
+  /** Windows that offer the advanced view are the app's own (the panel, the
+   *  hub): Send becomes Stop there. A visitor's window is as it was. */
+  const inApp = offersAdvancedView(opts);
+  /** The line under the conversation that says what the turn is doing. */
+  let turnLine: HTMLElement | null = null;
+  /** The advanced view's list and frame (./advanced-shell), once built. */
+  let shell: ReturnType<typeof createAdvancedShell> | null = null;
+  /** The view on screen has no question in it yet: the new-chat screen. */
+  function syncBlank(): void {
+    panel.classList.toggle(
+      `${PREFIX}-blank`,
+      !busy && !history.some((m) => m.role === "user")
+    );
+  }
+  function paintTurnLine(): void {
+    if (!turnLine) return;
+    const key = threadId ?? NEW_TURN_KEY;
+    const text = isThreadPending(key) ? turnStatus.get(key) : undefined;
+    turnLine.hidden = !text;
+    const label = turnLine.lastElementChild;
+    if (label) label.textContent = text ?? "";
+  }
   /** Recompute `busy` for the CURRENT view (call after any switch or any
    *  pending-set change). Function-declared so early code can reference it;
    *  it only runs after the composer exists. */
   function syncBusy(): void {
     busy = isThreadPending(threadId) || tokenActionRunning;
-    sendBtn.disabled = busy || opts.preview === true;
+    // STOP (sgiant-platform#702): while the answer on screen is coming, Send
+    // is the way to stop it, in the app's own windows.
+    const canStop =
+      inApp && !opts.preview && turnStops.has(threadId ?? NEW_TURN_KEY);
+    sendBtn.classList.toggle(`${PREFIX}-send-stop`, canStop);
+    sendBtn.textContent = canStop ? L("stop") : L("send");
+    if (canStop) sendBtn.setAttribute("aria-label", L("stopAnswer"));
+    else sendBtn.removeAttribute("aria-label");
+    sendBtn.disabled = canStop ? false : busy || opts.preview === true;
+    syncBlank();
+    paintTurnLine();
+    shell?.pendingChanged(pendingThreads);
     // The launcher's `working` state, from the real in-flight turn rather than
     // a separate flag that could drift from it (#305). Only while the panel is
     // CLOSED — a breathing launcher next to an open panel that is already
@@ -1915,7 +1978,10 @@ export function createAiChatWidget(
   // account and language change.
   const onResize = (): void => {
     const p = readPos();
-    if (p) applyPos(p);
+    // Not in the advanced view: it is laid out by CSS over the whole screen,
+    // and a floating position put back on it moved it off its edges
+    // (sgiant-platform#702, found resizing between its layouts).
+    if (p && !advanced) applyPos(p);
     // The box's share of the window is a share of its HEIGHT: a browser
     // made short with five lines typed kept the five lines and pushed Send
     // out of the window until the next letter.
@@ -2315,7 +2381,7 @@ export function createAiChatWidget(
   // Advanced view — full-screen split with the app in a drivable iframe. Only
   // shown when the host wired `getAdvancedUrl`.
   let advancedBtn: HTMLElement | null = null;
-  if (opts.getAdvancedUrl) {
+  if (inApp) {
     advancedBtn = el("button", `${PREFIX}-icon ${PREFIX}-advbtn`);
     advancedBtn.setAttribute(
       "aria-label",
@@ -3624,6 +3690,13 @@ export function createAiChatWidget(
   const sendBtn = el("button", `${PREFIX}-send`) as HTMLButtonElement;
   sendBtn.type = "submit";
   sendBtn.textContent = L("send");
+  // Stop, when Send is Stop: the answer on screen stops being read.
+  sendBtn.addEventListener("click", (e) => {
+    const stop = turnStops.get(threadId ?? NEW_TURN_KEY);
+    if (!sendBtn.classList.contains(`${PREFIX}-send-stop`) || !stop) return;
+    e.preventDefault();
+    stop.abort();
+  });
 
   // The model pill (sgiant-platform#465), only when the host offers a choice.
   // The choice is remembered per layout scope, like the panel's position, so
@@ -3811,10 +3884,18 @@ export function createAiChatWidget(
   // The chat lives in its own column so advanced view can lay a drivable app
   // pane beside it. In normal mode `chatCol` fills the panel; `pane` is hidden.
   const chatCol = el("div", `${PREFIX}-chatcol`);
+  // The status line (sgiant-platform#702): what the answer is doing before
+  // its words arrive. Drawn in the advanced view; a live region, so it is
+  // also heard.
+  turnLine = el("div", `${PREFIX}-turnline`);
+  turnLine.hidden = true;
+  turnLine.setAttribute("role", "status");
+  turnLine.append(el("span", `${PREFIX}-act-spin`), el("span", `${PREFIX}-turnline-t`));
   chatCol.append(
     header,
     noticeEl,
     log,
+    turnLine,
     meterEl,
     statusEl,
     suggestionsEl,
@@ -3974,7 +4055,7 @@ export function createAiChatWidget(
         // reposition logic, NOT the keyboard handler. Clearing it here dropped a
         // dragged panel to `top:auto` → off-screen, and a refresh re-stranded it.
         // Restore the saved position (or the CSS corner) instead of clobbering it.
-        applyPos(readPos());
+        if (!advanced) applyPos(readPos());
         return;
       }
       panel.style.height = `${vv.height}px`;
@@ -4067,16 +4148,7 @@ export function createAiChatWidget(
   }
 
   // --- Advanced view: the app in a pane beside the chat (./advanced-view) ----
-  const {
-    advKey,
-    openAdvanced,
-    teardownFrame,
-    frameShowing,
-    autoNavigateFrame,
-    showPaneWidget,
-    dispatchAction,
-    openOnTheRight,
-  } = createAdvancedView({
+  const advancedApi = createAdvancedView({
     L,
     ownWords,
     panel,
@@ -4090,15 +4162,70 @@ export function createAiChatWidget(
     getAdvanced: () => advanced,
     setAdvanced: (v) => {
       advanced = v;
+      if (v) shell?.enter();
+      else shell?.exit();
     },
     getExpanded: () => expanded,
     setExpanded,
     getKnownNavTargets: () => knownNavTargets,
     refreshNavTargets,
     hasUserConfirmed,
-    isNarrow: isSheet,
+    // In the advanced view a phone opens the page as a sheet over the chat,
+    // so only the small window is too narrow for it.
+    isNarrow: () => isSheet() && !advanced,
+    isPhone: () => shell?.isPhone() ?? false,
+    onPaneChange: () => {
+      shell?.layout();
+    },
     opts,
   });
+  const {
+    advKey,
+    openAdvanced,
+    teardownFrame,
+    frameShowing,
+    autoNavigateFrame,
+    showPaneWidget,
+    dispatchAction,
+    openOnTheRight,
+    enabled: advancedOffered,
+    setPaneOpen,
+    isPaneOpen,
+    hasPaneContent,
+    closeAdvanced,
+  } = advancedApi;
+  if (advancedOffered) {
+    shell = createAdvancedShell({
+      L,
+      ownWords,
+      opts,
+      panel,
+      chatCol,
+      pane,
+      moreWrap,
+      name,
+      avatarHtml: uniquifySvgIds(avatarInner),
+      ns,
+      layoutScope,
+      locale,
+      getThreadId: () => threadId,
+      firstQuestion: () => history.find((m) => m.role === "user")?.content ?? null,
+      isPending: (id) => isThreadPending(id),
+      openThread: (id) => loadPastThread(id),
+      newChat: () => {
+        startNewChat();
+        input.focus();
+      },
+      exitAdvanced: () => closeAdvanced(),
+      isPaneOpen,
+      setPaneOpen,
+      hasPaneContent,
+      onStarred: (id, on) => {
+        starredThreads.set(id, on);
+        paintStarItem();
+      },
+    });
+  }
 
   // History (past conversations) — fetch the thread list, show a picker, and on
   // select replay that thread's messages into the log (sets it as the active
@@ -4303,6 +4430,9 @@ export function createAiChatWidget(
       syncBusy();
       saveState();
       void refreshArtifacts();
+      // A conversation with questions in it has no shortcuts under it: the
+      // ones the new-chat screen offered go (sgiant-platform#702, QA).
+      void renderSuggestions();
       overlay?.remove();
     } catch {
       if (overlay) {
@@ -4667,7 +4797,6 @@ export function createAiChatWidget(
     log,
     panel,
     input,
-    sendBtn,
     suggestionsEl,
     metaChip,
     launcher,
@@ -4675,6 +4804,7 @@ export function createAiChatWidget(
     uploads,
     history,
     pendingThreads,
+    turnStops,
     qualityAsked,
     threadTurns,
     richDisposers,
@@ -4700,6 +4830,11 @@ export function createAiChatWidget(
     // runs rather than now, which would be before they exist.
     noteApiResult: (result) => noteApiResult(result),
     maybeDing,
+    onTurnStatus: (key, text) => {
+      if (text) turnStatus.set(key, text);
+      else turnStatus.delete(key);
+      paintTurnLine();
+    },
     usageBadge,
     searchLine,
     loadThreadItems,
@@ -4945,7 +5080,11 @@ export function createAiChatWidget(
     richDisposers,
     dispatchAction,
     openOnTheRight,
-    canSplit: () => Boolean(opts.getAdvancedUrl) && !isSheet(),
+    // Beside the chat only where there is a beside: not in the small window
+    // on a phone, and not in the advanced view's phone layout, where the
+    // page is a sheet over the chat.
+    canSplit: () =>
+      Boolean(opts.getAdvancedUrl) && !isSheet() && !(shell?.isPhone() ?? false),
     subscribeJob,
     showPaneWidget,
     input,
@@ -5307,6 +5446,7 @@ export function createAiChatWidget(
   // painted against real state rather than a temporal dead zone. Keep this the
   // LAST thing setup does.
   paintOpeningView();
+  syncBlank();
 
   /**
    * Whether the API answered last time we asked (#346).
@@ -5486,6 +5626,7 @@ export function createAiChatWidget(
           document.removeEventListener(ev, wake);
       unbindKeyboard();
       clearRich();
+      shell?.destroy();
       teardownFrame();
       bubble.remove();
       panel.remove();

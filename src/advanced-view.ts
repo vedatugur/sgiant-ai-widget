@@ -1,6 +1,6 @@
-import { el } from "./dom";
+import { el, escapeHtml } from "./dom";
 import { PREFIX } from "./prefix";
-import { ICON_CHEVRON_R } from "./icons";
+import { ICON_BACK, ICON_CHEVRON_R, ICON_X } from "./icons";
 import { readItem, writeFlag, writeItem } from "./storage";
 import { isSafeFrameUrl, isSafeRelPath, gateNavigationTarget } from "./safe-url";
 import { shouldAutoNavigate, shouldCollapseNarration } from "./pane-follow";
@@ -50,7 +50,18 @@ export interface AdvancedViewContext {
   hasUserConfirmed: (key: string) => boolean;
   /** The window is a phone-width sheet: there is no room beside it. */
   isNarrow: () => boolean;
+  /** The advanced view is laid out for a phone: the page is a sheet over
+   *  the chat, opened only by the person (sgiant-platform#702). */
+  isPhone: () => boolean;
+  /** The page on the right opened or closed. */
+  onPaneChange: (open: boolean) => void;
   opts: AiChatWidgetOptions;
+}
+
+/** Whether a window offers the advanced view at all: with a page to show
+ *  beside the chat, or because the host asked for it without one. */
+export function offersAdvancedView(opts: AiChatWidgetOptions): boolean {
+  return Boolean(opts.getAdvancedUrl) || opts.advancedView === true;
 }
 
 export function createAdvancedView(ctx: AdvancedViewContext) {
@@ -78,6 +89,7 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
   let advFrame: HTMLIFrameElement | null = null;
   let frameUrlLabel: HTMLElement | null = null;
   let collapseBtnEl: HTMLButtonElement | null = null;
+  const enabled = offersAdvancedView(opts);
   const advKey = opts.persistKey
     ? scoped(`${ns}:adv:${opts.persistKey}`)
     : "";
@@ -195,16 +207,32 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
 
   // Collapse the app pane to a thin strip (not display:none — the strip keeps the
   // toggle visible so it can be re-expanded). Also refreshes the toggle's label.
-  const setPaneCollapsed = (v: boolean): void => {
+  // THE PAGE ON THE RIGHT OPENS AND CLOSES (sgiant-platform#702). Closed, it
+  // is out of the layout and out of the tab order, and the chat takes its
+  // room; it slides back in when it opens. `byAssistant` draws a ring once,
+  // so a page that opened by itself says where it came from.
+  const setPaneCollapsed = (v: boolean, byAssistant = false): void => {
+    const changed = paneCollapsed !== v;
     paneCollapsed = v;
     panel.classList.toggle(`${PREFIX}-pane-collapsed`, v);
+    pane.inert = v;
     if (collapseBtnEl) {
-      const label = v
-        ? opts.expandPaneLabel || ownWords.showPane
-        : opts.collapsePaneLabel || ownWords.hidePane;
+      const label = opts.collapsePaneLabel || ownWords.hidePane;
       collapseBtnEl.setAttribute("aria-label", label);
       collapseBtnEl.title = label;
     }
+    if (!v && byAssistant) {
+      pane.classList.remove(`${PREFIX}-pane-ring`);
+      void pane.offsetWidth;
+      pane.classList.add(`${PREFIX}-pane-ring`);
+    }
+    if (changed || !v) ctx.onPaneChange(!v);
+  };
+  /** Open the page on the right because the assistant went there: never on
+   *  a phone, where it would cover the conversation being read. */
+  const revealPane = (): void => {
+    if (!getAdvanced() || ctx.isPhone()) return;
+    if (paneCollapsed) setPaneCollapsed(false, true);
   };
 
   const buildFrame = (): void => {
@@ -220,13 +248,11 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
       opts.collapsePaneLabel || ownWords.hidePane
     );
     collapseBtn.title = opts.collapsePaneLabel || ownWords.hidePane;
-    collapseBtn.innerHTML = ICON_CHEVRON_R;
-    collapseBtn.addEventListener("click", () =>
-      setPaneCollapsed(!paneCollapsed)
-    );
+    collapseBtn.innerHTML = ICON_X;
+    collapseBtn.addEventListener("click", () => setPaneCollapsed(true));
     collapseBtnEl = collapseBtn;
     frameUrlLabel = el("div", `${PREFIX}-pane-url`);
-    bar.append(collapseBtn, frameUrlLabel);
+    bar.append(backToChat(), frameUrlLabel, collapseBtn);
     const frame = el("iframe", `${PREFIX}-pane-frame`) as HTMLIFrameElement;
     frame.setAttribute("title", opts.advancedLabel || ownWords.advanced);
     // No sandbox: the framed page is our OWN app and needs full capability
@@ -243,6 +269,14 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
       const here = framePath();
       if (!here) return;
       setFrameUrlLabel(here);
+      // The page's own name where it has one (sgiant-platform#702): a
+      // person reads "Season report", not a path. Same origin, so readable.
+      try {
+        const named = advFrame?.contentDocument?.title?.trim();
+        if (named && frameUrlLabel) frameUrlLabel.textContent = named;
+      } catch {
+        /* no document to ask: the path stays */
+      }
       if (frameRequestedPath === null) {
         // We never asked for anything and it moved: the user did.
         frameUserDriven = true;
@@ -254,6 +288,16 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     body.append(frame);
     pane.append(bar, body);
     advFrame = frame;
+  };
+
+  /** On a phone the page covers the chat: this is the way back to it. */
+  const backToChat = (): HTMLButtonElement => {
+    const b = el("button", `${PREFIX}-pane-back`) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-label", L("paneBackToChat"));
+    b.innerHTML = `${ICON_BACK}<span>${escapeHtml(L("paneChat"))}</span>`;
+    b.addEventListener("click", () => setPaneCollapsed(true));
+    return b;
   };
 
   const teardownFrame = (): void => {
@@ -303,8 +347,15 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     if (!paneShowsWidget) return;
     paneShowsWidget = false;
     disposePaneWidget();
+    // A window with no page to show (the host passed no address) has only
+    // the result to show there: back means the pane closes.
+    if (!opts.getAdvancedUrl) {
+      pane.innerHTML = "";
+      setPaneCollapsed(true);
+      return;
+    }
     buildFrame();
-    if (opts.getAdvancedUrl) navigateFrame(opts.getAdvancedUrl());
+    navigateFrame(opts.getAdvancedUrl());
   };
 
   /**
@@ -317,7 +368,10 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     rows: unknown,
     comparisonRows?: unknown
   ): boolean => {
-    if (!getAdvanced() || !opts.renderDataWidget) return false;
+    // On a phone the result stays in the conversation: a sheet the
+    // assistant raised over it would hide what is being read.
+    if (!getAdvanced() || !opts.renderDataWidget || ctx.isPhone())
+      return false;
     teardownFrame();
     paneShowsWidget = true;
     const bar = el("div", `${PREFIX}-pane-bar`);
@@ -331,11 +385,22 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     back.addEventListener("click", () => showPaneRoute());
     const label = el("div", `${PREFIX}-pane-url`);
     label.textContent = L("paneShowingWidget");
-    bar.append(back, label);
+    if (!opts.getAdvancedUrl) back.hidden = true;
+    const close = el(
+      "button",
+      `${PREFIX}-icon ${PREFIX}-pane-collapse`
+    ) as HTMLButtonElement;
+    close.type = "button";
+    close.setAttribute("aria-label", opts.collapsePaneLabel || ownWords.hidePane);
+    close.title = opts.collapsePaneLabel || ownWords.hidePane;
+    close.innerHTML = ICON_X;
+    close.addEventListener("click", () => setPaneCollapsed(true));
+    bar.append(back, label, close);
     const body = el("div", `${PREFIX}-pane-body`);
     const host = el("div", `${PREFIX}-pane-widget`);
     body.append(host);
     pane.append(bar, body);
+    revealPane();
     try {
       const dispose = opts.renderDataWidget(host, spec, rows, comparisonRows);
       if (dispose) paneWidgetDispose = dispose;
@@ -369,8 +434,11 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
   // Draggable divider between the chat column and the app pane (advanced view).
   // Drag to resize; the width persists per host so it survives reloads; a
   // double-click resets to the default. Only active in advanced, non-collapsed.
+  // The PAGE's width now, not the chat's (sgiant-platform#702): the page on
+  // the right is a fixed width the person can drag, and the chat takes the
+  // rest. A new key, so a chat width saved by 3.0 is not read as a page's.
   const advWidthKey = opts.persistKey
-    ? scoped(`${ns}:advw:${opts.persistKey}`)
+    ? scoped(`${ns}:advpw:${opts.persistKey}`)
     : "";
   const resizer = el("div", `${PREFIX}-resizer`);
   resizer.setAttribute("role", "separator");
@@ -380,24 +448,25 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
   resizer.title = resizeLabel;
   panel.insertBefore(resizer, pane);
 
-  const clampChatWidth = (px: number): number => {
-    const total = panel.getBoundingClientRect().width || 900;
-    const max = Math.max(360, total - 360); // keep the app pane usable
+  const clampPaneWidth = (px: number): number => {
+    const total = pane.parentElement?.getBoundingClientRect().width || 1200;
+    const max = Math.max(320, total - 380); // keep the chat readable
     return Math.round(Math.min(Math.max(px, 320), max));
   };
-  const setChatWidth = (px: number, persist: boolean): void => {
-    const w = clampChatWidth(px);
-    panel.style.setProperty("--aiw-chatw", `${w}px`);
+  const setPaneWidth = (px: number, persist: boolean): void => {
+    if (!Number.isFinite(px)) return;
+    const w = clampPaneWidth(px);
+    panel.style.setProperty("--aiw-pane-w", `${w}px`);
     if (persist) writeItem(advWidthKey, String(w));
   };
-  const restoreChatWidth = (): void => {
+  const restorePaneWidth = (): void => {
     const raw = readItem(advWidthKey);
-    if (raw) setChatWidth(parseInt(raw, 10), false);
+    if (raw) setPaneWidth(parseInt(raw, 10), false);
   };
   let resizing = false;
   const onResizeMove = (e: PointerEvent): void => {
     if (!resizing) return;
-    setChatWidth(e.clientX - panel.getBoundingClientRect().left, true);
+    setPaneWidth(panel.getBoundingClientRect().right - e.clientX, true);
   };
   const stopResize = (): void => {
     if (!resizing) return;
@@ -416,16 +485,15 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
   });
   // Double-click the divider → reset to the default width.
   resizer.addEventListener("dblclick", () => {
-    panel.style.removeProperty("--aiw-chatw");
+    panel.style.removeProperty("--aiw-pane-w");
     writeItem(advWidthKey, null);
   });
 
   /** Turn the advanced view on, at `path` (account-relative) or at the
    *  page the person is on. */
   const openAdvanced = (path?: string): void => {
-    if (getAdvanced() || !opts.getAdvancedUrl) return;
+    if (getAdvanced() || !enabled) return;
     setAdvanced(true);
-    setPaneCollapsed(false);
     panel.classList.add(`${PREFIX}-advanced`);
     // Advanced view is a CSS-driven layout. A leftover inline drag position
     // (left/top/right:auto) would OVERRIDE that CSS, so drop the floating
@@ -433,16 +501,27 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     // edge-to-edge (there is no separate fullscreen toggle anymore).
     toCorner();
     setAdvancedFull(true);
-    restoreChatWidth();
+    restorePaneWidth();
     // Advanced owns the full screen and IS the wide view, so the "wide" button
     // is redundant here (hidden via CSS). Drop the plain expanded size + reset
     // the button so it shows the right icon/label when advanced is exited.
     if (getExpanded()) setExpanded(false);
-    buildFrame();
+    // Lay out first (the shell reads the window's size), then decide whether
+    // the page opens: with no page to show it waits for a result, and on a
+    // phone it waits to be asked for, unless the person asked for this one.
+    ctx.onPaneChange(false);
+    setPaneCollapsed(!opts.getAdvancedUrl || (ctx.isPhone() && !path));
     // A fresh advanced session: the user has not driven anything yet, and any
     // operation that auto-navigated in a PREVIOUS session may do so again.
     frameUserDriven = false;
     autoNavigated.clear();
+    if (!opts.getAdvancedUrl) {
+      updateAdvancedBtn();
+      rememberAdvanced();
+      scrollDown(true);
+      return;
+    }
+    buildFrame();
     navigateFrame(opts.getAdvancedUrl(path));
     updateAdvancedBtn();
     rememberAdvanced();
@@ -496,6 +575,9 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
       const relPath = isSafeRelPath(candidate) ? candidate : null;
       if (relPath != null && opts.getAdvancedUrl) {
         navigateFrame(opts.getAdvancedUrl(relPath));
+        // THE ASSISTANT OPENS THE PAGE ITSELF (sgiant-platform#702): it went
+        // there, so the page on the right comes out to show it.
+        revealPane();
         return L("actionOpened");
       }
     }
@@ -517,13 +599,28 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
       return dispatchAction("navigate", { path });
     await gateNavigationTarget(path, getKnownNavTargets, refreshNavTargets);
     if (!getAdvanced()) openAdvanced(path);
-    else if (advFrame) navigateFrame(opts.getAdvancedUrl(path));
-    else return dispatchAction("navigate", { path });
+    else if (advFrame || paneShowsWidget) {
+      // A result was in the pane: the page takes it back.
+      if (!advFrame) {
+        paneShowsWidget = false;
+        disposePaneWidget();
+        buildFrame();
+      }
+      navigateFrame(opts.getAdvancedUrl(path));
+      // Pressed, so it opens, on a phone too.
+      setPaneCollapsed(false);
+    } else return dispatchAction("navigate", { path });
     return L("actionOpened");
   };
 
   return {
     advKey,
+    enabled,
+    setPaneOpen: (open: boolean): void => setPaneCollapsed(!open),
+    isPaneOpen: (): boolean => getAdvanced() && !paneCollapsed,
+    /** Whether there is anything to show on the right: a page, or a result. */
+    hasPaneContent: (): boolean =>
+      Boolean(opts.getAdvancedUrl) || paneShowsWidget,
     openAdvanced,
     openOnTheRight,
     closeAdvanced,
@@ -534,3 +631,4 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     dispatchAction,
   };
 }
+
