@@ -123,3 +123,9 @@ test("the dictionary is the platform's copy, never edited here, and the checker 
   assert.doesNotMatch(read("src/parts/part-check.ts"), /^\s*import\s/m);
   assert.match(read("scripts/sync-parts.mjs"), /packages\/ai-contract\/src\/part-check\.ts/);
 });
+
+test("a screen in the chat keeps its height: the log's column may not shrink its box", () => {
+  // Measured in a browser before this rule: the box hides its overflow, so
+  // the log's flex column shrank it to 2px and the screen was invisible.
+  assert.match(read("src/styles.ts"), /\$\{PREFIX\}-component\{flex:none;/);
+});

@@ -980,8 +980,9 @@ audio.${PREFIX}-ui-media-el{height:auto;object-fit:unset}
 .${PREFIX}-preview-frame{display:block;width:100%;height:340px;border:0;background:var(--aiw-surface)}
 /* One of the app's own screens in the chat (sgiant-platform#703): the host
    draws into the box; a page opened in its place gets a frame and a button.
-   44px hit target on the button. */
-.${PREFIX}-component{align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
+   44px hit target on the button. flex:none: a box that hides its overflow
+   is otherwise shrunk to nothing by the log's column (measured: 2px). */
+.${PREFIX}-component{flex:none;align-self:stretch;border:1px solid var(--aiw-border);border-radius:var(--aiw-radius-2xl);overflow:hidden;background:var(--aiw-surface);animation:${PREFIX}-rise var(--duration-fast) var(--ease-out)}
 .${PREFIX}-component-frame{display:block;width:100%;height:420px;border:0;background:var(--aiw-surface)}
 .${PREFIX}-component-open{display:block;width:100%;min-height:44px;padding:10px 12px;border:0;border-top:1px solid var(--aiw-border-soft);background:transparent;color:var(--aiw-text);font:inherit;font-size:var(--aiw-font-xs);font-weight:600;cursor:pointer;text-align:left}
 .${PREFIX}-component-open:focus-visible{outline:2px solid var(--aiw-accent);outline-offset:-2px}
