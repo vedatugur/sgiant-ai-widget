@@ -10,7 +10,10 @@ import type { PartSchema } from "../part-check";
 export const WINDOW_PARTS: {
   version: number;
   parts: Record<string, PartSchema>;
-  components: Record<string, { params: PartSchema; path: string }>;
+  components: Record<
+    string,
+    { params: PartSchema; path: string; title: { en: string; tr: string } }
+  >;
 } = {
   version: 1,
   parts: {
@@ -234,6 +237,12 @@ export const WINDOW_PARTS: {
         params: {
           type: "object",
         },
+        label: {
+          type: "string",
+          maxLength: 80,
+          description:
+            "The card's title, in the person's language, e.g. \"October report\". Absent: the component's own name.",
+        },
       },
       required: ["name"],
     },
@@ -428,6 +437,10 @@ export const WINDOW_PARTS: {
         required: ["reportId"],
       },
       path: "/reports/{reportId}",
+      title: {
+        en: "Report",
+        tr: "Rapor",
+      },
     },
     dashboard_view: {
       params: {
@@ -443,6 +456,10 @@ export const WINDOW_PARTS: {
         required: ["dashboardId"],
       },
       path: "/dashboards/{dashboardId}",
+      title: {
+        en: "Dashboard",
+        tr: "Pano",
+      },
     },
     report_list: {
       params: {
@@ -450,6 +467,10 @@ export const WINDOW_PARTS: {
         properties: {},
       },
       path: "/reports/all",
+      title: {
+        en: "Reports",
+        tr: "Raporlar",
+      },
     },
     dashboard_list: {
       params: {
@@ -457,6 +478,10 @@ export const WINDOW_PARTS: {
         properties: {},
       },
       path: "/dashboards/all",
+      title: {
+        en: "Dashboards",
+        tr: "Panolar",
+      },
     },
     page: {
       params: {
@@ -473,6 +498,10 @@ export const WINDOW_PARTS: {
         required: ["path"],
       },
       path: "{path}",
+      title: {
+        en: "Page",
+        tr: "Sayfa",
+      },
     },
   },
 };

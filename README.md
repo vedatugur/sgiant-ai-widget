@@ -545,11 +545,12 @@ the button says it could not do it.
   `scripts/sync-parts.mjs`). The same part sent as a `[[tag:{…}]]` in the
   text, as a server that ignores `partsVersion` does, is drawn the same way,
   so a 2.x backend keeps working.
-- New option `renderComponent(host, name, params)`: one of your app's own
-  screens drawn in the chat (`report_view`, `dashboard_view`, `report_list`,
-  `dashboard_list`, `page`). Return `false` for one you have no renderer
-  for; the window then opens its page inside the chat from
-  `getAdvancedUrl(path)`, or offers a button to it.
+- A `component` part (one of the host app's own screens: `report_view`,
+  `dashboard_view`, `report_list`, `dashboard_list`, `page`) is a short card
+  in the chat, its title and one button. The button opens the page in the
+  advanced view's right pane (`getAdvancedUrl(path)`), turning it on first;
+  on a phone-width window it opens the page as the host does
+  (`onWidgetAction("navigate")`). Nothing opens until the button is pressed.
 - The window no longer points at, fills in or presses controls on the page.
   `highlight`, `scroll-to`, `focus-field`, `fill` and `click` actions draw
   nothing, the advanced view's frame is no longer driven, and the window

@@ -25,6 +25,8 @@ export const PARTS_VERSION: number = WINDOW_PARTS.version;
 export interface ComponentSpec {
   name: string;
   params?: Record<string, unknown>;
+  /** The card's title as the assistant wrote it ("October report"). */
+  label?: string;
 }
 
 /**
@@ -47,12 +49,20 @@ export function partFrameAsTag(
 
 /**
  * Whether a component spec names one this window knows, with what its
- * params need; and the page it is on (relative to the account), which is
- * what the window opens when the host cannot draw the component itself.
+ * params need; and the page it is on (relative to the account), which the
+ * card's button opens beside the chat.
  */
 export function checkComponent(
   spec: unknown,
-): { ok: true; spec: ComponentSpec; path: string } | { ok: false } {
+):
+  | {
+      ok: true;
+      spec: ComponentSpec;
+      path: string;
+      /** The component's own name, for a card the assistant gave none. */
+      title: { en: string; tr: string };
+    }
+  | { ok: false } {
   if (!spec || typeof spec !== "object") return { ok: false };
   const s = spec as ComponentSpec;
   const known =
@@ -65,5 +75,15 @@ export function checkComponent(
   if (checkAgainstSchema(params, known.params, "spec.params").length)
     return { ok: false };
   const path = fillPagePath(known.path, params);
-  return path ? { ok: true, spec: { name: s.name, params }, path } : { ok: false };
+  if (!path) return { ok: false };
+  const label =
+    typeof s.label === "string" && s.label.trim()
+      ? s.label.trim().slice(0, 80)
+      : undefined;
+  return {
+    ok: true,
+    spec: { name: s.name, params, ...(label ? { label } : {}) },
+    path,
+    title: known.title,
+  };
 }

@@ -615,21 +615,6 @@ export interface AiChatWidgetOptions {
    */
   renderers?: Record<string, DirectiveRenderer>;
   /**
-   * ONE OF THE APP'S OWN SCREENS, DRAWN IN THE CHAT (sgiant-platform#703).
-   *
-   * The assistant names a component (`report_view`, `dashboard_view`,
-   * `report_list`, `dashboard_list`, `page`) and gives it small `params`
-   * (an id); draw that screen into `host`, fetching its own data with your
-   * own session. Return a disposer (or nothing) when drawn, or `false` when
-   * you have no renderer for `name`: the window then opens the screen's page
-   * inside the chat, from `getAdvancedUrl(path)`, or offers a button to it.
-   */
-  renderComponent?: (
-    host: HTMLElement,
-    name: string,
-    params: Record<string, unknown>
-  ) => (() => void) | void | false;
-  /**
    * Fallback chart renderer for embeds WITHOUT `renderDataWidget` (no React
    * host). When the assistant streams a `render_chart` frame and no host
    * renderer is wired, this is consulted before the built-in degrade
@@ -800,9 +785,9 @@ export interface AiChatWidgetOptions {
   /**
    * ADVANCED VIEW. When `getAdvancedUrl` is provided, a header toggle opens a
    * full-screen split: the chat on the left and the app in an <iframe> on the
-   * right (no longer driven: sgiant-platform#703). It is also the page a
-   * component the host cannot draw opens as, inside the chat (see
-   * `renderComponent`). `getAdvancedUrl()` returns the embed URL for the
+   * right (no longer driven: sgiant-platform#703). It is also where a
+   * component card's button opens its page. `getAdvancedUrl()` returns the
+   * embed URL for the
    * CURRENT page; `getAdvancedUrl(path)` returns it for an account-relative path
    * (used to navigate the frame). Omit to disable advanced view.
    */
@@ -4085,6 +4070,7 @@ export function createAiChatWidget(
     autoNavigateFrame,
     showPaneWidget,
     dispatchAction,
+    openOnTheRight,
   } = createAdvancedView({
     L,
     ownWords,
@@ -4105,6 +4091,7 @@ export function createAiChatWidget(
     getKnownNavTargets: () => knownNavTargets,
     refreshNavTargets,
     hasUserConfirmed,
+    isNarrow: isSheet,
     opts,
   });
 
@@ -4952,6 +4939,8 @@ export function createAiChatWidget(
     send,
     richDisposers,
     dispatchAction,
+    openOnTheRight,
+    canSplit: () => Boolean(opts.getAdvancedUrl) && !isSheet(),
     subscribeJob,
     showPaneWidget,
     input,

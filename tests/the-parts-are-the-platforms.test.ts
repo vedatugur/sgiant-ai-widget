@@ -71,7 +71,14 @@ test("a component names a screen this window knows, and the page it opens instea
     ok: true,
     spec: { name: "report_view", params: { reportId: "r_1" } },
     path: "/reports/r_1",
+    title: { en: "Report", tr: "Rapor" },
   });
+  const named = checkComponent({
+    name: "report_view",
+    params: { reportId: "r_1" },
+    label: "  October report ",
+  });
+  assert.equal(named.ok && named.spec.label, "October report");
   const page = checkComponent({ name: "page", params: { path: "/billing" } });
   assert.equal(page.ok && page.path, "/billing");
   const list = checkComponent({ name: "dashboard_list" });
@@ -128,4 +135,33 @@ test("a screen in the chat keeps its height: the log's column may not shrink its
   // Measured in a browser before this rule: the box hides its overflow, so
   // the log's flex column shrank it to 2px and the screen was invisible.
   assert.match(read("src/styles.ts"), /\$\{PREFIX\}-component\{flex:none;/);
+});
+
+test("a component is a short card whose ONE button opens the page on the right (owner, 2026-11-23)", () => {
+  const render = read("src/ui-render.ts");
+  const card = render.slice(render.indexOf("function renderComponent("));
+  const body = card.slice(0, card.indexOf("\n  }\n"));
+  // No frame and no host-drawn screen in the chat any more.
+  assert.doesNotMatch(body, /iframe|opts\.renderComponent/);
+  // The page opens only on the press.
+  assert.match(body, /open\.addEventListener\("click", \(\) => \{\s*void Promise\.resolve\(openOnTheRight\(c\.path\)\)/);
+  assert.equal((body.match(/openOnTheRight\(/g) ?? []).length, 1);
+  const adv = read("src/advanced-view.ts");
+  const fn = adv.slice(adv.indexOf("const openOnTheRight = async"));
+  const right = fn.slice(0, fn.indexOf("\n  };\n"));
+  // A phone-width window opens the page as the host does, same tab.
+  assert.match(right, /ctx\.isNarrow\(\)[\s\S]*return dispatchAction\("navigate", \{ path \}\)/);
+  // The same gate as every page the assistant opens, then the right pane,
+  // turned on first when it is off.
+  assert.match(right, /await gateNavigationTarget\(path, getKnownNavTargets, refreshNavTargets\);\s*if \(!getAdvanced\(\)\) openAdvanced\(path\);/);
+  assert.match(adv, /navigateFrame\(opts\.getAdvancedUrl\(path\)\);\n    updateAdvancedBtn\(\);/);
+});
+
+test("the card's words are the window's own, in both languages", async () => {
+  const { WIDGET_LABELS } = await import("../dist/labels.js");
+  const { WIDGET_LABELS_TR } = await import("../dist/labels-tr.js");
+  assert.equal(WIDGET_LABELS.componentOpenRight, "Open on the right");
+  assert.equal(WIDGET_LABELS_TR.componentOpenRight, "Sağda aç");
+  assert.equal(WIDGET_LABELS.componentOpenPage, "Open the page");
+  assert.equal(WIDGET_LABELS_TR.componentOpenPage, "Sayfayı aç");
 });

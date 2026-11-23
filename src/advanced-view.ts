@@ -48,6 +48,8 @@ export interface AdvancedViewContext {
   refreshNavTargets: () => Promise<void>;
   /** Whether the user confirmed this job in THIS session (job cards). */
   hasUserConfirmed: (key: string) => boolean;
+  /** The window is a phone-width sheet: there is no room beside it. */
+  isNarrow: () => boolean;
   opts: AiChatWidgetOptions;
 }
 
@@ -418,7 +420,9 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     writeItem(advWidthKey, null);
   });
 
-  const openAdvanced = (): void => {
+  /** Turn the advanced view on, at `path` (account-relative) or at the
+   *  page the person is on. */
+  const openAdvanced = (path?: string): void => {
     if (getAdvanced() || !opts.getAdvancedUrl) return;
     setAdvanced(true);
     setPaneCollapsed(false);
@@ -439,7 +443,7 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     // operation that auto-navigated in a PREVIOUS session may do so again.
     frameUserDriven = false;
     autoNavigated.clear();
-    navigateFrame(opts.getAdvancedUrl());
+    navigateFrame(opts.getAdvancedUrl(path));
     updateAdvancedBtn();
     rememberAdvanced();
     scrollDown(true);
@@ -498,9 +502,30 @@ export function createAdvancedView(ctx: AdvancedViewContext) {
     return opts.onWidgetAction ? opts.onWidgetAction(name, data) : undefined;
   };
 
+  /**
+   * A COMPONENT CARD'S BUTTON (sgiant-platform#703): the page on the right.
+   *
+   * The owner's decision of 2026-11-23. The page opens in this pane,
+   * turning the advanced view on first when it is off; where the window is
+   * a phone-width sheet there is no right, and the page opens as the host
+   * opens pages, in the same tab. Either way it passes the same navigation
+   * gate as every other page the assistant opens. Only a press gets here:
+   * a card arriving opens nothing.
+   */
+  const openOnTheRight = async (path: string): Promise<string | void> => {
+    if (!opts.getAdvancedUrl || ctx.isNarrow() || !isSafeRelPath(path))
+      return dispatchAction("navigate", { path });
+    await gateNavigationTarget(path, getKnownNavTargets, refreshNavTargets);
+    if (!getAdvanced()) openAdvanced(path);
+    else if (advFrame) navigateFrame(opts.getAdvancedUrl(path));
+    else return dispatchAction("navigate", { path });
+    return L("actionOpened");
+  };
+
   return {
     advKey,
     openAdvanced,
+    openOnTheRight,
     closeAdvanced,
     teardownFrame,
     frameShowing,

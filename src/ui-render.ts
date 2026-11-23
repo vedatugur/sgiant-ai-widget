@@ -21,7 +21,7 @@ import {
 import type { AiChatWidgetOptions, WidgetJobView } from "./index";
 import type { WidgetLabels } from "./labels";
 import { checkComponent } from "./parts/window-parts";
-import { isSafeFrameUrl } from "./safe-url";
+import { WIDGET_LABELS_TR, builtInLabels } from "./labels-tr";
 
 /**
  * Rendering for server-driven UI: the `ui` spec and the inline data widgets.
@@ -67,6 +67,11 @@ export interface UiRenderCtx {
   ) => Promise<void>;
   /** Teardown callbacks for renderers holding subscriptions or timers. */
   richDisposers: Array<() => void>;
+  /** Open a page beside the chat (the right pane), or as the host opens
+   *  pages where the window cannot split (sgiant-platform#703). */
+  openOnTheRight: (path: string) => Promise<string | void>;
+  /** Whether the window can show a page beside the chat right now. */
+  canSplit: () => boolean;
   /** Hand an action to the host app. */
   dispatchAction: (
     name: string,
@@ -105,6 +110,8 @@ export function createUiRenderers(ctx: UiRenderCtx) {
     send,
     richDisposers,
     dispatchAction,
+    openOnTheRight,
+    canSplit,
     subscribeJob,
     showPaneWidget,
     input,
@@ -746,56 +753,38 @@ export function createUiRenderers(ctx: UiRenderCtx) {
   }
 
   /**
-   * ONE OF THE APP'S OWN SCREENS, IN THE CHAT (sgiant-platform#703): a
-   * report, a dashboard, a list. The assistant names it and gives it an id;
-   * the HOST draws it (`renderComponent`) and it fetches its own data with
-   * the host's session, so the figures are the screen's, never the model's.
+   * ONE OF THE APP'S OWN SCREENS (sgiant-platform#703): a short card in
+   * the chat, its title and one button, and the page itself beside it.
    *
-   * A host that has no renderer for it (no option, or `false` back) gets the
-   * page opened INSIDE the chat instead, from `getAdvancedUrl(path)`, the
-   * embed URL the host already builds; with neither, a button that opens the
-   * page. A spec this window does not know draws nothing.
+   * The owner's decision of 2026-11-23: the chat is not where a report is
+   * read. The card names it ("October report", or the component's own name)
+   * and its button opens the page in the window's right pane, where it
+   * fetches its own data with the host's session. A window too narrow to
+   * split opens the page as the host opens pages. Nothing opens by itself
+   * when the card arrives; only the button does. A spec this window does
+   * not know draws nothing.
    */
   function renderComponent(raw: unknown): void {
     const c = checkComponent(raw);
     if (!c.ok) return;
-    const wrap = el("div", `${PREFIX}-component`);
-    wrap.dataset.component = c.spec.name;
-    log.appendChild(wrap);
-    let drawn: (() => void) | void | false = false;
-    if (opts.renderComponent) {
-      try {
-        drawn = opts.renderComponent(wrap, c.spec.name, c.spec.params ?? {});
-      } catch {
-        drawn = false;
-      }
-    }
-    if (drawn !== false) {
-      if (typeof drawn === "function") richDisposers.push(drawn);
-      scrollDown(true);
-      return;
-    }
-    wrap.replaceChildren();
+    const card = el("div", `${PREFIX}-component`);
+    card.dataset.component = c.spec.name;
+    const title = el("div", `${PREFIX}-component-title`);
+    title.textContent =
+      c.spec.label ??
+      (builtInLabels(opts.locale, document.documentElement?.lang) ===
+      WIDGET_LABELS_TR
+        ? c.title.tr
+        : c.title.en);
     const open = el("button", `${PREFIX}-component-open`) as HTMLButtonElement;
     open.type = "button";
-    open.textContent = L("componentOpenPage");
+    const beside = canSplit();
+    open.textContent = L(beside ? "componentOpenRight" : "componentOpenPage");
     open.addEventListener("click", () => {
-      void Promise.resolve(dispatchAction("navigate", { path: c.path })).catch(
-        () => undefined,
-      );
+      void Promise.resolve(openOnTheRight(c.path)).catch(() => undefined);
     });
-    const url = opts.getAdvancedUrl?.(c.path);
-    if (url && isSafeFrameUrl(url)) {
-      wrap.classList.add(`${PREFIX}-component-page`);
-      const frame = el(
-        "iframe",
-        `${PREFIX}-component-frame`,
-      ) as HTMLIFrameElement;
-      frame.setAttribute("title", L("componentFrameTitle"));
-      frame.setAttribute("loading", "lazy");
-      frame.src = url;
-      wrap.append(frame, open);
-    } else wrap.append(open);
+    card.append(title, open);
+    log.appendChild(card);
     scrollDown(true);
   }
 

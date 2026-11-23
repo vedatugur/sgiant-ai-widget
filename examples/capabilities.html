@@ -170,18 +170,16 @@
     </div>
 
     <div class="demo">
-      <h2>The host app's own screens, in the chat</h2>
-      <p>The assistant can show one of your app's screens in the conversation
-        (a report, a dashboard, a list) instead of describing it: it sends a
-        <code>component</code> part with a name and a few ids, and
-        <code>renderComponent(host, name, params)</code> draws it with your
-        own session. Return <code>false</code> for a screen you have no
-        renderer for and the window opens that page inside the chat, from
-        <code>getAdvancedUrl(path)</code>.</p>
+      <h2>The host app's own screens, beside the chat</h2>
+      <p>The assistant can point at one of your app's screens (a report, a
+        dashboard, a list) instead of describing it: it sends a
+        <code>component</code> part with a name, a few ids and a title. The
+        chat shows a short card with one button, <em>Open on the right</em>,
+        which opens that page in the advanced view's right pane, from
+        <code>getAdvancedUrl(path)</code>. On a phone-width window the page
+        opens as your app opens pages.</p>
       <pre><code>createAiChatWidget({
-  renderComponent: (host, name, params) =&gt;
-    name === "report_view" ? mountReport(host, params.reportId) : false,
-  getAdvancedUrl: (path) =&gt; `${path}?embed=ai`,
+  getAdvancedUrl: (path) =&gt; `${path ?? location.pathname}?embed=ai`,
 });</code></pre>
     </div>
 
