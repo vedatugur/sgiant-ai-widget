@@ -23,6 +23,9 @@ export {
   type WidgetJobView,
 } from "./widget";
 export type { SiteChatOptions } from "./site-chat";
+// The longest message the public chat takes (sgiant-platform#709): the box
+// stops there, and the platform's drift test compares it with the server's.
+export { PUBLIC_CHAT_MESSAGE_MAX_CHARS } from "./message-limit.js";
 export type { ModelOption } from "./model-picker";
 
 // A saved conversation, replayed into the window: the server payload in,

@@ -19,6 +19,7 @@
  * See [[project_unified_managed_ai]].
  */
 
+import { composerMaxLength } from "./message-limit.js";
 // The ids the widget stamps on ITSELF, so the manifest and the DOM cannot
 // disagree by typo — see widget-manifest.ts.
 import { WIDGET_TARGETS } from "./widget-manifest.js";
@@ -3539,6 +3540,9 @@ export function createAiChatWidget(
   // line field could not hold.
   const input = el("textarea", `${PREFIX}-input`) as HTMLTextAreaElement;
   input.rows = 1;
+  // As long as the server takes, on the public window (#709, message-limit.ts).
+  const maxChars = composerMaxLength(opts);
+  if (maxChars) input.maxLength = maxChars;
   /** Lines the box grows to before it scrolls inside. */
   const COMPOSER_MAX_LINES = 5;
   /** The most of the window's height the box may take, when that is less. */
