@@ -1,22 +1,31 @@
-/**
- * THE LONGEST MESSAGE THE PUBLIC CHAT TAKES, in characters (sgiant-platform
- * #709).
- *
- * The server refuses a longer one inside the conversation (`message_too_long`,
- * sgiant-platform#693 QA: its `PUBLIC_CHAT_MESSAGE_MAX_CHARS`, 4,000). The box
- * had no limit of its own, so a visitor could paste a page they would then be
- * told to shorten. The box now stops at the same number. A copy, kept equal by
- * the platform's drift test, which reads this export from the published
- * package.
- *
- * Only the PUBLIC window (no account: a customer's site, or ours): a signed-in
- * chat has no such limit on the server, and the box gets none.
- */
-export const PUBLIC_CHAT_MESSAGE_MAX_CHARS = 4000;
+import { PUBLIC_CHAT_MESSAGE_MAX_CHARS } from "./limits.js";
 
-/** The box's `maxLength`, or undefined for a window with no limit. */
+/**
+ * THE PUBLIC WINDOW'S BOX STOPS WHERE THE SERVER STOPS (sgiant-platform#709).
+ *
+ * The public chat refuses a message over `PUBLIC_CHAT_MESSAGE_MAX_CHARS`
+ * inside the conversation (`message_too_long`); the box had no limit, so a
+ * visitor could paste a page and only then be told to shorten it.
+ *
+ * Only the PUBLIC lane, named explicitly: a window `createSiteChat` drew
+ * (`siteChat`), or one that posts to the public chat endpoint
+ * (`/public/ai/chat`, which our own sites and the demo use). Not "a window
+ * without an account": the staff chat passes `getAccountScope` and no
+ * `accountId` (QA on #709), and neither it nor a signed-in chat has this
+ * limit on the server.
+ */
 export function composerMaxLength(opts: {
-  accountId?: string;
+  endpoint?: string;
+  siteChat?: boolean;
 }): number | undefined {
-  return opts.accountId ? undefined : PUBLIC_CHAT_MESSAGE_MAX_CHARS;
+  return opts.siteChat === true || isPublicChatEndpoint(opts.endpoint)
+    ? PUBLIC_CHAT_MESSAGE_MAX_CHARS
+    : undefined;
+}
+
+/** The public chat's address, whatever the origin: `/public/ai/chat`. */
+function isPublicChatEndpoint(endpoint: string | undefined): boolean {
+  if (typeof endpoint !== "string") return false;
+  const path = endpoint.split(/[?#]/)[0]!.replace(/\/+$/, "");
+  return /(^|\/)public\/ai\/chat$/.test(path);
 }

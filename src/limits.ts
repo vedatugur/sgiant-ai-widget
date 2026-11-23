@@ -54,3 +54,10 @@ export function motionCssVars(): string {
     `--ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);`,
   ].join("\n");
 }
+
+/**
+ * The longest message the PUBLIC chat takes, in characters (sgiant-platform
+ * #709): `PUBLIC_CHAT_MESSAGE_MAX_CHARS` in `@sgiant/shared`, which the server
+ * refuses past (`message_too_long`). Gated like the numbers above.
+ */
+export const PUBLIC_CHAT_MESSAGE_MAX_CHARS = 4000;
