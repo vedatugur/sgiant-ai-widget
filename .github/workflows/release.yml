@@ -85,7 +85,12 @@ jobs:
       # The suite that came with the package when it was extracted — 73 tests
       # that had been running in the monorepo it left. A published package whose
       # tests stayed behind is a package with no tests.
+      # The browser cases run too (AIW_CHROME): they were skipped here for
+      # their whole life, and 146 of them went stale after 3.0.0 without a
+      # single red run. The runner image ships Google Chrome.
       - run: npm test
+        env:
+          AIW_CHROME: /usr/bin/google-chrome
 
       # The tarball audit. `prepublishOnly` runs it again during publish, but
       # having it as its own step means a leak fails with a readable log line

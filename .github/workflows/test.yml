@@ -1,0 +1,25 @@
+# Every push to main and every pull request runs the whole suite, browser
+# cases included, so a stale test fails the day it goes stale rather than at
+# the next release tag (146 browser cases rotted unseen after 3.0.0).
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          AIW_CHROME: /usr/bin/google-chrome
