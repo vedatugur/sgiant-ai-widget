@@ -643,6 +643,27 @@ A proposal that a transcript read replays carries the `preview` it was saved
 with (BACKEND.md, "A proposal card that outlives its stream"), so the replayed
 card is phrased and applied as the live one was.
 
+## Upgrading to 3.3.1
+
+From 3.3.0. Nothing is removed; a host that passes nothing new gets 3.3.0's
+window, except that a refused "open" button now says so.
+
+- New option `reportPath(reportId)`: where a report is in the page list the
+  host declares (`getContext().navTargets`), written the way that list
+  writes it (`/reports/r1` for an entry `/reports/:reportId`). The "Open the
+  report" button on a step that produced a report navigates there. Without
+  it the button uses `reportHref`, as before; a host whose `reportHref`
+  returns a full address (`/accounts/a1/reports/r1`, which an applied card's
+  link needs) should pass both, because the navigation gate matches a path
+  against the page list and refuses one it does not find there. An empty
+  `reportPath` draws no button.
+- When the "Open the report" or "Open the result" button's page is refused
+  or fails to open, the window says so under the button
+  ("That page could not be opened.") and the button can be pressed again.
+  It used to come back with nothing said. New label: `openPageFailed`, in
+  English and Turkish (`WIDGET_LABELS`); a host that translates the window
+  through `labels` should add it.
+
 ## Upgrading to 3.3
 
 From 3.2. Nothing is removed; a host that reads neither new argument and
