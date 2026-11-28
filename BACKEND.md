@@ -188,7 +188,7 @@ production, and these three pieces are the fix:
 1. **Persist the proposal and send its id** as `proposalId` on the frame.
 2. **Return it from your transcript read** as an artifact
    `{ id, kind: "proposal", status, payload: { name, args, agent?, fields?,
-   accountId?, artifactId?, result? }, createdAt }`. `buildThreadReplay` draws
+   accountId?, artifactId?, preview?, result? }, createdAt }`. `buildThreadReplay` draws
    a `proposed` one as a live Apply card, and an `applied` one as its outcome,
    after the reply of the turn that proposed it. It skips a `discarded` one.
 3. **Wire `onProposalResolved(proposalId, status, result)`** to record what the
@@ -197,6 +197,12 @@ production, and these three pieces are the fix:
    it.
 
 Skip all three and nothing changes: cards work exactly as they always have.
+
+A `tool_proposal` may also carry `preview`: any JSON your host needs to phrase
+and apply the write (where the draft is, the call Apply should make). The
+widget reads nothing inside it; it hands it to `proposalSummary` and
+`onApplyProposal` with the `proposalId` (README, "Phrasing a proposal card").
+Save the same value in the payload above and a replayed card gets it too.
 
 ### When an apply is refused
 

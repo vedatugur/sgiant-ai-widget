@@ -68,6 +68,7 @@ import { createMessageChrome } from "./message-chrome";
 import { PREFIX } from "./prefix";
 import { createUiRenderers } from "./ui-render";
 import { createDecisionCards } from "./decision-cards";
+import type { ProposalSummary } from "./proposal-summary";
 import type { TokenRefusal } from "./token-refusal";
 import { createJobCards } from "./job-cards";
 import { createUploads, type WidgetAtt } from "./uploads";
@@ -500,11 +501,23 @@ export interface AiChatWidgetOptions {
    */
   /** Tool name -> card TITLE. Falls back to the `proposalGeneric` label. */
   proposalTitles?: Record<string, string>;
-  /** Tool name + args -> card BODY. Return null to use the generic renderer. */
+  /**
+   * Tool name + args -> card BODY. Return null to use the generic renderer.
+   *
+   * Since 3.3.0 it may return a card instead of a sentence, `{ title?, text?,
+   * link? }` (see `ProposalSummaryCard`): a heading for this card, its body,
+   * and one link, drawn only when its `href` is a site-root path or an
+   * http(s) URL and opened in a new tab. All of it is drawn as text.
+   *
+   * The third argument is what the server sent beside the call: its
+   * `preview` (opaque to the widget), the `proposalId` it kept the proposal
+   * under and the account it is for. Each is present only when sent.
+   */
   proposalSummary?: (
     name: string,
-    args: Record<string, unknown>
-  ) => string | null;
+    args: Record<string, unknown>,
+    about: { preview?: unknown; proposalId?: string; accountId?: string }
+  ) => ProposalSummary;
 
   /**
    * The status badge's vocabulary, all host-supplied and all optional.
@@ -1000,7 +1013,15 @@ export interface AiChatWidgetOptions {
      *  on its own session and would otherwise aim at whatever account its page
      *  is scoped to — which is not always the account the assistant reasoned
      *  about, and on a platform page is not an account at all. */
-    opts?: { accountId?: string; artifactId?: string }
+    opts?: {
+      accountId?: string;
+      artifactId?: string;
+      /** The server's id for this proposal, when it kept it (3.3.0). */
+      proposalId?: string;
+      /** The frame's `preview`, as the server sent it (3.3.0). The widget
+       *  never reads it; a host can apply from it instead of from `args`. */
+      preview?: unknown;
+    }
   ) => Promise<
     | string
     | void
@@ -2854,6 +2875,8 @@ export function createAiChatWidget(
       accountId: it.accountId,
       artifactId: it.artifactId,
       proposalId: it.id,
+      // The same card as the live one: the host phrases it from this.
+      ...(it.preview !== undefined ? { preview: it.preview } : {}),
       replayed: true,
     });
   }

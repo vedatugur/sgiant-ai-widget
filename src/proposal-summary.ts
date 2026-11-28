@@ -15,6 +15,66 @@
  * override, or null to fall through to this.
  */
 
+import { isHttpUrl, isSafeRelPath } from "./safe-url";
+
+/**
+ * What a host's `proposalSummary` may return beyond a plain sentence: a
+ * heading for this one card, its body, and ONE link (the draft a publish
+ * would make public, say), so the person can look before they approve.
+ *
+ * Every part is drawn as text. The link is the same kind the applied outcome
+ * already shows (`onApplyProposal`'s `href`), opened the same way.
+ */
+export interface ProposalSummaryCard {
+  /** Replaces the card's heading (`proposalTitles` / `proposalGeneric`). */
+  title?: string;
+  /** The body, as the string form is. Empty falls back to the generic one. */
+  text?: string;
+  /** Drawn only when `href` is a site-root path or an http(s) URL. */
+  link?: { href: string; label?: string };
+}
+
+/** What `proposalSummary` returns: a sentence, a card, or null for the
+ *  generic renderer. */
+export type ProposalSummary = string | ProposalSummaryCard | null;
+
+/**
+ * A host's answer, reduced to what the card draws. The answer came through a
+ * host function that may itself be fed model output, so nothing here is
+ * trusted: a title or text that is not a string is not drawn, and a link
+ * whose address could run script (`javascript:`, `data:`) or leave the
+ * scheme rules of `./safe-url` is dropped, not "fixed".
+ *
+ * `null` means the host said nothing worth drawing, and the caller uses the
+ * generic renderer, as an empty string always meant.
+ */
+export function readProposalSummary(value: unknown): {
+  title?: string;
+  text?: string;
+  link?: { href: string; label?: string };
+} | null {
+  if (typeof value === "string") return value ? { text: value } : null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const str = (x: unknown): string | undefined =>
+    typeof x === "string" && x.trim() ? x : undefined;
+  const title = str(v.title);
+  const text = str(v.text);
+  const l =
+    v.link && typeof v.link === "object" && !Array.isArray(v.link)
+      ? (v.link as Record<string, unknown>)
+      : null;
+  const raw = l?.href;
+  const href = isSafeRelPath(raw) || isHttpUrl(raw) ? raw : "";
+  const label = l ? str(l.label) : undefined;
+  if (!title && !text && !href) return null;
+  return {
+    ...(title ? { title } : {}),
+    ...(text ? { text } : {}),
+    ...(href ? { link: { href, ...(label ? { label } : {}) } } : {}),
+  };
+}
+
 /** Render an unknown tool call from its arguments alone. */
 export function genericProposalSummary(args: Record<string, unknown>): string {
   return Object.entries(args)

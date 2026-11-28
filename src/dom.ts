@@ -64,6 +64,10 @@ export interface StreamFrame {
    *  `onProposalResolved`, and a transcript reload keeps the card in place.
    *  Without it the card works exactly as before and lives only in the stream. */
   proposalId?: string;
+  /** tool_proposal frame — whatever the server worked out for the host to
+   *  draw and apply this write with. Opaque: the widget hands it to
+   *  `proposalSummary` and `onApplyProposal` and reads nothing inside it. */
+  preview?: unknown;
   /** usage frame — per-turn token counts (drives the session meter). */
   inputTokens?: number;
   outputTokens?: number;

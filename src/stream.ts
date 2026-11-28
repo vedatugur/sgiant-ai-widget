@@ -542,6 +542,8 @@ export function createTurnStream(ctx: TurnStreamContext) {
       artifactId?: string;
       /** The server's id for this proposal (#503), when it persisted it. */
       proposalId?: string;
+      /** The frame's `preview`, carried to the host untouched. */
+      preview?: unknown;
     }> = [];
     /** Draw the held cards, in the order the model proposed them. */
     const drawDeferred = (skip?: ReadonlySet<string>): void => {
@@ -553,6 +555,7 @@ export function createTurnStream(ctx: TurnStreamContext) {
           accountId: p.accountId,
           artifactId: p.artifactId,
           proposalId: p.proposalId,
+          ...(p.preview !== undefined ? { preview: p.preview } : {}),
         });
       }
     };
@@ -1002,6 +1005,11 @@ export function createTurnStream(ctx: TurnStreamContext) {
                 accountId: (frame as { accountId?: string }).accountId,
                 artifactId: (frame as { artifactId?: string }).artifactId,
                 proposalId: frame.proposalId,
+                // What the host needs to draw and apply this write: kept,
+                // never read. Dropped here, a host had only `args` to go on.
+                ...(frame.preview !== undefined
+                  ? { preview: frame.preview }
+                  : {}),
               });
               producedAny = true;
             }

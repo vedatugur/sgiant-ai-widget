@@ -595,6 +595,69 @@ The window runs `navigate` and the on-page controls (highlight, scroll-to,
 focus-field, fill, click) itself. Every other name must be in `handlers`, or
 the button says it could not do it.
 
+## Phrasing a proposal card
+
+When the server proposes a write (a `tool_proposal` frame), the window draws a
+card with Apply and Dismiss, and only a host that passes `onApplyProposal`
+gets one. The person approves the card's words, not the tool call, so a host
+with write tools should phrase them:
+
+```js
+createAiChatWidget({
+  // …
+  proposalTitles: { publish_draft: "Publish this draft?" },
+  // `about` holds what the server sent beside the call, each part only when
+  // sent: its `preview` (any JSON; the window never reads it), the
+  // `proposalId` it kept the proposal under, and the `accountId` it is for.
+  proposalSummary: (name, args, about) => {
+    if (name !== "publish_draft") return null; // the generic card
+    const p = about.preview;
+    return {
+      title: `Publish “${p.title}”?`,
+      text: `${p.sections} sections, version ${p.version}`,
+      link: { label: "See the draft", href: p.draftPath },
+    };
+  },
+  onApplyProposal: async (name, args, ctx) => {
+    // ctx: { accountId?, artifactId?, proposalId?, preview? }, or undefined
+    // when the frame carried none of them.
+    const { path, method, body } = ctx.preview.apply;
+    const res = await fetch(path, { method, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`publish failed: ${res.status}`);
+    return "Published.";
+  },
+});
+```
+
+`proposalSummary` returns a sentence, a card `{ title?, text?, link? }`
+(`ProposalSummaryCard`), or `null` for the generic summary of the arguments.
+Everything on the card is drawn as text, never as markup. `title` replaces the
+card's heading; an empty `text` falls back to the generic summary, so a card
+is never blank. The `link` is drawn only when its `href` is a path on the site
+(`/drafts/1`, not `//other.example`) or an `http(s)` address, and opens in a
+new tab, as the link on an applied card does; any other address (a
+`javascript:` one, say) draws no link. Without a `label` it says the
+`openResult` label.
+
+A proposal that a transcript read replays carries the `preview` it was saved
+with (BACKEND.md, "A proposal card that outlives its stream"), so the replayed
+card is phrased and applied as the live one was.
+
+## Upgrading to 3.3
+
+From 3.2. Nothing is removed; a host that reads neither new argument and
+returns only sentences gets 3.2's cards exactly.
+
+- A `tool_proposal` frame's `preview` (any JSON) is kept, live and in a
+  replayed proposal's payload, and handed to the host: `proposalSummary`
+  takes a third argument `{ preview?, proposalId?, accountId? }`, and
+  `onApplyProposal`'s third argument gains `proposalId` and `preview`. That
+  argument is now an object whenever the frame carried a `proposalId` or a
+  `preview`; it is still `undefined` when it carried none of the four.
+- `proposalSummary` may return a card, `{ title?, text?, link? }`, with one
+  link; see "Phrasing a proposal card". New types: `ProposalSummary`,
+  `ProposalSummaryCard`.
+
 ## Upgrading to 3.2
 
 From 3.0 (3.1 was never published). Nothing is removed; these behave

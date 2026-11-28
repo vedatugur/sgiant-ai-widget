@@ -89,6 +89,9 @@ export interface ReplayProposalItem {
   accountId?: string;
   /** The saved artifact a dashboard/template apply needs. */
   artifactId?: string;
+  /** The live frame's `preview`, as the server saved it: opaque, so a
+   *  replayed card is phrased and applied from what the live one was. */
+  preview?: unknown;
   status: "proposed" | "applied";
   /** The host's account of an applied write: its sentence and a link. */
   result?: { message?: string; href?: string; hrefLabel?: string };
@@ -495,6 +498,7 @@ function proposalItem(a: {
     fields?: unknown;
     accountId?: unknown;
     artifactId?: unknown;
+    preview?: unknown;
     result?: unknown;
   };
   if (!a.id || typeof p.name !== "string" || !p.name) return null;
@@ -524,6 +528,7 @@ function proposalItem(a: {
     ...(p.fields !== undefined ? { fields: p.fields } : {}),
     ...(str(p.accountId) ? { accountId: str(p.accountId) } : {}),
     ...(str(p.artifactId) ? { artifactId: str(p.artifactId) } : {}),
+    ...(p.preview !== undefined ? { preview: p.preview } : {}),
     status: a.status,
     ...(result && Object.keys(result).length ? { result } : {}),
   };

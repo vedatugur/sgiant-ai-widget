@@ -24,6 +24,11 @@ export {
 } from "./widget";
 export type { SiteChatOptions } from "./site-chat";
 export type { ModelOption } from "./model-picker";
+// What a host's `proposalSummary` returns: a sentence, or a card with one link.
+export type {
+  ProposalSummary,
+  ProposalSummaryCard,
+} from "./proposal-summary";
 
 // A saved conversation, replayed into the window: the server payload in,
 // render items out.

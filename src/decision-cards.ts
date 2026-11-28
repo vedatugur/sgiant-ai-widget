@@ -1,6 +1,9 @@
 import { el, escapeHtml } from "./dom";
 import { PREFIX } from "./prefix";
-import { genericProposalSummary } from "./proposal-summary";
+import {
+  genericProposalSummary,
+  readProposalSummary,
+} from "./proposal-summary";
 import { readApplyRefusal } from "./apply-refusal";
 import { isHttpUrl } from "./safe-url";
 import {
@@ -90,6 +93,11 @@ export interface ProposalCardOptions {
   /** The server's id for this proposal (#503): what Apply and Dismiss are
    *  reported against, and what a transcript reload matches the card by. */
   proposalId?: string;
+  /** What the server worked out for the host to draw and apply this write
+   *  with (a draft's address, the call Apply should make). Opaque here: the
+   *  widget carries it to `proposalSummary` and `onApplyProposal` and never
+   *  reads inside it, so a new kind of preview needs no new widget. */
+  preview?: unknown;
   /** Drawn from the transcript rather than the live stream. Never
    *  auto-applied: the person was not there when it was proposed, and a write
    *  they never saw must not happen on a page load. */
@@ -122,11 +130,28 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
   // purpose: a host returning "" means "nothing worth saying", and an empty
   // card would be a confirm gate that confirms nothing.
   const PROPOSAL_LABELS: Record<string, string> = ctx.opts.proposalTitles ?? {};
+  // The host's answer may be a card (title, text, one link) rather than a
+  // sentence; either way the body is never left blank by it, for the same
+  // reason. The third argument is what the server sent beside the call, so a
+  // host can phrase a card from it; a host written for two arguments ignores
+  // it and gets exactly what it got before.
   const proposalSummary = (
     name: string,
-    args: Record<string, unknown>
-  ): string =>
-    ctx.opts.proposalSummary?.(name, args) || genericProposalSummary(args);
+    args: Record<string, unknown>,
+    about: { preview?: unknown; proposalId?: string; accountId?: string }
+  ): {
+    title?: string;
+    text: string;
+    link?: { href: string; label?: string };
+  } => {
+    const said = readProposalSummary(
+      ctx.opts.proposalSummary?.(name, args, about)
+    );
+    return {
+      ...said,
+      text: said?.text || genericProposalSummary(args),
+    };
+  };
   /**
    * Tell the host what happened to a card (#503), so a replay shows the
    * outcome instead of asking again. Fire-and-forget: the person already has
@@ -334,6 +359,7 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
       accountId: proposalAccountId,
       artifactId: proposalArtifactId,
       proposalId,
+      preview,
       replayed = false,
     } = card;
     // `-pending` marks a card that is still AWAITING the user, and it is what
@@ -367,8 +393,16 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
       badge.style.marginRight = "6px";
       title.appendChild(badge);
     }
+    // Asked first, because a card the host phrased may name itself.
+    const summary = proposalSummary(name, args, {
+      ...(preview !== undefined ? { preview } : {}),
+      ...(proposalId ? { proposalId } : {}),
+      ...(proposalAccountId ? { accountId: proposalAccountId } : {}),
+    });
     title.appendChild(
-      document.createTextNode(PROPOSAL_LABELS[name] ?? ctx.L("proposalGeneric"))
+      document.createTextNode(
+        summary.title ?? PROPOSAL_LABELS[name] ?? ctx.L("proposalGeneric")
+      )
     );
     wrap.appendChild(title);
     let disposePreview: (() => void) | undefined;
@@ -436,11 +470,22 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
         node: built.node,
       });
     }
-    const summary = proposalSummary(name, args);
-    if (summary) {
+    if (summary.text) {
       const s = el("div", `${PREFIX}-proposal-summary`);
-      s.textContent = summary;
+      s.textContent = summary.text;
       wrap.appendChild(s);
+    }
+    // One way to look before approving: the draft a publish would make
+    // public, say. Text only, an address `readProposalSummary` already
+    // checked, and a new tab like the applied outcome's link, so looking does
+    // not take the chat (and this undecided card) away.
+    if (summary.link) {
+      const open = el("a", `${PREFIX}-proposal-link`) as HTMLAnchorElement;
+      open.href = summary.link.href;
+      open.target = "_blank";
+      open.rel = "noopener noreferrer";
+      open.textContent = summary.link.label || ctx.L("openResult");
+      wrap.appendChild(open);
     }
     // Shown when Apply is REFUSED because a field the assistant marked required
     // was left blank. Applying anyway (which is what dropping the empty value
@@ -532,12 +577,20 @@ export function createDecisionCards(ctx: DecisionCardContext): DecisionCards {
           })(),
           // `artifactId` travels beside the account: the dashboard/template
           // applies are the two that cannot be reconstructed from `args` alone.
-          proposalAccountId || proposalArtifactId
+          // `proposalId` and `preview` let a host apply the write the server
+          // kept rather than rebuild it from `args`. Still `undefined` when
+          // there is none of them, as a host that tests for it has always seen.
+          proposalAccountId ||
+            proposalArtifactId ||
+            proposalId ||
+            preview !== undefined
             ? {
                 ...(proposalAccountId ? { accountId: proposalAccountId } : {}),
                 ...(proposalArtifactId
                   ? { artifactId: proposalArtifactId }
                   : {}),
+                ...(proposalId ? { proposalId } : {}),
+                ...(preview !== undefined ? { preview } : {}),
               }
             : undefined
         );
