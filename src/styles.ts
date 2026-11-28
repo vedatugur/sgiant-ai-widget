@@ -592,7 +592,8 @@ select.${PREFIX}-field{appearance:none;-webkit-appearance:none;cursor:pointer;pa
    it lands the same on a bare input, a checkbox row and a radio GROUP — the
    three shapes buildField can hand back. */
 .${PREFIX}-field-invalid{outline:1px solid var(--aiw-danger-text);outline-offset:2px;border-radius:var(--aiw-field-radius)}
-.${PREFIX}-form-err,.${PREFIX}-proposal-err{font-size:var(--aiw-font-xs);line-height:1.45;color:var(--aiw-danger-text)}
+.${PREFIX}-form-err,.${PREFIX}-proposal-err,.${PREFIX}-open-err{font-size:var(--aiw-font-xs);line-height:1.45;color:var(--aiw-danger-text)}
+.${PREFIX}-open-err{align-self:flex-start;max-width:92%}
 .${PREFIX}-field-check{display:flex;align-items:center;gap:8px;font-size:var(--aiw-font-sm);line-height:1.4;color:var(--aiw-field-fg);cursor:pointer}
 .${PREFIX}-field-check-label{min-width:0}
 .${PREFIX}-check{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:16px;height:16px;margin:0;box-sizing:border-box;background:var(--aiw-field-bg);border:1px solid var(--aiw-field-border);border-radius:var(--aiw-radius-xs);cursor:pointer;outline:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}

@@ -187,6 +187,11 @@ export const WIDGET_LABELS = {
   /** Used while the total is still unknown — a report learns it once planned. */
   jobProgressOpen: "{done} so far",
   jobOpenResult: "Open the result",
+  /** Under "Open the result" / "Open the report" when the page did not open:
+   *  the window would not open it (not one of the host's pages) or the host
+   *  failed to. Said, because a button that only comes back reads as a click
+   *  that never landed. */
+  openPageFailed: "That page could not be opened.",
   /** Toggle under the flow tail that reveals the job's full activity feed. */
   jobFlowAll: "Show all {count} steps",
   /** Shown INSTEAD of the step feed when the app pane is already showing this

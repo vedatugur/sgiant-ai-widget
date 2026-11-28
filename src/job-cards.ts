@@ -1,4 +1,4 @@
-import { el, escapeHtml } from "./dom";
+import { clearOpenRefusal, el, escapeHtml, showOpenRefusal } from "./dom";
 import { PREFIX } from "./prefix";
 import { readJson, tabKey, writeJson } from "./storage";
 import { isSafeRelPath } from "./safe-url";
@@ -530,8 +530,14 @@ export function createJobCards(ctx: JobCardContext): JobCards {
         btn.disabled = true;
         try {
           await ctx.dispatchAction("navigate", { path });
+          clearOpenRefusal(btn);
         } catch {
+          // Refused (not one of the host's pages) or failed: said under the
+          // button, which comes back for a press that might work next time.
           btn.disabled = false;
+          showOpenRefusal(btn, ctx.L("openPageFailed"), (line) =>
+            btn.after(line),
+          );
         }
       });
       card.appendChild(btn);

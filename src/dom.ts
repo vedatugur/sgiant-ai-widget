@@ -132,6 +132,44 @@ export function el(tag: string, cls: string): HTMLElement {
   return node;
 }
 
+/**
+ * THE LINE UNDER AN "OPEN" BUTTON WHOSE PAGE DID NOT OPEN.
+ *
+ * The open buttons on a finished job and on a report step re-enabled
+ * themselves in silence when the navigation was refused, so a refused page
+ * looked exactly like a click that never landed. A refusal is a decision,
+ * and it is said, the way a refused apply is (`${PREFIX}-proposal-err`).
+ *
+ * `place` puts the line where the caller's layout wants it; called again for
+ * the same button, it reuses the line rather than stacking a second one.
+ * `clearOpenRefusal` takes it away when the next press works.
+ */
+export function showOpenRefusal(
+  btn: HTMLElement,
+  text: string,
+  place: (line: HTMLElement) => void,
+): void {
+  const owned = openRefusals.get(btn);
+  if (owned?.isConnected) {
+    owned.textContent = text;
+    return;
+  }
+  const line = el("div", `${PREFIX}-open-err`);
+  line.setAttribute("role", "status");
+  line.textContent = text;
+  place(line);
+  openRefusals.set(btn, line);
+}
+
+export function clearOpenRefusal(btn: HTMLElement): void {
+  openRefusals.get(btn)?.remove();
+  openRefusals.delete(btn);
+}
+
+/** Each button's refusal line. Weak, so a button wiped with its transcript
+ *  takes its line's entry with it. */
+const openRefusals = new WeakMap<HTMLElement, HTMLElement>();
+
 /** Coarse "when" bucket for grouping past conversations (Today / Yesterday / …). */
 /** Relative-time group for a timestamp — returns a WIDGET_LABELS key so the
  *  caller resolves the localized separator text via L(). */

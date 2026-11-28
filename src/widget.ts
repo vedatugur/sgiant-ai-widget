@@ -90,6 +90,8 @@ import {
   escapeHtml,
   relBucket,
   relTime,
+  showOpenRefusal,
+  clearOpenRefusal,
   usableLocale,
 } from "./dom";
 import {
@@ -994,6 +996,23 @@ export interface AiChatWidgetOptions {
    * one would produce a link that 404s in two of them.
    */
   reportHref?: (reportId: string) => string;
+  /**
+   * Where a report is IN THE HOST'S PAGE LIST, for the "Open the report"
+   * button on a step that produced one. Optional; without it that button
+   * opens `reportHref`, as before 3.3.1.
+   *
+   * Two hooks because the two places want two different paths. An applied
+   * card's link is a plain `<a href>`, which needs the full address
+   * (`reportHref`). The step's button goes through the navigation gate,
+   * which matches a path against the page list the host declares
+   * (`getContext().navTargets`), whose entries are written relative to
+   * wherever the host mounts them (`/reports/:reportId`). A host whose
+   * `reportHref` adds a prefix of its own (`/accounts/a1/reports/r1`) gets a
+   * path the gate cannot match, and the button is refused; this hook gives
+   * the gate the path as the page list writes it (`/reports/r1`). The gate
+   * itself is unchanged: the path must still be one of the host's pages.
+   */
+  reportPath?: (reportId: string) => string;
   /**
    * Do the write the person just approved. Resolve with a sentence (or an
    * object carrying one) and the card shows it.
@@ -2545,6 +2564,14 @@ export function createAiChatWidget(
       (status !== "running" ? ` ${PREFIX}-activity-done` : "");
     chip.innerHTML = `${icon}${badge}${modelBadge}<span class="${PREFIX}-act-label">${escapeHtml(label)}</span>`;
   }
+  /** The path a report step's button navigates to: the host's page-list
+   *  path when it gives one (`reportPath`), else its link (`reportHref`).
+   *  A `reportPath` that answers nothing leaves the button out, rather than
+   *  falling back to a link the gate is known to refuse. */
+  function reportOpenPath(reportId: string): string | undefined {
+    if (opts.reportPath) return opts.reportPath(reportId);
+    return opts.reportHref?.(reportId);
+  }
   function addActivityChip(
     label: string,
     status: string,
@@ -2567,8 +2594,14 @@ export function createAiChatWidget(
         btn.disabled = true;
         try {
           await dispatchAction("navigate", { path });
+          clearOpenRefusal(btn);
         } catch {
+          // Refused or failed: said under the chip, not swallowed. The chip
+          // is a one-line pill, so the line goes below it rather than in it.
           btn.disabled = false;
+          showOpenRefusal(btn, L("openPageFailed"), (line) =>
+            chip.after(line)
+          );
         }
       });
       chip.appendChild(btn);
@@ -2802,7 +2835,7 @@ export function createAiChatWidget(
           it.status,
           it.agent,
           it.model,
-          it.reportId ? opts.reportHref?.(it.reportId) : undefined
+          it.reportId ? reportOpenPath(it.reportId) : undefined
         );
       } else if ("role" in it) {
         // The message's first DOM node — the anchor an edit/regenerate rewrites

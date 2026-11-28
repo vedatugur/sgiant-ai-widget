@@ -123,6 +123,7 @@ export const WIDGET_LABELS_TR: WidgetLabels = {
   jobProgress: "{total} işlemden {done} tanesi",
   jobProgressOpen: "şu ana kadar {done}",
   jobOpenResult: "Sonucu aç",
+  openPageFailed: "Bu sayfa açılamadı.",
   jobFlowAll: "Tüm {count} adımı göster",
   jobWatchingInPane: "Yan tarafta takip ediliyor →",
   paneBackToPage: "Sayfaya dön",
